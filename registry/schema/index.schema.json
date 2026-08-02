@@ -1,0 +1,57 @@
+{
+  "$id": "https://programmable.money/schemas/registry-index-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activeIntake": {
+      "additionalProperties": false,
+      "properties": {
+        "baseBranch": { "const": "main" },
+        "directory": { "const": "submissions" },
+        "repository": { "const": "0xprogrammable/programmable-registry" },
+        "state": { "enum": ["prelaunch", "open", "paused-new", "paused-all"] }
+      },
+      "required": ["baseBranch", "directory", "repository", "state"],
+      "type": "object"
+    },
+    "generatedAt": { "format": "date-time", "type": "string" },
+    "legacyIntake": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "baseBranch": { "type": "string" },
+          "continuingPullRequests": { "items": { "minimum": 1, "type": "integer" }, "maxItems": 64, "type": "array", "uniqueItems": true },
+          "repository": { "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string" }
+        },
+        "required": ["baseBranch", "continuingPullRequests", "repository"],
+        "type": "object"
+      },
+      "maxItems": 8,
+      "type": "array"
+    },
+    "records": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+          "id": { "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+          "kind": { "type": "string" },
+          "name": { "type": "string" },
+          "path": { "pattern": "^registry/projects/[a-z0-9]+(?:-[a-z0-9]+)*/project\\.json$", "type": "string" },
+          "sha256": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+          "status": { "type": "string" },
+          "summary": { "type": "string" },
+          "surfaces": { "items": { "type": "string" }, "type": "array", "uniqueItems": true },
+          "tags": { "items": { "type": "string" }, "type": "array", "uniqueItems": true }
+        },
+        "required": ["capabilities", "id", "kind", "name", "path", "sha256", "status", "summary", "surfaces", "tags"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "registryDigest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "schemaVersion": { "const": "1.0.0" }
+  },
+  "required": ["activeIntake", "generatedAt", "legacyIntake", "records", "registryDigest", "schemaVersion"],
+  "type": "object"
+}

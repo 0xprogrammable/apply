@@ -1,0 +1,106 @@
+{
+  "capabilities": [
+    "beneficiary-owned-rewards",
+    "buy-sell-fees",
+    "fixed-supply-token",
+    "initial-buy-custody",
+    "locked-liquidity",
+    "programmable-volume-fee"
+  ],
+  "chains": [
+    {
+      "chainId": 1,
+      "deploymentEvidence": "https://github.com/0xprogrammable/programmable/blob/0f2a2704216ba3eeb3c9761466aa9197abe927bc/releases/classic-v3/mainnet-manifest.json",
+      "network": "Ethereum Mainnet",
+      "state": "available"
+    }
+  ],
+  "discovery": {
+    "mechanism": "A fixed-supply token launch with directional transfer fees, beneficiary-owned ETH rewards, optional initial-buy custody, and permanently locked Uniswap v4 liquidity.",
+    "outcomes": [
+      "Launch a fixed-supply token with visible buy and sell fees.",
+      "Route creator rewards to beneficiary-controlled claim vaults.",
+      "Keep the launch liquidity position permanently locked."
+    ],
+    "synonyms": [
+      "classic launch",
+      "fee token",
+      "ordinary launch"
+    ],
+    "tags": [
+      "classic",
+      "fee-token",
+      "fixed-supply",
+      "locked-liquidity",
+      "token-launch"
+    ]
+  },
+  "economics": {
+    "programmableFee": {
+      "claimOwner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "inclusiveBps": 10,
+      "policyId": "programmable-volume-fee-v1",
+      "required": true
+    },
+    "summary": "The fixed 0.10 percentage-point Programmable share is deducted from each selected directional fee; the remaining fee belongs to the creator side."
+  },
+  "hook": {
+    "beforeSwapReturnDelta": true,
+    "canonicalPoolRequired": true,
+    "contractNames": [
+      "EthCreatorFeeHookV3"
+    ],
+    "permissions": [
+      "after-swap",
+      "after-swap-return-delta",
+      "before-initialize",
+      "before-swap",
+      "before-swap-return-delta"
+    ],
+    "upgradeability": "none",
+    "used": true
+  },
+  "id": "classic",
+  "kind": "launch-model",
+  "name": "Classic",
+  "provenance": {
+    "importedFrom": "https://github.com/0xprogrammable/programmable/blob/0f2a2704216ba3eeb3c9761466aa9197abe927bc/models/classic/model.json",
+    "observedAt": "2026-08-02T12:00:00Z",
+    "recordClass": "legacy-platform-record"
+  },
+  "relations": {
+    "similarTo": [],
+    "supersededBy": null,
+    "supersedes": []
+  },
+  "review": {
+    "acceptancePath": null,
+    "applicationPullRequest": null,
+    "independentAudit": false,
+    "limitations": [
+      "This predates the public Builder application ledger and is imported from the exact platform model record.",
+      "No independent audit or public contest is recorded in the imported model manifest."
+    ],
+    "state": "legacy-record"
+  },
+  "schemaVersion": "1.0.0",
+  "source": {
+    "manifestPath": "models/classic/model.json",
+    "numericRepositoryId": "1314365508",
+    "repositoryUri": "https://github.com/0xprogrammable/programmable",
+    "revisionObjectId": "0f2a2704216ba3eeb3c9761466aa9197abe927bc",
+    "treeObjectId": "df70a41231b60f575918ea5eafee5fc0720295e6"
+  },
+  "status": "available",
+  "statusUpdatedAt": "2026-07-30T00:00:00Z",
+  "summary": "A fixed-supply token with independent buy and sell fees, beneficiary-owned ETH rewards, optional initial-buy custody, and permanently locked Uniswap v4 liquidity.",
+  "surfaces": [
+    "claim-interface",
+    "explorer",
+    "launch-interface",
+    "uniswap-v4-pool"
+  ],
+  "warnings": [
+    "Availability is a Programmable platform state, not a safety, audit, routing, or future-uptime guarantee."
+  ]
+}

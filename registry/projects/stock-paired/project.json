@@ -1,0 +1,99 @@
+{
+  "capabilities": [
+    "locked-liquidity",
+    "programmable-volume-fee",
+    "quote-asset-rewards",
+    "stock-paired-token",
+    "tokenized-asset-quote"
+  ],
+  "chains": [
+    {
+      "chainId": 1,
+      "deploymentEvidence": "https://github.com/0xprogrammable/programmable/blob/0f2a2704216ba3eeb3c9761466aa9197abe927bc/models/stock-paired/model.json",
+      "network": "Ethereum Mainnet",
+      "state": "declared-addresses"
+    }
+  ],
+  "discovery": {
+    "mechanism": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and locked launch liquidity.",
+    "outcomes": [
+      "Launch against a reviewed tokenized stock or ETF quote asset.",
+      "Pay creator-side rewards in the quote asset.",
+      "Preserve a permanently locked launch-liquidity design."
+    ],
+    "synonyms": [
+      "asset-paired token",
+      "stock paired",
+      "tokenized stock pair"
+    ],
+    "tags": [
+      "locked-liquidity",
+      "quote-asset",
+      "stock-paired",
+      "tokenized-assets"
+    ]
+  },
+  "economics": {
+    "programmableFee": {
+      "claimOwner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "inclusiveBps": 10,
+      "policyId": "programmable-volume-fee-v1",
+      "required": true
+    },
+    "summary": "Any launch-ready release must preserve Programmable's inclusive 10 bps share of executed gross quote-side canonical-pool volume."
+  },
+  "hook": {
+    "beforeSwapReturnDelta": null,
+    "canonicalPoolRequired": true,
+    "contractNames": [
+      "QuoteAssetCreatorFeeHookV1"
+    ],
+    "permissions": [],
+    "upgradeability": "unknown",
+    "used": true
+  },
+  "id": "stock-paired",
+  "kind": "launch-model",
+  "name": "Stock-Paired",
+  "provenance": {
+    "importedFrom": "https://github.com/0xprogrammable/programmable/blob/0f2a2704216ba3eeb3c9761466aa9197abe927bc/models/stock-paired/model.json",
+    "observedAt": "2026-08-02T12:00:00Z",
+    "recordClass": "legacy-platform-record"
+  },
+  "relations": {
+    "similarTo": [],
+    "supersededBy": null,
+    "supersedes": []
+  },
+  "review": {
+    "acceptancePath": null,
+    "applicationPullRequest": null,
+    "independentAudit": false,
+    "limitations": [
+      "The platform manifest records candidate status, not current public availability.",
+      "No independent audit or public contest is recorded in the imported model manifest.",
+      "The imported model record declares addresses but no current release manifest."
+    ],
+    "state": "legacy-record"
+  },
+  "schemaVersion": "1.0.0",
+  "source": {
+    "manifestPath": "models/stock-paired/model.json",
+    "numericRepositoryId": "1314365508",
+    "repositoryUri": "https://github.com/0xprogrammable/programmable",
+    "revisionObjectId": "0f2a2704216ba3eeb3c9761466aa9197abe927bc",
+    "treeObjectId": "df70a41231b60f575918ea5eafee5fc0720295e6"
+  },
+  "status": "candidate",
+  "statusUpdatedAt": "2026-07-30T00:00:00Z",
+  "summary": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and permanently locked Uniswap v4 launch liquidity.",
+  "surfaces": [
+    "claim-interface",
+    "explorer",
+    "launch-interface",
+    "uniswap-v4-pool"
+  ],
+  "warnings": [
+    "Candidate status does not mean the model is launchable, available, provider-supported, audited, or safe."
+  ]
+}

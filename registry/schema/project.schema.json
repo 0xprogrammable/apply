@@ -1,0 +1,132 @@
+{
+  "$id": "https://programmable.money/schemas/registry-project-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": { "items": { "$ref": "#/$defs/slug" }, "maxItems": 64, "type": "array", "uniqueItems": true },
+    "chains": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "chainId": { "maximum": 9007199254740991, "minimum": 1, "type": "integer" },
+          "deploymentEvidence": { "anyOf": [{ "format": "uri", "type": "string" }, { "type": "null" }] },
+          "network": { "$ref": "#/$defs/text" },
+          "state": { "enum": ["proposed", "declared-addresses", "deployed", "source-verified", "lifecycle-verified", "available"] }
+        },
+        "required": ["chainId", "deploymentEvidence", "network", "state"],
+        "type": "object"
+      },
+      "maxItems": 16,
+      "type": "array"
+    },
+    "discovery": {
+      "additionalProperties": false,
+      "properties": {
+        "mechanism": { "$ref": "#/$defs/text" },
+        "outcomes": { "items": { "$ref": "#/$defs/text" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+        "synonyms": { "items": { "$ref": "#/$defs/text" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+        "tags": { "items": { "$ref": "#/$defs/slug" }, "maxItems": 32, "type": "array", "uniqueItems": true }
+      },
+      "required": ["mechanism", "outcomes", "synonyms", "tags"],
+      "type": "object"
+    },
+    "economics": {
+      "additionalProperties": false,
+      "properties": {
+        "programmableFee": {
+          "additionalProperties": false,
+          "properties": {
+            "claimOwner": { "pattern": "^0x[0-9A-Fa-f]{40}$", "type": "string" },
+            "inclusiveBps": { "const": 10 },
+            "policyId": { "$ref": "#/$defs/slug" },
+            "required": { "const": true }
+          },
+          "required": ["claimOwner", "inclusiveBps", "policyId", "required"],
+          "type": "object"
+        },
+        "summary": { "$ref": "#/$defs/text" }
+      },
+      "required": ["programmableFee", "summary"],
+      "type": "object"
+    },
+    "hook": {
+      "additionalProperties": false,
+      "properties": {
+        "beforeSwapReturnDelta": { "type": ["boolean", "null"] },
+        "canonicalPoolRequired": { "type": "boolean" },
+        "contractNames": { "items": { "$ref": "#/$defs/text" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+        "permissions": {
+          "items": {
+            "enum": ["after-add-liquidity", "after-add-liquidity-return-delta", "after-donate", "after-initialize", "after-remove-liquidity", "after-remove-liquidity-return-delta", "after-swap", "after-swap-return-delta", "before-add-liquidity", "before-donate", "before-initialize", "before-remove-liquidity", "before-swap", "before-swap-return-delta"]
+          },
+          "maxItems": 14,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "upgradeability": { "enum": ["none", "immutable-factory", "upgradeable", "unknown"] },
+        "used": { "type": ["boolean", "null"] }
+      },
+      "required": ["beforeSwapReturnDelta", "canonicalPoolRequired", "contractNames", "permissions", "upgradeability", "used"],
+      "type": "object"
+    },
+    "id": { "$ref": "#/$defs/slug" },
+    "kind": { "enum": ["launch-model", "hook-project", "application-game", "application-service", "composite"] },
+    "name": { "$ref": "#/$defs/text" },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "importedFrom": { "format": "uri", "type": "string" },
+        "observedAt": { "format": "date-time", "type": "string" },
+        "recordClass": { "enum": ["legacy-platform-record", "maintainer-acceptance"] }
+      },
+      "required": ["importedFrom", "observedAt", "recordClass"],
+      "type": "object"
+    },
+    "relations": {
+      "additionalProperties": false,
+      "properties": {
+        "similarTo": { "items": { "$ref": "#/$defs/slug" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+        "supersededBy": { "anyOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "supersedes": { "items": { "$ref": "#/$defs/slug" }, "maxItems": 32, "type": "array", "uniqueItems": true }
+      },
+      "required": ["similarTo", "supersededBy", "supersedes"],
+      "type": "object"
+    },
+    "review": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptancePath": { "anyOf": [{ "pattern": "^registry/acceptances/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9.-]*\\.json$", "type": "string" }, { "type": "null" }] },
+        "applicationPullRequest": { "anyOf": [{ "format": "uri", "type": "string" }, { "type": "null" }] },
+        "independentAudit": { "type": "boolean" },
+        "limitations": { "items": { "$ref": "#/$defs/text" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+        "state": { "enum": ["legacy-record", "pending", "changes-requested", "accepted", "suspended", "retired"] }
+      },
+      "required": ["acceptancePath", "applicationPullRequest", "independentAudit", "limitations", "state"],
+      "type": "object"
+    },
+    "schemaVersion": { "const": "1.0.0" },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "manifestPath": { "pattern": "^[A-Za-z0-9._/-]{1,512}$", "type": "string" },
+        "numericRepositoryId": { "pattern": "^[1-9][0-9]{0,63}$", "type": "string" },
+        "repositoryUri": { "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+$", "type": "string" },
+        "revisionObjectId": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "treeObjectId": { "pattern": "^[0-9a-f]{40}$", "type": "string" }
+      },
+      "required": ["manifestPath", "numericRepositoryId", "repositoryUri", "revisionObjectId", "treeObjectId"],
+      "type": "object"
+    },
+    "status": { "enum": ["design", "candidate", "accepted", "deployed", "available", "suspended", "retired"] },
+    "statusUpdatedAt": { "format": "date-time", "type": "string" },
+    "summary": { "$ref": "#/$defs/text" },
+    "surfaces": { "items": { "$ref": "#/$defs/slug" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+    "warnings": { "items": { "$ref": "#/$defs/text" }, "maxItems": 32, "type": "array", "uniqueItems": true }
+  },
+  "required": ["capabilities", "chains", "discovery", "economics", "hook", "id", "kind", "name", "provenance", "relations", "review", "schemaVersion", "source", "status", "statusUpdatedAt", "summary", "surfaces", "warnings"],
+  "type": "object",
+  "$defs": {
+    "slug": { "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+    "text": { "maxLength": 1000, "minLength": 1, "type": "string" }
+  }
+}

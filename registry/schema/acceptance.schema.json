@@ -1,0 +1,37 @@
+{
+  "$id": "https://programmable.money/schemas/registry-acceptance-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptedAt": { "format": "date-time", "type": "string" },
+    "acceptedBy": { "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$", "type": "string" },
+    "application": {
+      "additionalProperties": false,
+      "properties": {
+        "applicationId": { "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+        "applicationRevision": { "minimum": 1, "type": "integer" },
+        "packageDigest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+        "pullRequest": { "format": "uri", "type": "string" }
+      },
+      "required": ["applicationId", "applicationRevision", "packageDigest", "pullRequest"],
+      "type": "object"
+    },
+    "conditions": { "items": { "maxLength": 1000, "minLength": 1, "type": "string" }, "maxItems": 32, "type": "array", "uniqueItems": true },
+    "decision": { "const": "accepted-for-registry-promotion" },
+    "projectRecordPath": { "pattern": "^registry/projects/[a-z0-9]+(?:-[a-z0-9]+)*/project\\.json$", "type": "string" },
+    "schemaVersion": { "const": "1.0.0" },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "numericRepositoryId": { "pattern": "^[1-9][0-9]{0,63}$", "type": "string" },
+        "repositoryUri": { "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+$", "type": "string" },
+        "revisionObjectId": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "treeObjectId": { "pattern": "^[0-9a-f]{40}$", "type": "string" }
+      },
+      "required": ["numericRepositoryId", "repositoryUri", "revisionObjectId", "treeObjectId"],
+      "type": "object"
+    }
+  },
+  "required": ["acceptedAt", "acceptedBy", "application", "conditions", "decision", "projectRecordPath", "schemaVersion", "source"],
+  "type": "object"
+}

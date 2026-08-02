@@ -1,0 +1,25 @@
+{
+  "name": "@programmable/registry",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate": "node scripts/generate-registry.mjs --write",
+    "check": "node scripts/verify-repository.mjs",
+    "test": "node scripts/verify-repository.mjs",
+    "test:intake": "node --test --test-concurrency=1 scripts/test/verify-public-hook-application*.test.mjs",
+    "test:registry": "node --test test/*.test.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xprogrammable/programmable-registry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0xprogrammable/programmable-registry/issues"
+  },
+  "homepage": "https://github.com/0xprogrammable/programmable-registry#readme"
+}
