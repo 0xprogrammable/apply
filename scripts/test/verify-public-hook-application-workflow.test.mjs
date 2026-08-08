@@ -5,8 +5,10 @@ import test from "node:test";
 
 const intake = fs.readFileSync(path.resolve(".github/workflows/verify-hook-builder.yml"), "utf8");
 const ordinary = fs.readFileSync(path.resolve(".github/workflows/verify.yml"), "utf8");
+const postMerge = fs.readFileSync(path.resolve(".github/workflows/verify-post-merge.yml"), "utf8");
+const codeql = fs.readFileSync(path.resolve(".github/workflows/codeql.yml"), "utf8");
 const validator = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
-const publicJob = intake.slice(intake.indexOf("  public-intake:"), intake.indexOf("  trusted-post-merge:"));
+const publicJob = intake.slice(intake.indexOf("  public-intake:"));
 const verificationStep = publicJob.slice(
   publicJob.indexOf("- name: Verify closed public application package"),
   publicJob.indexOf("- name: Defer executable registry maintenance")
@@ -18,6 +20,7 @@ const fetchStep = publicJob.slice(
 
 test("pull_request_target uses only protected base code and read-only authority", () => {
   assert.match(intake, /pull_request_target:\n\s+branches:\n\s+- main/u);
+  assert.doesNotMatch(intake, /\n  push:|\n  workflow_dispatch:/u);
   assert.match(intake, /\npermissions:\n  contents: read\n/u);
   assert.doesNotMatch(intake, /secrets\.|contents:\s*write|pull-requests:\s*write|id-token:/u);
   assert.match(publicJob, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/u);
@@ -64,15 +67,25 @@ test("ordinary CI is read-only, credential-free, pinned, and covers Node 20 and 
   assert.match(ordinary, /node:\n\s+- 20\n\s+- 22/u);
   assert.match(ordinary, /run: npm test/u);
   assert.doesNotMatch(ordinary, /secrets\.|github\.token|contents:\s*write/u);
-  for (const source of [intake, ordinary]) {
+  for (const source of [intake, ordinary, postMerge, codeql]) {
     const uses = [...source.matchAll(/^\s*uses:\s*([^\s#]+)/gmu)].map((match) => match[1]);
     assert.ok(uses.length >= 2);
     for (const action of uses) assert.match(action, /^[^@\s]+@[a-f0-9]{40}$/u);
   }
 });
 
+test("CodeQL is read-only apart from security result publication and uses pinned actions", () => {
+  assert.match(codeql, /\npermissions:\n  contents: read\n  security-events: write\n/u);
+  assert.match(codeql, /languages: javascript-typescript/u);
+  assert.match(codeql, /name: CodeQL/u);
+  assert.doesNotMatch(codeql, /secrets\.|contents:\s*write|pull-requests:\s*write/u);
+});
+
 test("post-merge verifies the complete repository and every maintained submission", () => {
-  const postMerge = intake.slice(intake.indexOf("  trusted-post-merge:"));
+  assert.match(postMerge, /\n  push:\n\s+branches:\n\s+- main/u);
+  assert.match(postMerge, /\n  workflow_dispatch:/u);
+  assert.doesNotMatch(postMerge, /pull_request/u);
+  assert.match(postMerge, /  trusted-post-merge:/u);
   assert.match(postMerge, /working-directory: source\n\s+run: npm test/u);
   assert.match(postMerge, /--verify-maintained/u);
   assert.match(postMerge, /--repository-root "\$source_root"/u);

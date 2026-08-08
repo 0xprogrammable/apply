@@ -1,14 +1,18 @@
 # Support
 
-Use a GitHub issue for reproducible bugs, documentation problems, missing templates, agent-host compatibility, or a
-proposal for a new capability pack. Include the Builder version, agent host, operating system, Node version, exact
-command, sanitized output and a minimal public reproduction when possible.
+Use the [issue chooser](https://github.com/0xprogrammable/apply/issues/new/choose) for reproducible checker defects,
+review-rule gaps, intake failures, registry or schema problems, and documentation errors. Include the affected Apply
+release or commit, exact command, sanitized output, and a minimal public reproduction when possible.
 
-Use GitHub Discussions for architecture questions and unfamiliar product ideas when Discussions are enabled. Novelty is
-not a security report and not a reason to force an idea into an existing template.
+Use [Apply Discussions](https://github.com/0xprogrammable/apply/discussions) for architecture questions and unfamiliar
+product ideas. Novelty is not a security report and not a reason to force an idea into an existing template.
 
-Use private vulnerability reporting for security-sensitive findings. Do not post wallet material, credentials, private
-repositories, personal data or unannounced vulnerabilities in public issues.
+Use [Hookbuilder issues](https://github.com/0xprogrammable/hookbuilder/issues/new/choose) for installation, agent-host,
+build, verification, template, or application-preparation support.
+
+Use [private vulnerability reporting](https://github.com/0xprogrammable/apply/security/advisories/new) for
+security-sensitive findings. Do not post wallet material, credentials, private repositories, personal data, or
+unannounced vulnerabilities in public issues.
 
 Project approval, deployment, provider routing, investment advice and guaranteed implementation support are not
 provided through repository issues.

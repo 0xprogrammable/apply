@@ -1,0 +1,69 @@
+name: Checker or registry bug
+description: Report a reproducible, non-sensitive problem in Apply.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for public, non-sensitive defects. Report exploitable vulnerabilities privately through [GitHub Security](https://github.com/0xprogrammable/apply/security/advisories/new).
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - Public checker or policy
+        - Application intake
+        - Registry or discovery data
+        - Schema
+        - GitHub workflow
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Apply release or commit
+      description: Provide the exact tag or 40-character commit when possible.
+      placeholder: v1.1.0 or ba485e37561763179a694130b59de0cd09954b16
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List the exact commands and smallest public input needed to reproduce the problem.
+      placeholder: |
+        1. Run ...
+        2. Provide ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include sanitized output or a public link.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: Explain the objective result you expected and why.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the operating system, Node.js version, and relevant command or host.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-report confirmation
+      options:
+        - label: This report contains no secret, personal data, private repository content, wallet material, or unpatched exploit.
+          required: true

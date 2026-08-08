@@ -3,7 +3,8 @@
 Programmable reviews exact project revisions. It does not rank ideas, judge whether a project is interesting, or reject
 unusual tokenomics merely because they are unusual.
 
-The public standard has five decision-critical axes:
+The public standard defines five decision-critical axes. A prepared review input records the evidence state for each
+axis:
 
 1. **Artifact identity** binds the repository, commit, tree, configuration and executable artifact.
 2. **Functionality** checks that declared paths actually execute, including failure, recovery and no-market behavior.
@@ -24,7 +25,8 @@ flowchart LR
 ```
 
 The public checker ends at the unsigned review decision. It has no production credentials and cannot sign or issue a
-launch permit.
+launch permit. It validates a closed review input and applies the published policy; it does not fetch project
+repositories, run project tests, or independently reproduce the supplied evidence.
 
 ## Decisions
 

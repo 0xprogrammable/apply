@@ -1,11 +1,11 @@
-# Registry contribution contract
+# Apply contribution contract
 
 This repository is the public application ledger and canonical discovery registry for Programmable projects built with
-the Programmable v4 Builder.
+Hookbuilder.
 
 ## Authority boundaries
 
-- Builder projects remain in builder-controlled public GitHub repositories.
+- Applicant projects remain in applicant-owned public GitHub repositories.
 - `submissions/` contains bounded, untrusted application records. A submission never edits `registry/`.
 - `registry/projects/` contains maintainer-authored records only. A record describes evidence; it is not an audit or
   safety guarantee.

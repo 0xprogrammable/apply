@@ -1,6 +1,6 @@
 # Architecture
 
-Programmable Registry separates four authorities that must not silently collapse into one another.
+Programmable Apply separates four authorities that must not silently collapse into one another.
 
 1. A builder-owned public repository is the source authority for a project.
 2. A six-file application is bounded review data tied to one exact repository id, commit, tree, and evidence set.
