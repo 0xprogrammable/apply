@@ -22,9 +22,5 @@
   "bugs": {
     "url": "https://github.com/0xprogrammable/apply/issues"
   },
-  "homepage": "https://github.com/0xprogrammable/apply#readme",
-  "devDependencies": {
-    "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
-  }
+  "homepage": "https://github.com/0xprogrammable/apply#readme"
 }

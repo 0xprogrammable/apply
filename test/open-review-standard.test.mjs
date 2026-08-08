@@ -4,8 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import Ajv2020 from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
+import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020.js";
 
 import { canonicalJson, evaluateOpenReview, validateOpenReviewInput } from "../review/open-review-engine.mjs";
 
@@ -85,7 +84,6 @@ test("the published policy keeps novelty neutral and unknown distinct from unsaf
 
 test("all public examples and decisions conform to the published closed schemas", () => {
   const ajv = new Ajv2020({ allErrors: true, strict: true });
-  addFormats(ajv);
   const validateInput = ajv.compile(JSON.parse(fs.readFileSync(path.join(root, "review/schemas/open-review-input.v1.schema.json"), "utf8")));
   const validateDecision = ajv.compile(JSON.parse(fs.readFileSync(path.join(root, "review/schemas/open-review-decision.v1.schema.json"), "utf8")));
 
