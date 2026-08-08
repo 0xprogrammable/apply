@@ -85,6 +85,7 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   "assets/",
   "docs/",
   "registry/",
+  "review/",
   "scripts/test/schema-validator/",
   "test/",
   "vendor/programmable-v4-hook-builder/"
