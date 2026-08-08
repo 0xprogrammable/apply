@@ -30,7 +30,7 @@ function verifyVendorReceipt() {
   const receiptPath = path.join(root, "vendor/receipt.json");
   if (!fs.existsSync(receiptPath)) throw new RegistryError("VENDOR_RECEIPT_MISSING", "vendor receipt is missing");
   const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
-  if (receipt.schemaVersion !== "1.0.0" || receipt.repository !== "0xprogrammable/hookbuilder" || !/^[0-9a-f]{40}$/u.test(receipt.commit ?? "") || !/^[0-9a-f]{40}$/u.test(receipt.skillTree ?? "")) {
+  if (receipt.schemaVersion !== "1.0.0" || receipt.repository !== "0xprogrammable/programmable-v4-builder" || !/^[0-9a-f]{40}$/u.test(receipt.commit ?? "") || !/^[0-9a-f]{40}$/u.test(receipt.skillTree ?? "")) {
     throw new RegistryError("VENDOR_RECEIPT_INVALID", "vendor receipt is malformed");
   }
   const temporaryIndex = path.join(root, `.vendor-index-${process.pid}`);
