@@ -93,8 +93,12 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
 const REGISTRY_MAINTENANCE_FILES = new Set([
   ".github/CODEOWNERS",
   ".github/ISSUE_TEMPLATE/config.yml",
+  ".github/ISSUE_TEMPLATE/documentation.yml",
+  ".github/ISSUE_TEMPLATE/review-or-registry-bug.yml",
   ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/workflows/codeql.yml",
   ".github/workflows/verify-hook-builder.yml",
+  ".github/workflows/verify-post-merge.yml",
   ".github/workflows/verify.yml",
   ".gitignore",
   "AGENTS.md",
@@ -112,6 +116,12 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-public-hook-application.mjs",
   "submissions/README.md"
+]);
+const RESERVED_MAINTENANCE_PREFIXES = Object.freeze([
+  ".github/",
+  "scripts/",
+  "submissions/",
+  "vendor/"
 ]);
 const SHARED_REGISTRY_DOCUMENTATION_FILES = new Set([]);
 const APPLICATION_PATH_PATTERN = /^submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([^/]+)$/;
@@ -241,7 +251,15 @@ export function classifyPublicIntakePullRequest({
     isRegistryMaintenancePath(change.path)
     && !SHARED_REGISTRY_DOCUMENTATION_FILES.has(change.path)
   ));
-  if (maintenanceChanges.length === 0) return { mode: "no-op", ...comparison };
+  if (maintenanceChanges.length === 0) {
+    if (changes.some((change) => RESERVED_MAINTENANCE_PREFIXES.some((prefix) => change.path.startsWith(prefix)))) {
+      reject(
+        "CHANGED_PATH_NOT_ALLOWED",
+        "A pull request cannot add or change an unrecognized first-party maintenance path."
+      );
+    }
+    return { mode: "no-op", ...comparison };
+  }
 
   rejectUnsafeChangedEntries(changes);
   if (changes.every((change) => isRegistryMaintenancePath(change.path))) {
