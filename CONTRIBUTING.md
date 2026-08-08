@@ -21,6 +21,12 @@ or deployment claim.
 Never hand-edit generated indexes. Change a source project record, then run `npm run generate`. Existing history files
 are append-only and must never be rewritten.
 
+## Review standard maintenance
+
+Changes to `review/`, its schemas or its decision semantics require a separate maintainer pull request, public regression
+fixtures for both unusual legitimate behavior and proven failures, and a version change when existing inputs could
+receive a different decision. A model score or private assertion is never sufficient test evidence.
+
 ## Security
 
 Do not publish an unpatched vulnerability, credential, wallet secret, private RPC, personal data, or exploit in a pull

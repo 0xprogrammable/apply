@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "programmable.open-review-input.v1",
+  "reviewedRevision": {
+    "numericRepositoryId": 1002,
+    "repository": "example/novel-return-delta",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "currentRevision": {
+    "numericRepositoryId": 1002,
+    "repository": "example/novel-return-delta",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "obligations": [
+    { "id": "artifact.identity", "axis": "artifact_identity", "critical": true, "owner": "candidate", "state": "closed", "statement": "Exact source and runtime identity are bound.", "evidence": ["sha256:1111111111111111111111111111111111111111111111111111111111111111"] },
+    { "id": "functionality.novel-delta", "axis": "functionality", "critical": true, "owner": "platform", "state": "unknown", "statement": "The new split and merge return-delta semantics still require platform-owned replay.", "evidence": [] },
+    { "id": "disclosure.behavior", "axis": "disclosure", "critical": true, "owner": "candidate", "state": "closed", "statement": "The novel behavior and intended value effects are disclosed.", "evidence": ["sha256:3333333333333333333333333333333333333333333333333333333333333333"] },
+    { "id": "integrity.value-flow", "axis": "integrity", "critical": true, "owner": "platform", "state": "closed", "statement": "All presently reproduced value-flow edges reconcile.", "evidence": ["sha256:4444444444444444444444444444444444444444444444444444444444444444"] },
+    { "id": "launch.compatibility", "axis": "launch_compatibility", "critical": true, "owner": "candidate", "state": "closed", "statement": "The exact configuration satisfies the current launch contract.", "evidence": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"] }
+  ],
+  "witnesses": []
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/0xprogrammable/apply/blob/main/review/schemas/open-review-input.v1.schema.json",
+  "title": "Programmable Open Review Input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "reviewedRevision", "currentRevision", "obligations", "witnesses"],
+  "properties": {
+    "schemaVersion": { "const": "programmable.open-review-input.v1" },
+    "reviewedRevision": { "$ref": "#/$defs/revision" },
+    "currentRevision": { "$ref": "#/$defs/revision" },
+    "obligations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/obligation" }
+    },
+    "witnesses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/witness" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numericRepositoryId", "repository", "commit", "tree", "configurationHash"],
+      "properties": {
+        "numericRepositoryId": { "type": "integer", "minimum": 1 },
+        "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "configurationHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "obligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "axis", "critical", "owner", "state", "statement", "evidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,79}$" },
+        "axis": {
+          "enum": ["artifact_identity", "functionality", "disclosure", "integrity", "launch_compatibility", "advisory"]
+        },
+        "critical": { "type": "boolean" },
+        "owner": { "enum": ["candidate", "platform"] },
+        "state": { "enum": ["closed", "unknown", "contradicted", "not_applicable"] },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "evidence": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId", "universal", "revisionBound", "reachable", "complete", "independentlyReplayed",
+        "sequenceHash", "affectedActors", "affectedValue", "violatedProperty", "reproduction"
+      ],
+      "properties": {
+        "ruleId": {
+          "enum": [
+            "UNAUTHORIZED_VALUE_DIVERSION",
+            "BROKEN_ACCOUNTING_OR_CLAIM",
+            "CONCEALED_EXIT_DENIAL",
+            "UNBOUNDED_RETROACTIVE_AUTHORITY",
+            "REVIEWED_ARTIFACT_SUBSTITUTION",
+            "PARTY_CONTROLLED_OBJECTIVE_OUTCOME"
+          ]
+        },
+        "universal": { "type": "boolean" },
+        "revisionBound": { "type": "boolean" },
+        "reachable": { "type": "boolean" },
+        "complete": { "type": "boolean" },
+        "independentlyReplayed": { "type": "boolean" },
+        "sequenceHash": { "$ref": "#/$defs/sha256" },
+        "affectedActors": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "affectedValue": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "violatedProperty": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "reproduction": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      }
+    }
+  }
+}

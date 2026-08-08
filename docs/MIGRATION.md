@@ -11,7 +11,7 @@ Activation requires all of the following:
 
 1. this repository is public at the exact tested commit;
 2. protected-branch checks are enforced;
-3. a released Builder version targets `0xprogrammable/programmable-registry`;
+3. a released Hookbuilder version targets `0xprogrammable/apply`;
 4. the vendored intake validator matches that Builder's application contract; and
 5. `docs/builder/intake-status.json` and `registry/config.json` are changed together from `prelaunch` to `open`.
 

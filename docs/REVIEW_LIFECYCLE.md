@@ -1,6 +1,7 @@
 # Review and promotion lifecycle
 
-The public lifecycle is deliberately non-automatic.
+The public lifecycle separates deterministic review from launch authority. The current public policy and preview engine
+are documented in [Open Review Standard v1](OPEN_REVIEW_STANDARD.md).
 
 | State | Evidence | Meaning |
 | --- | --- | --- |
@@ -8,6 +9,7 @@ The public lifecycle is deliberately non-automatic.
 | Submitted | Draft application pull request | Public review thread exists |
 | Intake passed | Trusted check is green | Package shape and exact public evidence passed known checks |
 | Changes requested | GitHub review state | Builder must update the exact application revision |
+| Review ready | Public checker decision | Critical evidence is closed for one exact revision; no launch right exists yet |
 | Accepted | Maintainer acceptance record | One exact source revision may be promoted |
 | Deployed | Deployment evidence | Contracts or services were deployed; not automatically available |
 | Available | Platform release evidence | Programmable currently exposes the project |
