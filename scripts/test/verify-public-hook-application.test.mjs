@@ -837,8 +837,12 @@ test("legacy paths cannot be mixed with Registry maintenance", (t) => {
 test("first-party Registry infrastructure classifies as registry maintenance", (t) => {
   const fixture = createRevisionPair(t);
   for (const relativePath of [
+    ".github/workflows/codeql.yml",
     ".github/workflows/verify-hook-builder.yml",
+    ".github/workflows/verify-post-merge.yml",
     ".github/ISSUE_TEMPLATE/config.yml",
+    ".github/ISSUE_TEMPLATE/documentation.yml",
+    ".github/ISSUE_TEMPLATE/review-or-registry-bug.yml",
     "AGENTS.md",
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
@@ -865,6 +869,23 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
   const candidateCommit = commitAll(fixture.candidate, "registry maintenance change");
   const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
   assert.equal(result.mode, "registry-maintenance");
+});
+
+test("unrecognized first-party maintenance paths fail closed", (t) => {
+  for (const relativePath of [
+    ".github/workflows/unreviewed.yml",
+    "scripts/unreviewed.mjs",
+    "submissions/unreviewed.txt",
+    "vendor/unreviewed/file.txt"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, "unreviewed maintenance path\n");
+    const candidateCommit = commitAll(fixture.candidate, `unreviewed path ${relativePath}`);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED")
+    );
+  }
 });
 
 test("Registry documentation is always maintainer-reviewed maintenance", (t) => {
