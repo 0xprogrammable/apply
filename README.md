@@ -5,84 +5,136 @@
 <h1 align="center">Programmable Apply</h1>
 
 <p align="center">
-  Public applications, open review rules and the discovery ledger for Programmable projects.
+  Open review rules, public applications, and canonical discovery records for Programmable projects.
 </p>
 
-The Registry gives agents, reviewers, and the Programmable Explorer one GitHub-backed source for what has been
-submitted, reviewed, deployed, made available, suspended, or retired. It never turns a local check, merged application,
-similarity match, deployment, or indexer observation into a safety guarantee.
+<p align="center">
+  <a href="https://github.com/0xprogrammable/apply/actions/workflows/verify.yml"><img src="https://github.com/0xprogrammable/apply/actions/workflows/verify.yml/badge.svg?branch=main" alt="Repository verification"></a>
+  <a href="https://github.com/0xprogrammable/apply/actions/workflows/codeql.yml"><img src="https://github.com/0xprogrammable/apply/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL analysis"></a>
+  <a href="https://github.com/0xprogrammable/apply/releases/latest"><img src="https://img.shields.io/github/v/release/0xprogrammable/apply?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/0xprogrammable/apply" alt="MIT License"></a>
+</p>
 
-## Build, apply, review
+<p align="center">
+  <a href="#open-review-standard">Read the standard</a> ·
+  <a href="#run-the-checker">Run the checker</a> ·
+  <a href="#report-a-finding">Report a finding</a>
+</p>
 
-```mermaid
-flowchart LR
-  B["Builder-owned project repository"] -->|"six-file application PR"| R["Programmable Apply"]
-  S["Hookbuilder"] -->|"build, check, submit"| B
-  R -->|"open review standard"| V["Review"]
-  V -->|"exact-revision record"| E["Programmable Explorer"]
-```
+Programmable Apply publishes the [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md), a deterministic local checker,
+the public application ledger, and a versioned discovery registry. Complete project source stays in the applicant-owned
+public repository.
 
-- The builder's repository owns the complete project.
-- [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder) owns agent behavior, rules,
-  templates, checks, and the GitHub client.
-- This repository owns applications and discovery records.
-- [`programmable`](https://github.com/0xprogrammable/programmable) owns the platform, contracts, and Explorer.
+> [!IMPORTANT]
+> **Public application intake is currently in prelaunch.** The standard, checker, schemas, examples, and discovery
+> registry are public today. A matching Hookbuilder release will activate new applications to this repository. Existing
+> applications keep their original GitHub review threads.
 
-## Open review standard
+A local checker result, passing pull request, merged application, registry match, deployment, or indexer observation is
+never presented as a safety guarantee or launch right.
 
-The selection rules are public. They judge exact evidence, not whether an idea is familiar, fashionable or profitable.
-Unknown platform-owned behavior stays pending; it is not silently called unsafe. A hard block requires a complete,
-revision-bound and independently replayed witness.
+## Open Review Standard
 
-Read the [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md), inspect the
-[policy](review/policy.v1.json), or run a public example:
+The standard defines evidence requirements across five decision-critical areas: artifact identity, functionality,
+disclosure, integrity, and launch compatibility. It does not rank ideas or reject a project because its mechanics, fees,
+losses, architecture, or tokenomics are unusual.
+
+Unknown platform-owned evidence remains `platform_analysis_pending`. A hard block requires a complete, revision-bound,
+independently replayed witness supported by the current policy. A model opinion, scanner score, label, or incomplete
+witness cannot hard-block a project.
+
+The public checker validates a closed review input and applies the published policy deterministically. It does not fetch
+project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, or issue a
+launch permit.
+
+Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and the machine-readable
+[policy](review/policy.v1.json).
+
+## Run the checker
+
+Node.js 20 or newer is required. The checker has no runtime dependencies and never executes candidate code.
 
 ```bash
+git clone --depth 1 https://github.com/0xprogrammable/apply.git
+cd apply
 npm run review -- review/examples/disclosed-high-fee.json
 ```
 
-The local result never signs an approval or grants launch rights.
+The bundled example returns `launch_ready` together with `checkerOnly: true`, `launchAuthorized: false`, and
+`independentAudit: false`. Inspect the [examples](review/examples),
+[input schema](review/schemas/open-review-input.v1.schema.json), and
+[decision schema](review/schemas/open-review-decision.v1.schema.json).
 
-## Current registry
-
-[`registry/index.json`](registry/index.json) is the small discovery entry point. Every entry binds one closed record by
-SHA-256. [`registry/search-index.json`](registry/search-index.json) contains only bounded discovery metadata; agents
-fetch a full project record only after a match.
-
-Statuses are deliberately separate: `design`, `candidate`, `accepted`, `deployed`, `available`, `suspended`, and
-`retired`. Pending pull requests are unreviewed applications and are never inserted into the canonical registry merely
-because their intake check passed.
-
-Read the small contracts before integrating:
-
-- [Architecture and trust boundaries](docs/ARCHITECTURE.md)
-- [Discovery contract](docs/DISCOVERY_CONTRACT.md)
-- [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)
-- [Legacy intake migration](docs/MIGRATION.md)
-- [Current code-maturity assessment](docs/CODE_MATURITY.md)
-- [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
-
-## Apply
-
-Use the released [Hookbuilder](https://github.com/0xprogrammable/hookbuilder). Your complete project stays in your own public GitHub repository. After exact
-confirmation, the Builder opens a draft pull request containing exactly six generated files under
-`submissions/<application-id>/`.
-
-The Registry is in migration prelaunch until the matching Builder release activates this target. Existing applications
-already opened against `0xprogrammable/programmable` keep their original review thread.
-
-## Verify
-
-Node.js 20 or newer is required. The repository has no runtime dependencies.
+Run the complete repository gate with:
 
 ```bash
 npm test
 ```
 
-Application content is untrusted data. The `pull_request_target` intake job checks out only protected base code, uses
-read-only permissions, hydrates only the bounded six-file package, and never executes candidate code.
+## How it works
 
-## Security and independence
+1. **Build.** Project source stays in its own public GitHub repository.
+2. **Prepare.** When intake opens, [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) prepares six generated
+   application files bound to one repository id, commit, tree, configuration, and evidence set.
+3. **Review.** Programmable Apply validates the bounded application. Review evidence and any later decision remain
+   bound to the exact submitted revision.
+4. **Promote.** Application intake, acceptance, deployment, availability, and launch authorization remain separate
+   facts.
+5. **Discover.** Agents and the Programmable Explorer read digest-bound records from the discovery registry.
 
-Read [SECURITY.md](SECURITY.md) before reporting a vulnerability. Programmable Registry is independent open-source
-software. It does not claim affiliation with or endorsement by Uniswap Labs or Uniswap Foundation.
+Application content is untrusted data. The trusted intake workflow uses protected base code, read-only permissions,
+bounded files, and no candidate execution.
+
+## Application intake
+
+**Status: prelaunch.** Do not create an application pull request manually.
+
+Once activated, Hookbuilder will open a draft pull request containing exactly six generated files under
+`submissions/<application-id>/`. Existing applications remain on their original review threads. Read the
+[migration contract](docs/MIGRATION.md) for the activation requirements.
+
+## Discovery registry
+
+Agents and integrations start with [`registry/index.json`](registry/index.json) or
+[`registry/search-index.json`](registry/search-index.json) at one exact repository commit. A consumer fetches the
+selected full record from that same commit and verifies its SHA-256 digest before use.
+
+Search results indicate relevance only. They do not prove originality, compatibility, acceptance, safety, deployment,
+provider support, or availability. The statuses `design`, `candidate`, `accepted`, `deployed`, `available`, `suspended`,
+and `retired` remain deliberately separate.
+
+Read the [discovery contract](docs/DISCOVERY_CONTRACT.md) before integrating.
+
+## Report a finding
+
+Reproducible false decisions, missing review rules, intake defects, identity mismatches, registry-integrity problems,
+and documentation errors are useful findings.
+
+- [Report a non-sensitive checker or registry problem](https://github.com/0xprogrammable/apply/issues/new/choose).
+- [Discuss an architecture or policy idea](https://github.com/0xprogrammable/apply/discussions).
+- [Report an exploitable vulnerability privately](https://github.com/0xprogrammable/apply/security/advisories/new).
+
+Read [SECURITY.md](SECURITY.md) before testing or reporting a security-sensitive finding. Do not publish credentials,
+wallet material, private repositories, personal data, or an unpatched exploit.
+
+## Documentation
+
+- [Architecture and trust boundaries](docs/ARCHITECTURE.md)
+- [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
+- [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)
+- [Discovery contract](docs/DISCOVERY_CONTRACT.md)
+- [Code maturity assessment](docs/CODE_MATURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
+
+## Related repositories
+
+- [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) builds, checks, and prepares applications.
+- [Programmable](https://github.com/0xprogrammable/programmable) contains the platform, contracts, and Explorer.
+
+## Independence
+
+Programmable Apply is independent open-source software. It does not claim affiliation with or endorsement by Uniswap
+Labs or the Uniswap Foundation.
+
+Released under the [MIT License](LICENSE).

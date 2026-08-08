@@ -1,10 +1,10 @@
 # Public GitHub application intake
 
-The complete project stays in the builder-controlled public GitHub repository. A draft pull request to
+The complete project stays in the applicant-owned public GitHub repository. A draft pull request to
 `0xprogrammable/apply:main` carries exactly six generated files under one
 `submissions/<application-id>/` directory.
 
-The intake is `prelaunch` until a matching Programmable v4 Builder release activates this repository. Existing pull
+The intake is `prelaunch` until a matching Hookbuilder release activates this repository. Existing pull
 requests already opened against `0xprogrammable/programmable` remain on that legacy review thread and are not silently
 moved or relabeled.
 

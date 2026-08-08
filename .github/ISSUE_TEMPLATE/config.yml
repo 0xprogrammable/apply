@@ -1,8 +1,14 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security report
-    url: https://github.com/0xprogrammable/programmable-registry/security/advisories/new
-    about: Report vulnerabilities privately. Do not open a public security issue.
-  - name: Builder support
-    url: https://github.com/0xprogrammable/programmable-v4-builder/discussions
-    about: Ask how to build, verify, submit, or discover a project.
+  - name: Report a vulnerability privately
+    url: https://github.com/0xprogrammable/apply/security/advisories/new
+    about: Report security-sensitive findings privately. Do not open a public issue.
+  - name: Ask an Apply question
+    url: https://github.com/0xprogrammable/apply/discussions/new?category=q-a
+    about: Ask about applications, review records, registry data, or integrations.
+  - name: Propose an Apply idea
+    url: https://github.com/0xprogrammable/apply/discussions/new?category=ideas
+    about: Discuss a review-rule, registry, or workflow improvement before opening a pull request.
+  - name: Get Hookbuilder support
+    url: https://github.com/0xprogrammable/hookbuilder/issues/new/choose
+    about: Report Builder bugs or propose building capabilities and templates.

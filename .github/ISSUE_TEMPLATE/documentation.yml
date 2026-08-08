@@ -1,0 +1,34 @@
+name: Documentation correction
+description: Report inaccurate, missing, or unclear Apply documentation.
+title: "[Docs] "
+labels:
+  - documentation
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Page or file
+      description: Link to the exact page, file, or section.
+      placeholder: https://github.com/0xprogrammable/apply/blob/main/README.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is inaccurate or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Suggested correction
+      description: State the verifiable replacement or missing information.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-report confirmation
+      options:
+        - label: This report contains no secret, personal data, private repository content, wallet material, or unpatched exploit.
+          required: true
