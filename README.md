@@ -2,31 +2,46 @@
   <img src="assets/repository-cover.jpg" alt="Programmable islands connected by streams, representing composable projects" width="100%">
 </p>
 
-<h1 align="center">Programmable Registry</h1>
+<h1 align="center">Programmable Apply</h1>
 
 <p align="center">
-  The public application ledger and live discovery memory for projects built with the Programmable v4 Builder.
+  Public applications, open review rules and the discovery ledger for Programmable projects.
 </p>
 
 The Registry gives agents, reviewers, and the Programmable Explorer one GitHub-backed source for what has been
 submitted, reviewed, deployed, made available, suspended, or retired. It never turns a local check, merged application,
 similarity match, deployment, or indexer observation into a safety guarantee.
 
-## The four-repository model
+## Build, apply, review
 
 ```mermaid
 flowchart LR
-  B["Builder-owned project repository"] -->|"six-file application PR"| R["Programmable Registry"]
-  S["Programmable v4 Builder Skill"] -->|"build, check, submit, discover"| B
-  R -->|"bounded live index"| S
-  R -->|"canonical records"| E["Programmable Explorer"]
+  B["Builder-owned project repository"] -->|"six-file application PR"| R["Programmable Apply"]
+  S["Hookbuilder"] -->|"build, check, submit"| B
+  R -->|"open review standard"| V["Review"]
+  V -->|"exact-revision record"| E["Programmable Explorer"]
 ```
 
 - The builder's repository owns the complete project.
-- [`programmable-v4-builder`](https://github.com/0xprogrammable/programmable-v4-builder) owns agent behavior, rules,
+- [`hookbuilder`](https://github.com/0xprogrammable/hookbuilder) owns agent behavior, rules,
   templates, checks, and the GitHub client.
 - This repository owns applications and discovery records.
 - [`programmable`](https://github.com/0xprogrammable/programmable) owns the platform, contracts, and Explorer.
+
+## Open review standard
+
+The selection rules are public. They judge exact evidence, not whether an idea is familiar, fashionable or profitable.
+Unknown platform-owned behavior stays pending; it is not silently called unsafe. A hard block requires a complete,
+revision-bound and independently replayed witness.
+
+Read the [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md), inspect the
+[policy](review/policy.v1.json), or run a public example:
+
+```bash
+npm run review -- review/examples/disclosed-high-fee.json
+```
+
+The local result never signs an approval or grants launch rights.
 
 ## Current registry
 
@@ -45,10 +60,11 @@ Read the small contracts before integrating:
 - [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)
 - [Legacy intake migration](docs/MIGRATION.md)
 - [Current code-maturity assessment](docs/CODE_MATURITY.md)
+- [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
 
 ## Apply
 
-Use the released Programmable v4 Builder. Your complete project stays in your own public GitHub repository. After exact
+Use the released [Hookbuilder](https://github.com/0xprogrammable/hookbuilder). Your complete project stays in your own public GitHub repository. After exact
 confirmation, the Builder opens a draft pull request containing exactly six generated files under
 `submissions/<application-id>/`.
 

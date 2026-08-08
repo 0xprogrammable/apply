@@ -8,7 +8,7 @@
       "properties": {
         "baseBranch": { "const": "main" },
         "directory": { "const": "submissions" },
-        "repository": { "const": "0xprogrammable/programmable-registry" },
+        "repository": { "const": "0xprogrammable/apply" },
         "state": { "enum": ["prelaunch", "open", "paused-new", "paused-all"] }
       },
       "required": ["baseBranch", "directory", "repository", "state"],

@@ -4,3 +4,5 @@
 /scripts/ @0xprogrammable
 /.github/ @0xprogrammable
 /vendor/ @0xprogrammable
+/review/ @0xprogrammable
+/docs/OPEN_REVIEW_STANDARD.md @0xprogrammable

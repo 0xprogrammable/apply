@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "programmable.open-review-input.v1",
+  "reviewedRevision": {
+    "numericRepositoryId": 1001,
+    "repository": "example/disclosed-high-fee",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "currentRevision": {
+    "numericRepositoryId": 1001,
+    "repository": "example/disclosed-high-fee",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "obligations": [
+    { "id": "artifact.identity", "axis": "artifact_identity", "critical": true, "owner": "candidate", "state": "closed", "statement": "Exact source and runtime identity are bound.", "evidence": ["sha256:1111111111111111111111111111111111111111111111111111111111111111"] },
+    { "id": "functionality.swap", "axis": "functionality", "critical": true, "owner": "candidate", "state": "closed", "statement": "The declared swap path executes as specified.", "evidence": ["sha256:2222222222222222222222222222222222222222222222222222222222222222"] },
+    { "id": "disclosure.high-fee", "axis": "disclosure", "critical": true, "owner": "candidate", "state": "closed", "statement": "The intentional 80 percent fee, recipients and effect are disclosed before consent.", "evidence": ["sha256:3333333333333333333333333333333333333333333333333333333333333333"] },
+    { "id": "integrity.value-flow", "axis": "integrity", "critical": true, "owner": "platform", "state": "closed", "statement": "Observed value flow matches the disclosed fee behavior.", "evidence": ["sha256:4444444444444444444444444444444444444444444444444444444444444444"] },
+    { "id": "launch.compatibility", "axis": "launch_compatibility", "critical": true, "owner": "candidate", "state": "closed", "statement": "The exact configuration satisfies the current launch contract.", "evidence": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"] }
+  ],
+  "witnesses": []
+}

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "programmable.open-review-policy.v1",
+  "policyId": "programmable-open-review-v1",
+  "version": "1.0.0",
+  "requiredAxes": [
+    "artifact_identity",
+    "functionality",
+    "disclosure",
+    "integrity",
+    "launch_compatibility"
+  ],
+  "statuses": [
+    "launch_ready",
+    "changes_requested",
+    "platform_analysis_pending",
+    "blocked_proven_integrity_failure",
+    "changed_since_review"
+  ],
+  "blockerRules": [
+    {
+      "id": "UNAUTHORIZED_VALUE_DIVERSION",
+      "enforcement": "hard_block_with_complete_witness",
+      "summary": "A reachable path transfers user-controlled value outside the declared and consented value flow."
+    },
+    {
+      "id": "BROKEN_ACCOUNTING_OR_CLAIM",
+      "enforcement": "pending_until_dedicated_replay",
+      "summary": "Accounting, claims, refunds or settlement can be broken or used more than once."
+    },
+    {
+      "id": "CONCEALED_EXIT_DENIAL",
+      "enforcement": "pending_until_dedicated_replay",
+      "summary": "A promised exit, refund or settlement can be denied by an undisclosed reachable path."
+    },
+    {
+      "id": "UNBOUNDED_RETROACTIVE_AUTHORITY",
+      "enforcement": "pending_until_dedicated_replay",
+      "summary": "A party can retroactively and without a disclosed bound change rights over committed value."
+    },
+    {
+      "id": "REVIEWED_ARTIFACT_SUBSTITUTION",
+      "enforcement": "pending_until_dedicated_replay",
+      "summary": "The reviewed runtime, configuration or deployment can be replaced outside the reviewed identity."
+    },
+    {
+      "id": "PARTY_CONTROLLED_OBJECTIVE_OUTCOME",
+      "enforcement": "pending_until_dedicated_replay",
+      "summary": "A supposedly objective outcome can be freely chosen by an interested party."
+    }
+  ],
+  "principles": {
+    "noveltyIsNeutral": true,
+    "unknownIsUnsafe": false,
+    "unusualEconomicsAreBlocked": false,
+    "disclosedIntentionalLossIsBlocked": false,
+    "localPreviewCanAuthorizeLaunch": false,
+    "modelVoteCanCloseCriticalUnknown": false
+  }
+}

@@ -13,10 +13,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 try {
   const generated = verifyGeneratedArtifacts({ repositoryRoot: root });
   verifyVendorReceipt();
-  runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   if (!fs.existsSync(path.join(root, "scripts/test/schema-validator/node_modules/ajv"))) {
     run("npm", ["ci", "--prefix", "scripts/test/schema-validator", "--ignore-scripts", "--no-audit", "--no-fund"]);
   }
+  runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   runNodeTests("scripts/test", (name) => name.startsWith("verify-public-hook-application") && name.endsWith(".test.mjs"), ["--test-concurrency=1"]);
   process.stdout.write(`${canonicalJson({ ...generated, checks: ["generated-registry", "vendor-receipt", "registry-tests", "trusted-intake-tests"], ok: true })}\n`);
 } catch (error) {

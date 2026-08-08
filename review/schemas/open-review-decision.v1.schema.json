@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/0xprogrammable/apply/blob/main/review/schemas/open-review-decision.v1.schema.json",
+  "title": "Programmable Open Review Decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "policyId", "policyVersion", "reviewedRevision", "currentRevision", "status",
+    "checkerOnly", "launchAuthorized", "independentAudit", "rationaleCodes", "unresolved", "advisories", "blocker",
+    "digest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "programmable.open-review-decision.v1" },
+    "policyId": { "const": "programmable-open-review-v1" },
+    "policyVersion": { "const": "1.0.0" },
+    "reviewedRevision": { "$ref": "#/$defs/revision" },
+    "currentRevision": { "$ref": "#/$defs/revision" },
+    "status": {
+      "enum": [
+        "launch_ready",
+        "changes_requested",
+        "platform_analysis_pending",
+        "blocked_proven_integrity_failure",
+        "changed_since_review"
+      ]
+    },
+    "checkerOnly": { "const": true },
+    "launchAuthorized": { "const": false },
+    "independentAudit": { "const": false },
+    "rationaleCodes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "unresolved": { "type": "array", "items": { "$ref": "#/$defs/publicObligation" } },
+    "advisories": { "type": "array", "items": { "$ref": "#/$defs/publicObligation" } },
+    "blocker": { "oneOf": [{ "$ref": "#/$defs/witness" }, { "type": "null" }] },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numericRepositoryId", "repository", "commit", "tree", "configurationHash"],
+      "properties": {
+        "numericRepositoryId": { "type": "integer", "minimum": 1 },
+        "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "configurationHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "publicObligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "axis", "owner", "statement"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,79}$" },
+        "axis": {
+          "enum": ["artifact_identity", "functionality", "disclosure", "integrity", "launch_compatibility", "advisory"]
+        },
+        "owner": { "enum": ["candidate", "platform"] },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId", "universal", "revisionBound", "reachable", "complete", "independentlyReplayed",
+        "sequenceHash", "affectedActors", "affectedValue", "violatedProperty", "reproduction"
+      ],
+      "properties": {
+        "ruleId": { "const": "UNAUTHORIZED_VALUE_DIVERSION" },
+        "universal": { "type": "boolean" },
+        "revisionBound": { "type": "boolean" },
+        "reachable": { "type": "boolean" },
+        "complete": { "type": "boolean" },
+        "independentlyReplayed": { "type": "boolean" },
+        "sequenceHash": { "$ref": "#/$defs/sha256" },
+        "affectedActors": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "affectedValue": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "violatedProperty": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "reproduction": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      }
+    }
+  }
+}

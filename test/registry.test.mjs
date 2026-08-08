@@ -56,7 +56,7 @@ test("pending legacy pull requests remain explicitly separate from accepted reco
     repository: "0xprogrammable/programmable"
   }]);
   assert.equal(config.activeIntake.state, "prelaunch");
-  assert.equal(config.activeIntake.repository, "0xprogrammable/programmable-registry");
+  assert.equal(config.activeIntake.repository, "0xprogrammable/apply");
 });
 
 test("duplicate JSON keys and source path escapes fail closed", (t) => {
@@ -77,7 +77,8 @@ test("duplicate JSON keys and source path escapes fail closed", (t) => {
 
 test("history generation refuses to rewrite an existing version", (t) => {
   const fixture = copyFixture(t);
-  const historyPath = path.join(fixture, "registry/history/1.0.0.json");
+  const config = JSON.parse(fs.readFileSync(path.join(fixture, "registry/config.json"), "utf8"));
+  const historyPath = path.join(fixture, `registry/history/${config.historyVersion}.json`);
   fs.writeFileSync(historyPath, "{}\n");
   const result = childProcess.spawnSync(
     process.execPath,
@@ -95,7 +96,7 @@ test("maintainer acceptance must bind the exact application and source record", 
   const project = JSON.parse(fs.readFileSync(projectPath, "utf8"));
   project.review = {
     acceptancePath: "registry/acceptances/classic/1.json",
-    applicationPullRequest: "https://github.com/0xprogrammable/programmable-registry/pull/7",
+    applicationPullRequest: "https://github.com/0xprogrammable/apply/pull/7",
     independentAudit: false,
     limitations: ["Maintainer acceptance is not an audit or deployment approval."],
     state: "accepted"
@@ -110,7 +111,7 @@ test("maintainer acceptance must bind the exact application and source record", 
       applicationId: "classic",
       applicationRevision: 1,
       packageDigest: `sha256:${"a".repeat(64)}`,
-      pullRequest: "https://github.com/0xprogrammable/programmable-registry/pull/7"
+      pullRequest: "https://github.com/0xprogrammable/apply/pull/7"
     },
     conditions: ["Maintainer acceptance is not an audit or deployment authorization."],
     decision: "accepted-for-registry-promotion",
