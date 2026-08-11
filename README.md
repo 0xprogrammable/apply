@@ -93,6 +93,12 @@ Once activated, Hookbuilder will open a draft pull request containing exactly si
 `submissions/<application-id>/`. Existing applications remain on their original review threads. Read the
 [migration contract](docs/MIGRATION.md) for the activation requirements.
 
+## Fee terms
+
+Fee terms apply only to a verified, activated market path. Official Classic and verified Native Custom market policies allocate **10 bps (0.10%) to Programmable**. That share may be part of a wider configured trading fee, so the active market profile and onchain fee path remain the source of truth.
+
+Reusable public templates use a separate planned policy of 20 bps total, split 10 bps to the template creator and 10 bps to Programmable. That policy is not active through this repository. Read [Submit a Template](https://github.com/0xprogrammable/submit-template) for its current status and requirements.
+
 ## Discovery registry
 
 Agents and integrations start with [`registry/index.json`](registry/index.json) or

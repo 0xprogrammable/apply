@@ -1,5 +1,7 @@
 # Legacy intake migration
 
+The version 1 review schemas retain their original `0xprogrammable/apply` schema identifiers for backward compatibility. These identifiers are stable protocol names, not the current repository location. New repository links and intake records use `0xprogrammable/submit-launch`. A future schema identifier change requires a new schema version and explicit migration coverage.
+
 The first Submit a Launch release starts in `prelaunch`. The released Hookbuilder continues to use its existing central target
 until a matching Hookbuilder release activates this repository.
 
