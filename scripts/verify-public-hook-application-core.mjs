@@ -375,6 +375,80 @@ export async function preflightPublicApplicationCandidateFetch({
 }
 
 /**
+ * Prove from trusted GitHub metadata that a pull request contains only bounded
+ * public-application data. This deliberately does not inspect or execute any
+ * candidate bytes; the public-intake workflow remains the sole content gate.
+ */
+export async function verifyBoundedApplicationPullRequestPaths({
+  repository,
+  pullRequestNumber,
+  expectedBaseCommit,
+  expectedCandidateCommit,
+  readToken
+}, dependencies = {}) {
+  validateHydrationAuthority({ repository, readToken });
+  validateCandidateHeadIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit });
+  const changes = await resolveCentralPullRequestChangedFiles({
+    repository,
+    pullRequestNumber,
+    expectedBaseCommit,
+    expectedCandidateCommit,
+    readToken,
+    maximumChangedFiles: APPLICATION_FILES.length,
+    fetchImplementation: dependencies.fetchImplementation ?? globalThis.fetch,
+    timeoutMs: dependencies.timeoutMs ?? TRUSTED_GIT_TIMEOUT_MS
+  });
+  const classified = classifyBoundedApplicationPathChanges(changes);
+  return {
+    schemaVersion: 1,
+    result: "bounded-public-application-paths",
+    pullRequestNumber,
+    applicationId: classified.applicationId,
+    fileCount: classified.paths.length,
+    paths: classified.paths
+  };
+}
+
+export function classifyBoundedApplicationPathChanges(changes) {
+  if (!Array.isArray(changes) || changes.length < 1 || changes.length > APPLICATION_FILES.length) {
+    reject(
+      "CHANGED_PATH_NOT_ALLOWED",
+      "A bounded public-application pull request must change between one and six allowlisted files."
+    );
+  }
+  const applicationIds = new Set();
+  const paths = new Set();
+  for (const change of changes) {
+    if (
+      !isPlainObject(change)
+      || typeof change.path !== "string"
+      || change.previousPath !== null
+      || (change.status !== "added" && change.status !== "modified")
+      || !isAllowlistedApplicationPath(change.path)
+      || paths.has(change.path)
+    ) {
+      reject(
+        "CHANGED_PATH_NOT_ALLOWED",
+        "A bounded public-application pull request may only add or modify allowlisted files in one application directory."
+      );
+    }
+    const match = APPLICATION_PATH_PATTERN.exec(change.path);
+    applicationIds.add(match[1]);
+    paths.add(change.path);
+  }
+  if (applicationIds.size !== 1) {
+    reject(
+      "CHANGED_PATH_NOT_ALLOWED",
+      "A bounded public-application pull request may change only one application directory."
+    );
+  }
+  return {
+    applicationId: [...applicationIds][0],
+    paths: [...paths].sort(compareUtf8)
+  };
+}
+
+/**
  * Fetch the base repository's exact PR merge ref into a newly-created bare,
  * blobless object store under hard per-file and aggregate storage bounds.
  */

@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 
 import {
   canonicalJson,
+  classifyBoundedApplicationPathChanges,
   classifyPublicIntakePullRequest,
   fetchPublicApplicationCandidate,
   hydratePublicApplicationCandidate,
@@ -17,6 +18,7 @@ import {
   PUBLIC_BETA_DISCLAIMER,
   runBoundedHydrationGitProcess,
   validatePublicApplicationPackageFiles,
+  verifyBoundedApplicationPullRequestPaths,
   verifyPublicHookApplication
 } from "../verify-public-hook-application-core.mjs";
 
@@ -318,6 +320,89 @@ test("closed intake metadata preflight still permits maintenance and existing pa
     })
   });
   assert.equal(updateReport.modeHint, "application-update");
+});
+
+test("trusted metadata proves a bounded application-only pull request without candidate execution", async () => {
+  const baseCommit = "a".repeat(40);
+  const candidateCommit = "b".repeat(40);
+  const files = [...makePackage().keys()].map((fileName) => ({
+    filename: `submissions/example-hook/${fileName}`,
+    status: "added"
+  }));
+  const report = await verifyBoundedApplicationPullRequestPaths({
+    repository: "central/repository",
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    expectedBaseCommit: baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    readToken: "test-read-token"
+  }, {
+    fetchImplementation: createPullRequestMetadataFetch({ baseCommit, candidateCommit, files })
+  });
+  assert.deepEqual(report, {
+    schemaVersion: 1,
+    result: "bounded-public-application-paths",
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    applicationId: "example-hook",
+    fileCount: 6,
+    paths: files.map(({ filename }) => filename).sort()
+  });
+});
+
+test("bounded application metadata rejects mixed, cross-application, renamed, removed, and oversized changes", async (t) => {
+  const baseCommit = "a".repeat(40);
+  const candidateCommit = "b".repeat(40);
+  const cases = [
+    ["empty", [], "CHANGED_PATH_NOT_ALLOWED"],
+    ["mixed central path", [
+      { filename: "submissions/example-hook/application.json", status: "modified" },
+      { filename: "README.md", status: "modified" }
+    ], "CHANGED_PATH_NOT_ALLOWED"],
+    ["two application ids", [
+      { filename: "submissions/example-hook/application.json", status: "modified" },
+      { filename: "submissions/other-hook/application.json", status: "modified" }
+    ], "CHANGED_PATH_NOT_ALLOWED"],
+    ["unknown application file", [
+      { filename: "submissions/example-hook/source.js", status: "added" }
+    ], "CHANGED_PATH_NOT_ALLOWED"],
+    ["renamed application file", [{
+      filename: "submissions/example-hook/application.json",
+      previous_filename: "submissions/other-hook/application.json",
+      status: "renamed"
+    }], "CHANGED_PATH_NOT_ALLOWED"],
+    ["removed application file", [
+      { filename: "submissions/example-hook/application.json", status: "removed" }
+    ], "CHANGED_PATH_NOT_ALLOWED"],
+    ["too many files", [
+      ...[...makePackage().keys()].map((fileName) => ({
+        filename: `submissions/example-hook/${fileName}`,
+        status: "modified"
+      })),
+      { filename: "README.md", status: "modified" }
+    ], "TOO_MANY_CHANGED_FILES"]
+  ];
+  for (const [name, files, expectedCode] of cases) {
+    await t.test(name, async () => {
+      await assert.rejects(
+        verifyBoundedApplicationPullRequestPaths({
+          repository: "central/repository",
+          pullRequestNumber: PULL_REQUEST_NUMBER,
+          expectedBaseCommit: baseCommit,
+          expectedCandidateCommit: candidateCommit,
+          readToken: "test-read-token"
+        }, {
+          fetchImplementation: createPullRequestMetadataFetch({ baseCommit, candidateCommit, files })
+        }),
+        (error) => error?.code === expectedCode
+      );
+    });
+  }
+  assert.throws(
+    () => classifyBoundedApplicationPathChanges([
+      { path: "submissions/example-hook/application.json", previousPath: null, status: "modified" },
+      { path: "submissions/example-hook/application.json", previousPath: null, status: "modified" }
+    ]),
+    (error) => error?.code === "CHANGED_PATH_NOT_ALLOWED" && error?.kind === "candidate"
+  );
 });
 
 test("candidate preflight rejects a programmatic numeric pull-request identity", async (t) => {
