@@ -26,9 +26,9 @@ the public application ledger, and a versioned discovery registry. Complete proj
 public repository.
 
 > [!IMPORTANT]
-> **Public application intake is currently in prelaunch.** The standard, checker, schemas, examples, and discovery
-> registry are public today. A matching Hookbuilder release will activate new applications to this repository. Existing
-> applications keep their original GitHub review threads.
+> **Public application intake is open.** Use the current stable
+> [Hookbuilder](https://github.com/0xprogrammable/hookbuilder/releases/latest) to build, validate, and submit one exact
+> six-file application. Existing applications keep their original GitHub review threads.
 
 A local checker result, passing pull request, merged application, registry match, deployment, or indexer observation is
 never presented as a safety guarantee or launch right.
@@ -74,7 +74,7 @@ npm test
 ## How it works
 
 1. **Build.** Project source stays in its own public GitHub repository.
-2. **Prepare.** When intake opens, [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) prepares six generated
+2. **Prepare.** [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) prepares six generated
    application files bound to one repository id, commit, tree, configuration, and evidence set.
 3. **Review.** Submit a Launch validates the bounded application. Review evidence and any later decision remain
    bound to the exact submitted revision.
@@ -87,11 +87,11 @@ bounded files, and no candidate execution.
 
 ## Application intake
 
-**Status: prelaunch.** Do not create an application pull request manually.
+**Status: open.** Start with Hookbuilder. Do not hand-write the application package.
 
-Once activated, Hookbuilder will open a draft pull request containing exactly six generated files under
+Hookbuilder opens a draft pull request containing exactly six generated files under
 `submissions/<application-id>/`. Existing applications remain on their original review threads. Read the
-[migration contract](docs/MIGRATION.md) for the activation requirements.
+[migration contract](docs/MIGRATION.md) for the exact compatibility boundary.
 
 ## Fee terms
 
