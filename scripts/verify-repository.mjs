@@ -29,10 +29,17 @@ try {
 function verifyVendorReceipt() {
   const receiptPath = path.join(root, "vendor/receipt.json");
   if (!fs.existsSync(receiptPath)) throw new RegistryError("VENDOR_RECEIPT_MISSING", "vendor receipt is missing");
-  const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
-  if (receipt.schemaVersion !== "1.0.0" || receipt.repository !== "0xprogrammable/programmable-v4-builder" || !/^[0-9a-f]{40}$/u.test(receipt.commit ?? "") || !/^[0-9a-f]{40}$/u.test(receipt.skillTree ?? "")) {
-    throw new RegistryError("VENDOR_RECEIPT_INVALID", "vendor receipt is malformed");
-  }
+  const receiptBytes = fs.readFileSync(receiptPath, "utf8");
+  const receipt = JSON.parse(receiptBytes);
+  const expectedReceipt = {
+    commit: "826a6b40b9d215748b5dee80916a644a91bee83c",
+    release: "v0.4.2",
+    repository: "0xprogrammable/hookbuilder",
+    schemaVersion: "1.0.0",
+    skillTree: "536a49278cc9614619685e2c771dd1c465573b89",
+    source: "https://github.com/0xprogrammable/hookbuilder/tree/826a6b40b9d215748b5dee80916a644a91bee83c/skills/programmable-v4-hook-builder"
+  };
+  if (receiptBytes !== `${canonicalJson(expectedReceipt)}\n`) throw new RegistryError("VENDOR_RECEIPT_INVALID", "vendor receipt does not match the exact released Builder identity");
   const temporaryIndex = path.join(root, `.vendor-index-${process.pid}`);
   try {
     const environment = { ...process.env, GIT_INDEX_FILE: temporaryIndex };

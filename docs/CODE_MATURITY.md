@@ -15,6 +15,6 @@ self-assessment, not an independent audit.
 | Low-level and unsafe operations | 4 | Blobless bounded Git handling, disabled hooks/filters/submodules, byte/time/process limits, and no candidate execution under privileged CI | OS resource hard stops retain one Linux-only test path |
 | Testing and verification | 4 | Deterministic registry and decision tests plus the complete trusted intake adversarial suite | Hidden mutation corpora, production runner evidence, and an independent penetration review remain outstanding |
 
-The repository release has public CI and protected-main evidence. New application intake remains in prelaunch until a
-matching Hookbuilder release targets this repository and an end-to-end application canary passes against the released
+The repository release has public CI and protected-main evidence. Application intake is open only for the exact
+Hookbuilder release bound by the current receipt and an end-to-end application canary against the released
 contract. Local green checks alone do not prove those external states.
