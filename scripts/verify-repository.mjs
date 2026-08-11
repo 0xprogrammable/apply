@@ -32,12 +32,12 @@ function verifyVendorReceipt() {
   const receiptBytes = fs.readFileSync(receiptPath, "utf8");
   const receipt = JSON.parse(receiptBytes);
   const expectedReceipt = {
-    commit: "826a6b40b9d215748b5dee80916a644a91bee83c",
-    release: "v0.4.2",
+    commit: "f760ed5b8369ab45f6aab7dd0e2fbc4ad506d972",
+    release: "v0.4.3",
     repository: "0xprogrammable/hookbuilder",
     schemaVersion: "1.0.0",
-    skillTree: "536a49278cc9614619685e2c771dd1c465573b89",
-    source: "https://github.com/0xprogrammable/hookbuilder/tree/826a6b40b9d215748b5dee80916a644a91bee83c/skills/programmable-v4-hook-builder"
+    skillTree: "9f50921069f1d2929476ba5e018a471142920f7b",
+    source: "https://github.com/0xprogrammable/hookbuilder/tree/f760ed5b8369ab45f6aab7dd0e2fbc4ad506d972/skills/programmable-v4-hook-builder"
   };
   if (receiptBytes !== `${canonicalJson(expectedReceipt)}\n`) throw new RegistryError("VENDOR_RECEIPT_INVALID", "vendor receipt does not match the exact released Builder identity");
   const temporaryIndex = path.join(root, `.vendor-index-${process.pid}`);
