@@ -166,7 +166,7 @@ function validateConfig(value) {
   if (!/^1\.[0-9]+\.[0-9]+$/u.test(value.historyVersion ?? "")) fail("CONFIG_INVALID", "historyVersion must be a v1 semantic version");
   requireTimestamp(value.updatedAt, "registry config updatedAt");
   exactKeys(value.activeIntake, ["baseBranch", "directory", "repository", "state"], "activeIntake");
-  if (value.activeIntake.baseBranch !== "main" || value.activeIntake.directory !== "submissions" || value.activeIntake.repository !== "0xprogrammable/apply") {
+  if (value.activeIntake.baseBranch !== "main" || value.activeIntake.directory !== "submissions" || value.activeIntake.repository !== "0xprogrammable/submit-launch") {
     fail("CONFIG_INVALID", "active intake identity is not canonical");
   }
   if (!new Set(["prelaunch", "open", "paused-new", "paused-all"]).has(value.activeIntake.state)) fail("CONFIG_INVALID", "active intake state is invalid");
@@ -287,7 +287,7 @@ function validateAcceptance(acceptance, relativePath, projectId) {
   validateTextSet(acceptance.conditions, `${relativePath}.conditions`, 32, false);
 
   exactKeys(acceptance.application, ["applicationId", "applicationRevision", "packageDigest", "pullRequest"], `${relativePath}.application`);
-  if (acceptance.application.applicationId !== projectId || !Number.isSafeInteger(acceptance.application.applicationRevision) || acceptance.application.applicationRevision < 1 || !/^sha256:[0-9a-f]{64}$/u.test(acceptance.application.packageDigest ?? "") || !/^https:\/\/github\.com\/0xprogrammable\/apply\/pull\/[1-9][0-9]{0,19}$/u.test(acceptance.application.pullRequest ?? "")) {
+  if (acceptance.application.applicationId !== projectId || !Number.isSafeInteger(acceptance.application.applicationRevision) || acceptance.application.applicationRevision < 1 || !/^sha256:[0-9a-f]{64}$/u.test(acceptance.application.packageDigest ?? "") || !/^https:\/\/github\.com\/0xprogrammable\/submit-launch\/pull\/[1-9][0-9]{0,19}$/u.test(acceptance.application.pullRequest ?? "")) {
     fail("ACCEPTANCE_INVALID", `${relativePath} has an invalid application binding`);
   }
   exactKeys(acceptance.source, ["numericRepositoryId", "repositoryUri", "revisionObjectId", "treeObjectId"], `${relativePath}.source`);

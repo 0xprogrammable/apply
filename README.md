@@ -2,17 +2,17 @@
   <img src="assets/repository-cover.jpg" alt="Programmable islands connected by streams, representing composable projects" width="100%">
 </p>
 
-<h1 align="center">Programmable Apply</h1>
+<h1 align="center">Submit a Launch</h1>
 
 <p align="center">
-  Open review rules, public applications, and canonical discovery records for Programmable projects.
+  Submit one completed project for exact-revision review before launching it on Programmable.
 </p>
 
 <p align="center">
-  <a href="https://github.com/0xprogrammable/apply/actions/workflows/verify.yml"><img src="https://github.com/0xprogrammable/apply/actions/workflows/verify.yml/badge.svg?branch=main" alt="Repository verification"></a>
-  <a href="https://github.com/0xprogrammable/apply/actions/workflows/codeql.yml"><img src="https://github.com/0xprogrammable/apply/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL analysis"></a>
-  <a href="https://github.com/0xprogrammable/apply/releases/latest"><img src="https://img.shields.io/github/v/release/0xprogrammable/apply?label=release" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/0xprogrammable/apply" alt="MIT License"></a>
+  <a href="https://github.com/0xprogrammable/submit-launch/actions/workflows/verify.yml"><img src="https://github.com/0xprogrammable/submit-launch/actions/workflows/verify.yml/badge.svg?branch=main" alt="Repository verification"></a>
+  <a href="https://github.com/0xprogrammable/submit-launch/actions/workflows/codeql.yml"><img src="https://github.com/0xprogrammable/submit-launch/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL analysis"></a>
+  <a href="https://github.com/0xprogrammable/submit-launch/releases/latest"><img src="https://img.shields.io/github/v/release/0xprogrammable/submit-launch?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/0xprogrammable/submit-launch" alt="MIT License"></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
   <a href="#report-a-finding">Report a finding</a>
 </p>
 
-Programmable Apply publishes the [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md), a deterministic local checker,
+Submit a Launch publishes the [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md), a deterministic local checker,
 the public application ledger, and a versioned discovery registry. Complete project source stays in the applicant-owned
 public repository.
 
@@ -55,8 +55,8 @@ Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and the m
 Node.js 20 or newer is required. The checker has no runtime dependencies and never executes candidate code.
 
 ```bash
-git clone --depth 1 https://github.com/0xprogrammable/apply.git
-cd apply
+git clone --depth 1 https://github.com/0xprogrammable/submit-launch.git
+cd submit-launch
 npm run review -- review/examples/disclosed-high-fee.json
 ```
 
@@ -76,7 +76,7 @@ npm test
 1. **Build.** Project source stays in its own public GitHub repository.
 2. **Prepare.** When intake opens, [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) prepares six generated
    application files bound to one repository id, commit, tree, configuration, and evidence set.
-3. **Review.** Programmable Apply validates the bounded application. Review evidence and any later decision remain
+3. **Review.** Submit a Launch validates the bounded application. Review evidence and any later decision remain
    bound to the exact submitted revision.
 4. **Promote.** Application intake, acceptance, deployment, availability, and launch authorization remain separate
    facts.
@@ -110,9 +110,9 @@ Read the [discovery contract](docs/DISCOVERY_CONTRACT.md) before integrating.
 Reproducible false decisions, missing review rules, intake defects, identity mismatches, registry-integrity problems,
 and documentation errors are useful findings.
 
-- [Report a non-sensitive checker or registry problem](https://github.com/0xprogrammable/apply/issues/new/choose).
-- [Discuss an architecture or policy idea](https://github.com/0xprogrammable/apply/discussions).
-- [Report an exploitable vulnerability privately](https://github.com/0xprogrammable/apply/security/advisories/new).
+- [Report a non-sensitive checker or registry problem](https://github.com/0xprogrammable/submit-launch/issues/new/choose).
+- [Discuss an architecture or policy idea](https://github.com/0xprogrammable/submit-launch/discussions).
+- [Report an exploitable vulnerability privately](https://github.com/0xprogrammable/submit-launch/security/advisories/new).
 
 Read [SECURITY.md](SECURITY.md) before testing or reporting a security-sensitive finding. Do not publish credentials,
 wallet material, private repositories, personal data, or an unpatched exploit.
@@ -130,11 +130,12 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 ## Related repositories
 
 - [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) builds, checks, and prepares applications.
+- [Submit a Template](https://github.com/0xprogrammable/submit-template) is the planned path for reusable launch templates.
 - [Programmable](https://github.com/0xprogrammable/programmable) contains the platform, contracts, and Explorer.
 
 ## Independence
 
-Programmable Apply is independent open-source software. It does not claim affiliation with or endorsement by Uniswap
+Submit a Launch is independent open-source software. It does not claim affiliation with or endorsement by Uniswap
 Labs or the Uniswap Foundation.
 
 Released under the [MIT License](LICENSE).

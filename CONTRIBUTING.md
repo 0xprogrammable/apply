@@ -13,7 +13,7 @@ tree, and evidence digests.
 An intake pass proves only that the public record is structurally valid and bound to reachable source. It is not
 acceptance, an audit, deployment approval, provider support, availability, or Uniswap endorsement.
 
-## Apply repository maintenance
+## Submit a Launch repository maintenance
 
 Maintainers use a separate pull request for schemas, project records, generated indexes, documentation, workflows,
 tests, or the pinned Builder validation dependency. Run `npm test` and include the exact source evidence for every status

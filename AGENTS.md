@@ -1,4 +1,4 @@
-# Apply contribution contract
+# Submit a Launch contribution contract
 
 This repository is the public application ledger and canonical discovery registry for Programmable projects built with
 Hookbuilder.
