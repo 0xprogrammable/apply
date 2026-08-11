@@ -862,13 +862,41 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "scripts/registry-core.mjs",
     "scripts/verify-public-hook-application-core.mjs",
     "test/registry.test.mjs",
-    "vendor/programmable-v4-hook-builder/SKILL.md"
+    "vendor/programmable-v4-hook-builder/SKILL.md",
+    "vendor/receipt.json"
   ]) {
     writeFile(fixture.candidate, relativePath, `maintenance fixture for ${relativePath}\n`);
   }
   const candidateCommit = commitAll(fixture.candidate, "registry maintenance change");
   const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
   assert.equal(result.mode, "registry-maintenance");
+});
+
+test("the exact versioned vendor receipt is trusted Registry maintenance", (t) => {
+  const fixture = createRevisionPair(t);
+  writeFile(fixture.candidate, "vendor/receipt.json", "{\"release\":\"v0.4.2\"}\n");
+  const candidateCommit = commitAll(fixture.candidate, "update exact vendor receipt");
+  const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+  assert.equal(result.mode, "registry-maintenance");
+});
+
+test("the versioned vendor receipt allowlist is exact and does not trust sibling vendor paths", async (t) => {
+  for (const relativePath of [
+    "vendor/receipt.json.bak",
+    "vendor/receipts/receipt.json",
+    "vendor/release.json",
+    "vendor/programmable-v4-hook-builder-copy/SKILL.md"
+  ]) {
+    await t.test(relativePath, (t2) => {
+      const fixture = createRevisionPair(t2);
+      writeFile(fixture.candidate, relativePath, "untrusted vendor metadata\n");
+      const candidateCommit = commitAll(fixture.candidate, `untrusted vendor path ${relativePath}`);
+      assert.throws(
+        () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+        hasCode("CHANGED_PATH_NOT_ALLOWED")
+      );
+    });
+  }
 });
 
 test("unrecognized first-party maintenance paths fail closed", (t) => {
