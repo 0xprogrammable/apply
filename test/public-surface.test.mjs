@@ -8,11 +8,11 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 test("the public landing page states the checker and intake boundaries", () => {
   const readme = read("README.md");
-  assert.match(readme, /Public application intake is currently in prelaunch/u);
+  assert.match(readme, /Public application intake is open/u);
   assert.match(readme, /does not fetch\nproject repositories, reproduce evidence, perform an audit/u);
   assert.match(readme, /checkerOnly: true/u);
   assert.match(readme, /launchAuthorized: false/u);
-  assert.ok(readme.indexOf("Public application intake is currently in prelaunch") < readme.indexOf("## How it works"));
+  assert.ok(readme.indexOf("Public application intake is open") < readme.indexOf("## How it works"));
   assert.doesNotMatch(readme, /programmable-registry|programmable-v4-builder/u);
 });
 

@@ -4,7 +4,7 @@ There are three intentionally separate contribution paths. Keep each pull reques
 
 ## Application pull requests
 
-> **Status: prelaunch.** Do not open an application pull request manually. Use Hookbuilder to prepare your project and wait for this repository to publish an active intake path.
+> **Status: open.** Use the current stable Hookbuilder to generate and submit the application. Do not hand-write its files.
 
 Use the released [Hookbuilder](https://github.com/0xprogrammable/hookbuilder). An application pull request changes
 exactly one generated six-file directory

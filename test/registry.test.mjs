@@ -19,7 +19,7 @@ const root = path.resolve(".");
 test("the seeded registry distinguishes current availability from candidates and designs", () => {
   const { projects } = loadRegistry({ repositoryRoot: root });
   const states = Object.fromEntries(projects.map(({ project }) => [project.id, project.status]));
-  assert.deepEqual(states, { classic: "available", deep: "design", "stock-paired": "candidate" });
+  assert.deepEqual(states, { classic: "available", "stock-paired": "candidate" });
   for (const { project } of projects) {
     assert.equal(project.economics.programmableFee.claimOwner, PROGRAMMABLE_FEE_OWNER);
     assert.equal(project.economics.programmableFee.inclusiveBps, 10);
@@ -34,7 +34,7 @@ test("generated discovery files are deterministic and hash-bind every full recor
   assert.equal(canonicalJson(first), canonicalJson(second));
   assert.equal(first.index.registryDigest, first.search.registryDigest);
   assert.equal(first.index.registryDigest, first.history.registryDigest);
-  assert.equal(first.index.records.length, 3);
+  assert.equal(first.index.records.length, 2);
   for (const record of first.index.records) {
     const bytes = fs.readFileSync(path.join(root, record.path));
     const indexed = first.search.records.find(({ id }) => id === record.id);
@@ -43,20 +43,35 @@ test("generated discovery files are deterministic and hash-bind every full recor
   }
   assert.deepEqual(verifyGeneratedArtifacts({ repositoryRoot: root }), {
     ok: true,
-    records: 3,
+    records: 2,
     registryDigest: first.index.registryDigest
   });
 });
 
 test("pending legacy pull requests remain explicitly separate from accepted records", () => {
   const { config } = loadRegistry({ repositoryRoot: root });
-  assert.deepEqual(config.legacyIntake, [{
-    baseBranch: "main",
-    continuingPullRequests: [62],
-    repository: "0xprogrammable/programmable"
-  }]);
-  assert.equal(config.activeIntake.state, "prelaunch");
+  assert.deepEqual(config.legacyIntake, [
+    {
+      baseBranch: "main",
+      continuingPullRequests: [62],
+      repository: "0xprogrammable/programmable"
+    },
+    {
+      baseBranch: "main",
+      continuingPullRequests: [10, 11, 12, 14, 15, 18, 19, 20],
+      repository: "0xprogrammable/hookbuilder"
+    }
+  ]);
+  assert.equal(config.activeIntake.state, "open");
   assert.equal(config.activeIntake.repository, "0xprogrammable/submit-launch");
+});
+
+test("Deep is outside the active registry without rewriting released history", () => {
+  const current = buildRegistryArtifacts({ repositoryRoot: root });
+  assert.equal(current.index.records.some(({ id }) => id === "deep"), false);
+  assert.equal(current.search.records.some(({ id }) => id === "deep"), false);
+  const released = JSON.parse(fs.readFileSync(path.join(root, "registry/history/1.2.0.json"), "utf8"));
+  assert.equal(released.records.some(({ id }) => id === "deep"), true);
 });
 
 test("duplicate JSON keys and source path escapes fail closed", (t) => {
