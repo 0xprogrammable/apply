@@ -1,13 +1,13 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a vulnerability privately
-    url: https://github.com/0xprogrammable/apply/security/advisories/new
+    url: https://github.com/0xprogrammable/submit-launch/security/advisories/new
     about: Report security-sensitive findings privately. Do not open a public issue.
-  - name: Ask an Apply question
-    url: https://github.com/0xprogrammable/apply/discussions/new?category=q-a
+  - name: Ask a Submit a Launch question
+    url: https://github.com/0xprogrammable/submit-launch/discussions/new?category=q-a
     about: Ask about applications, review records, registry data, or integrations.
-  - name: Propose an Apply idea
-    url: https://github.com/0xprogrammable/apply/discussions/new?category=ideas
+  - name: Propose a Submit a Launch idea
+    url: https://github.com/0xprogrammable/submit-launch/discussions/new?category=ideas
     about: Discuss a review-rule, registry, or workflow improvement before opening a pull request.
   - name: Get Hookbuilder support
     url: https://github.com/0xprogrammable/hookbuilder/issues/new/choose

@@ -18,7 +18,7 @@ test("the public landing page states the checker and intake boundaries", () => {
 
 test("public support routes are canonical and have issue forms", () => {
   const config = read(".github/ISSUE_TEMPLATE/config.yml");
-  assert.match(config, /https:\/\/github\.com\/0xprogrammable\/apply\/security\/advisories\/new/u);
+  assert.match(config, /https:\/\/github\.com\/0xprogrammable\/submit-launch\/security\/advisories\/new/u);
   assert.match(config, /https:\/\/github\.com\/0xprogrammable\/hookbuilder\/issues\/new\/choose/u);
   assert.doesNotMatch(config, /programmable-registry|programmable-v4-builder|hookbuilder\/discussions/u);
   for (const form of ["review-or-registry-bug.yml", "documentation.yml"]) {
@@ -39,7 +39,7 @@ test("contribution paths and the pull request template stay in sync", () => {
   const template = read(".github/PULL_REQUEST_TEMPLATE.md");
   assert.match(contributing, /three intentionally separate contribution paths/u);
   assert.match(template, /Generated six-file application package/u);
-  assert.match(template, /Apply repository maintenance/u);
+  assert.match(template, /Submit a Launch repository maintenance/u);
   assert.match(template, /Open Review Standard maintenance/u);
 });
 

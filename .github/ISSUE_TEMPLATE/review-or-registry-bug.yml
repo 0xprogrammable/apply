@@ -1,5 +1,5 @@
 name: Checker or registry bug
-description: Report a reproducible, non-sensitive problem in Apply.
+description: Report a reproducible, non-sensitive problem in Submit a Launch.
 title: "[Bug] "
 labels:
   - bug
@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this form for public, non-sensitive defects. Report exploitable vulnerabilities privately through [GitHub Security](https://github.com/0xprogrammable/apply/security/advisories/new).
+        Use this form for public, non-sensitive defects. Report exploitable vulnerabilities privately through [GitHub Security](https://github.com/0xprogrammable/submit-launch/security/advisories/new).
   - type: dropdown
     id: component
     attributes:
@@ -25,7 +25,7 @@ body:
   - type: input
     id: revision
     attributes:
-      label: Apply release or commit
+      label: Submit a Launch release or commit
       description: Provide the exact tag or 40-character commit when possible.
       placeholder: v1.1.0 or ba485e37561763179a694130b59de0cd09954b16
     validations:

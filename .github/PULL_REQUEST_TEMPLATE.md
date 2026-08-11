@@ -7,7 +7,7 @@ Passing intake is not acceptance, an audit, deployment approval, or availability
 ## Contribution type
 
 - [ ] Generated six-file application package
-- [ ] Apply repository maintenance
+- [ ] Submit a Launch repository maintenance
 - [ ] Open Review Standard maintenance
 
 ## Evidence

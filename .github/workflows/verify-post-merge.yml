@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Verify trusted Apply revision
+      - name: Verify trusted Submit a Launch revision
         working-directory: source
         run: npm test
 

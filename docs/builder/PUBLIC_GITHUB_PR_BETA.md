@@ -1,7 +1,7 @@
 # Public GitHub application intake
 
 The complete project stays in the applicant-owned public GitHub repository. A draft pull request to
-`0xprogrammable/apply:main` carries exactly six generated files under one
+`0xprogrammable/submit-launch:main` carries exactly six generated files under one
 `submissions/<application-id>/` directory.
 
 The intake is `prelaunch` until a matching Hookbuilder release activates this repository. Existing pull

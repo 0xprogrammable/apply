@@ -1,6 +1,6 @@
 # Discovery contract
 
-Agents and applications start with `registry/index.json` or `registry/search-index.json` at one exact Apply commit.
+Agents and applications start with `registry/index.json` or `registry/search-index.json` at one exact Submit a Launch commit.
 They do not crawl project repositories or load every application into context.
 
 ## Required consumer behavior
@@ -14,7 +14,7 @@ They do not crawl project repositories or load every application into context.
 7. Preserve the record's exact status and limitations.
 
 `design`, `candidate`, `accepted`, `deployed`, `available`, `suspended`, and `retired` are distinct. Pending application
-pull requests are not canonical records. An offline snapshot may be used only when clearly labeled with its Apply
+pull requests are not canonical records. An offline snapshot may be used only when clearly labeled with its Submit a Launch
 commit and age; it must never be presented as live.
 
 ## Search behavior

@@ -6,7 +6,7 @@ self-assessment, not an independent audit.
 | Category | Score | Current evidence | Remaining gap |
 | --- | ---: | --- | --- |
 | Arithmetic and precision | 4 | Registry values use safe integers; the mandatory 10 bps identity is exact and tested | Economic correctness of submitted projects remains outside Registry arithmetic |
-| Auditing and observability | 3 | Exact source, record hashes, immutable history, deterministic review receipts, CI receipts, and public review threads | No independent Apply audit yet |
+| Auditing and observability | 3 | Exact source, record hashes, immutable history, deterministic review receipts, CI receipts, and public review threads | No independent Submit a Launch audit yet |
 | Authentication and access control | 3 | Candidate identity binds to GitHub's immutable user id; intake authority is read-only; protected `main` checks are enforced | Initial acceptance authority remains one maintainer |
 | Complexity management | 3 | Closed schemas, bounded files, generated indexes, separate application and maintenance paths, and one small dependency-free public review engine | The vendored intake validator is intentionally large and needs continued differential testing |
 | Decentralization and governance | 1 | Decisions are public and append-only | Initial acceptance authority is one maintainer; no independent quorum is established |

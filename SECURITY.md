@@ -3,7 +3,7 @@
 ## Report privately
 
 Report security-sensitive findings through [GitHub private vulnerability
-reporting](https://github.com/0xprogrammable/apply/security/advisories/new). Do not open a public issue for an intake
+reporting](https://github.com/0xprogrammable/submit-launch/security/advisories/new). Do not open a public issue for an intake
 bypass, path-confusion defect, source-binding failure, registry-integrity problem, prompt-injection path, credential
 exposure, or unpublished exploit.
 
@@ -22,7 +22,7 @@ seed phrases, access tokens, production secrets, personal data, or user funds.
 
 Applicant projects, Hookbuilder itself, Uniswap, wallets, RPC or infrastructure providers, the live Programmable
 platform, deployed contracts, and third-party systems retain their own security processes. A weakness in one of those
-systems is not automatically a vulnerability in Programmable Apply.
+systems is not automatically a vulnerability in Submit a Launch.
 
 ## Responsible testing
 
