@@ -115,7 +115,8 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "scripts/verify-repository.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-public-hook-application.mjs",
-  "submissions/README.md"
+  "submissions/README.md",
+  "vendor/receipt.json"
 ]);
 const RESERVED_MAINTENANCE_PREFIXES = Object.freeze([
   ".github/",
