@@ -2,21 +2,36 @@ name: Verify
 
 on:
   pull_request:
-  push:
+    paths-ignore:
+      - "submissions/*/application.json"
+      - "submissions/*/PROPOSAL.md"
+      - "submissions/*/TEST_PLAN.md"
+      - "submissions/*/THREAT_MODEL.md"
+      - "submissions/*/compatibility-report.json"
+      - "submissions/*/evidence-index.json"
+  pull_request_target:
     branches:
       - main
+    paths:
+      - "submissions/*/application.json"
+      - "submissions/*/PROPOSAL.md"
+      - "submissions/*/TEST_PLAN.md"
+      - "submissions/*/THREAT_MODEL.md"
+      - "submissions/*/compatibility-report.json"
+      - "submissions/*/evidence-index.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: registry-verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: registry-verify-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   repository:
-    name: Node ${{ matrix.node }}
+    if: github.event_name != 'pull_request_target'
+    name: Candidate repository / Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -42,3 +57,75 @@ jobs:
 
       - name: Verify registry, vendored validator, and intake
         run: npm test
+
+  bounded-application:
+    if: github.event_name == 'pull_request_target'
+    name: Bounded application / Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 20
+          - 22
+
+    steps:
+      - name: Checkout protected base validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Prove bounded application-only paths from trusted metadata
+        env:
+          CANDIDATE_READ_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 30s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --verify-bounded-application-paths \
+            --repository "${{ github.repository }}" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}"
+
+  required:
+    if: always()
+    needs:
+      - repository
+      - bounded-application
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 20
+          - 22
+
+    steps:
+      - name: Require the selected verification route
+        env:
+          BOUNDED_RESULT: ${{ needs.bounded-application.result }}
+          CANDIDATE_RESULT: ${{ needs.repository.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request_target" ]]; then
+            [[ "$BOUNDED_RESULT" == "success" && "$CANDIDATE_RESULT" == "skipped" ]]
+          else
+            [[ "$CANDIDATE_RESULT" == "success" && "$BOUNDED_RESULT" == "skipped" ]]
+          fi

@@ -10,6 +10,7 @@ import {
   hydratePublicApplicationCandidate,
   MAINTAINED_LEGACY_PACKAGE_TIMEOUT_MS,
   PublicIntakeError,
+  verifyBoundedApplicationPullRequestPaths,
   verifyMaintainedSubmissions,
   verifyPublicHookApplication
 } from "./verify-public-hook-application-core.mjs";
@@ -19,6 +20,7 @@ const usage = `Usage:
   verify-public-hook-application.mjs --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha> --expected-merge-commit <sha> --expected-builder-login <login> --expected-builder-user-id <decimal-id>
   verify-public-hook-application.mjs --fetch-candidate --repository <owner/repository> --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha>
   verify-public-hook-application.mjs --hydrate-candidate --repository <owner/repository> --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha> --expected-merge-commit <sha>
+  verify-public-hook-application.mjs --verify-bounded-application-paths --repository <owner/repository> --pull-request-number <number> --expected-base-commit <sha> --expected-candidate-commit <sha>
   verify-public-hook-application.mjs --verify-maintained --repository-root <path>
 
 Inspect one pull request with trusted base code. Candidate Git objects are treated only as data.
@@ -27,6 +29,7 @@ Options:
   --classify                    Print application, registry-maintenance, or no-op without network access
   --fetch-candidate             Fetch and identify the exact base-repository PR merge in bounded blobless storage
   --hydrate-candidate           Preflight sizes and hydrate only the closed six-file candidate package
+  --verify-bounded-application-paths Prove from trusted metadata that only bounded application data changed
   --repository <owner/name>     Authenticated central GitHub repository for candidate tree metadata
   --pull-request-number <n>     Exact central pull-request number for fetch, hydration, and final application verification
   --verify-maintained           Inspect all closed applications and validate bounded legacy packages
@@ -54,7 +57,16 @@ if (options?.help) {
   process.stdout.write(usage);
 } else if (options) {
   try {
-    if (options.verifyMaintained) {
+    if (options.verifyBoundedApplicationPaths) {
+      const report = await verifyBoundedApplicationPullRequestPaths({
+        repository: options.repository,
+        pullRequestNumber: options.pullRequestNumber,
+        expectedBaseCommit: options.expectedBaseCommit,
+        expectedCandidateCommit: options.expectedCandidateCommit,
+        readToken: process.env.CANDIDATE_READ_TOKEN
+      });
+      process.stdout.write(`${JSON.stringify(report)}\n`);
+    } else if (options.verifyMaintained) {
       const report = await verifyMaintainedSubmissions({
         repositoryRoot: options.repositoryRoot,
         validateLegacyPackage: runLegacyPackageValidator
@@ -113,6 +125,7 @@ function parseArguments(args) {
     classify: false,
     fetchCandidate: false,
     hydrateCandidate: false,
+    verifyBoundedApplicationPaths: false,
     verifyMaintained: false,
     help: false,
     repositoryRoot: null,
@@ -156,6 +169,10 @@ function parseArguments(args) {
       parsed.hydrateCandidate = true;
       continue;
     }
+    if (argument === "--verify-bounded-application-paths") {
+      parsed.verifyBoundedApplicationPaths = true;
+      continue;
+    }
     if (argument === "--verify-maintained") {
       parsed.verifyMaintained = true;
       continue;
@@ -169,10 +186,27 @@ function parseArguments(args) {
     index += 1;
   }
   if (!parsed.help) {
-    if ([parsed.classify, parsed.fetchCandidate, parsed.hydrateCandidate, parsed.verifyMaintained].filter(Boolean).length > 1) {
+    if ([
+      parsed.classify,
+      parsed.fetchCandidate,
+      parsed.hydrateCandidate,
+      parsed.verifyBoundedApplicationPaths,
+      parsed.verifyMaintained
+    ].filter(Boolean).length > 1) {
       throw new PublicIntakeError("CLI_MODE_INVALID", "Trusted validator modes cannot be combined.", { kind: "system" });
     }
-    if (parsed.verifyMaintained) {
+    if (parsed.verifyBoundedApplicationPaths) {
+      for (const key of ["repository", "pullRequestNumber", "expectedBaseCommit", "expectedCandidateCommit"]) {
+        if (parsed[key] === null) {
+          throw new PublicIntakeError("CLI_ARGUMENT_MISSING", "Bounded application-path verification is missing a required trusted option.", { kind: "system" });
+        }
+      }
+      for (const key of ["repositoryRoot", "baseRoot", "candidateRoot", "expectedBuilderLogin", "expectedBuilderUserId", "expectedMergeCommit"]) {
+        if (parsed[key] !== null) {
+          throw new PublicIntakeError("CLI_ARGUMENT_INVALID", "Bounded application-path verification received an unrelated validator option.", { kind: "system" });
+        }
+      }
+    } else if (parsed.verifyMaintained) {
       if (parsed.repositoryRoot === null) {
         throw new PublicIntakeError("CLI_ARGUMENT_MISSING", "Maintained verification requires the trusted repository root.", { kind: "system" });
       }
