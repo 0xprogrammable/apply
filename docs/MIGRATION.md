@@ -15,7 +15,7 @@ original Hookbuilder review threads. They are recorded as legacy intake and are 
 The activation is valid only while all of the following remain true:
 
 1. this repository is public at the exact tested commit;
-2. the protected branch requires `Node 20`, `Node 22`, and `public-intake` before merge;
+2. the protected branch requires `Node 22`, `Node 24`, and `public-intake` before merge;
 3. released Hookbuilder 0.4.3 targets `0xprogrammable/submit-launch` with Submission 1.5.0;
 4. the vendored intake validator and receipt match that exact Builder release; and
 5. `docs/builder/intake-status.json` and `registry/config.json` both report `open`.
