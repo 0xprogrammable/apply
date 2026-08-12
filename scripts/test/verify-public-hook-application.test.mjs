@@ -107,6 +107,14 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
   const cases = [
     ["missing projection", (application) => { delete application.programmableFee; }, "OBJECT_NOT_CLOSED"],
     ["wrong rate", (application) => { application.programmableFee.rates.platformHundredthsOfBip = 999; }],
+    ["legacy scalar rates", (application) => {
+      const rates = application.programmableFee.rates;
+      rates.selectedHundredthsOfBip = rates.selectedBuyHundredthsOfBip;
+      delete rates.selectedBuyHundredthsOfBip;
+    }],
+    ["wrong buy derivation", (application) => { application.programmableFee.rates.effectiveBuyHundredthsOfBip += 1; }],
+    ["wrong sell derivation", (application) => { application.programmableFee.rates.projectSellHundredthsOfBip += 1; }],
+    ["partially unresolved buy", (application) => { application.programmableFee.rates.selectedBuyHundredthsOfBip = null; }],
     ["wrong owner", (application) => { application.programmableFee.ownership.owner = "0x0000000000000000000000000000000000000001"; }],
     ["mutable owner", (application) => { application.programmableFee.ownership.immutable = false; }],
     ["delayed claim availability", (application) => { application.programmableFee.ownership.claimAvailability = "scheduled"; }],
@@ -139,9 +147,9 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
   );
 
   const zeroSelected = makePackage({ mutateApplication(application) {
-    application.programmableFee.rates.selectedHundredthsOfBip = 0;
-    application.programmableFee.rates.effectiveHundredthsOfBip = 1000;
-    application.programmableFee.rates.projectHundredthsOfBip = 0;
+    application.programmableFee.rates.selectedBuyHundredthsOfBip = 0;
+    application.programmableFee.rates.effectiveBuyHundredthsOfBip = 1000;
+    application.programmableFee.rates.projectBuyHundredthsOfBip = 0;
   } });
   assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
     applicationId: "example-hook",
@@ -151,9 +159,9 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
 
 test("trusted intake recomputes the fee projection from exact source submission bytes", async (t) => {
   const files = makePackage({ mutateApplication(application) {
-    application.programmableFee.rates.selectedHundredthsOfBip = 40000;
-    application.programmableFee.rates.effectiveHundredthsOfBip = 40000;
-    application.programmableFee.rates.projectHundredthsOfBip = 39000;
+    application.programmableFee.rates.selectedSellHundredthsOfBip = 40000;
+    application.programmableFee.rates.effectiveSellHundredthsOfBip = 40000;
+    application.programmableFee.rates.projectSellHundredthsOfBip = 39000;
   } });
   const fixture = createRevisionPair(t);
   writePackage(fixture.candidate, files);
@@ -2333,7 +2341,7 @@ function makeCompanionClosureFixture() {
           {
             uses: `actions/setup-node@${"2".repeat(40)}`,
             with: {
-              "node-version": "22.17.0",
+              "node-version": "24.14.0",
               cache: "npm",
               "cache-dependency-path": "package-lock.json"
             }
@@ -2534,12 +2542,15 @@ function makeProgrammableFee({
     poolScope: "canonical-launch-pool-key",
     rates: {
       unit: "hundredths-of-bip",
-      selectedHundredthsOfBip: 30000,
+      selectedBuyHundredthsOfBip: 30000,
+      selectedSellHundredthsOfBip: 20000,
       minimumEffectiveHundredthsOfBip: 1000,
-      effectiveHundredthsOfBip: 30000,
+      effectiveBuyHundredthsOfBip: 30000,
+      effectiveSellHundredthsOfBip: 20000,
       platformHundredthsOfBip: 1000,
-      projectHundredthsOfBip: 29000,
-      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      projectBuyHundredthsOfBip: 29000,
+      projectSellHundredthsOfBip: 19000,
+      formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
       lpFeeExcluded: true
     },
     basis: {
@@ -2602,7 +2613,7 @@ function sourceSubmissionBytes(applicationId, programmableFee, builderTemplate =
     model: { id: applicationId },
     programmableFee,
     schemaVersion: 1,
-    standardVersion: "1.5.0"
+    standardVersion: "1.6.0"
   })}\n`, "utf8");
 }
 

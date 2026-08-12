@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:programmable:v4-hook-submission:1.5.0",
+  "$id": "urn:programmable:v4-hook-submission:1.6.0",
   "title": "Programmable v4 model submission preflight",
   "type": "object",
   "additionalProperties": false,
@@ -15,6 +15,7 @@
     "target",
     "assets",
     "launchLifecycle",
+    "launchPlan",
     "pool",
     "programmableFee",
     "hook",
@@ -35,9 +36,9 @@
     "unresolved"
   ],
   "properties": {
-    "$schema": { "const": "urn:programmable:v4-hook-submission:1.5.0" },
+    "$schema": { "const": "urn:programmable:v4-hook-submission:1.6.0" },
     "schemaVersion": { "const": 1 },
-    "standardVersion": { "const": "1.5.0" },
+    "standardVersion": { "const": "1.6.0" },
     "stage": { "enum": ["proposal", "prototype"] },
     "model": {
       "type": "object",
@@ -190,7 +191,7 @@
         "required": ["id", "role", "origin", "address", "decimals", "decimalsSource", "supplyPolicy", "initialSupply", "behaviors", "controls"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-          "role": { "enum": ["launched", "quote", "share", "reward", "collateral", "other"] },
+          "role": { "enum": ["launched", "quote", "share", "reward", "collateral", "other"], "description": "Role of this asset in the project. Multiple launched or quote assets are allowed globally; exactly one launched and one quote role must resolve inside the canonical PoolKey." },
           "origin": {
             "enum": [
               "native-eth",
@@ -239,15 +240,98 @@
         "retirement": { "$ref": "#/$defs/lifecyclePhase" }
       }
     },
+    "launchPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executorVersion",
+        "targetStrategy",
+        "targetComponent",
+        "callDataFunction",
+        "callDataSourcePaths",
+        "hookConfigurationRule",
+        "hookConfigurationSourcePaths",
+        "initialLiquidityRule",
+        "liquiditySourcePaths",
+        "testPaths",
+        "nativeValueRule",
+        "minimumNativeValue",
+        "maximumNativeValue",
+        "nativeValueSource",
+        "refundRecipientPolicy",
+        "poolMustBeUninitialized",
+        "postAcceptanceBundleRequired"
+      ],
+      "properties": {
+        "executorVersion": { "const": "launch-authorization-executor-v1" },
+        "targetStrategy": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 100,
+          "description": "Open target strategy slug. New strategies remain eligible for architecture review and are never rejected merely for missing catalog coverage."
+        },
+        "targetComponent": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 100 },
+        "callDataFunction": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 },
+        "callDataSourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "hookConfigurationRule": { "type": ["string", "null"], "minLength": 1, "maxLength": 1000 },
+        "hookConfigurationSourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "initialLiquidityRule": { "type": ["string", "null"], "minLength": 12, "maxLength": 1200 },
+        "liquiditySourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "testPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "nativeValueRule": { "type": ["string", "null"], "minLength": 12, "maxLength": 1000 },
+        "minimumNativeValue": {
+          "type": ["string", "null"],
+          "pattern": "^(?:0|[1-9][0-9]*)$",
+          "maxLength": 78,
+          "description": "Inclusive lower bound for the eventual exact executor msg.value in wei as a uint256 decimal string."
+        },
+        "maximumNativeValue": {
+          "type": ["string", "null"],
+          "pattern": "^(?:0|[1-9][0-9]*)$",
+          "maxLength": 78,
+          "description": "Inclusive upper bound for the eventual exact executor msg.value in wei as a uint256 decimal string."
+        },
+        "nativeValueSource": { "type": ["string", "null"], "minLength": 12, "maxLength": 800 },
+        "refundRecipientPolicy": { "type": ["string", "null"], "minLength": 12, "maxLength": 800 },
+        "poolMustBeUninitialized": { "const": true },
+        "postAcceptanceBundleRequired": { "const": true }
+      },
+      "description": "Open-ended target-call plan for the generic launch executor. It constrains only the canonical pool launch boundary, not the project architecture built around it."
+    },
     "pool": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["currency0", "currency1", "orderingRule", "tickSpacing", "lpFee", "canonical", "alternativePools"],
+      "required": ["currency0", "currency1", "orderingRule", "tickSpacing", "minimumInitialLiquidity", "lpFee", "canonical", "alternativePools"],
       "properties": {
         "currency0": { "type": ["string", "null"] },
         "currency1": { "type": ["string", "null"] },
         "orderingRule": { "type": ["string", "null"], "maxLength": 300 },
         "tickSpacing": { "type": ["integer", "null"], "minimum": 1, "maximum": 32767 },
+        "minimumInitialLiquidity": {
+          "type": ["string", "null"],
+          "pattern": "^(?:0|[1-9][0-9]{0,38})$",
+          "description": "Uint128 minimum active canonical-pool AMM liquidity after the authorized target call. Zero is accepted only for a reviewed, backed full-consumption custom-accounting design; otherwise the minimum must be positive. Null is proposal-only."
+        },
         "lpFee": {
           "type": "object",
           "additionalProperties": false,
@@ -319,15 +403,18 @@
         "rates": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["unit", "selectedHundredthsOfBip", "minimumEffectiveHundredthsOfBip", "effectiveHundredthsOfBip", "platformHundredthsOfBip", "projectHundredthsOfBip", "formula", "lpFeeExcluded"],
+          "required": ["unit", "selectedBuyHundredthsOfBip", "selectedSellHundredthsOfBip", "minimumEffectiveHundredthsOfBip", "effectiveBuyHundredthsOfBip", "effectiveSellHundredthsOfBip", "platformHundredthsOfBip", "projectBuyHundredthsOfBip", "projectSellHundredthsOfBip", "formula", "lpFeeExcluded"],
           "properties": {
             "unit": { "const": "hundredths-of-bip" },
-            "selectedHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999 },
+            "selectedBuyHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999 },
+            "selectedSellHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999 },
             "minimumEffectiveHundredthsOfBip": { "const": 1000 },
-            "effectiveHundredthsOfBip": { "type": ["integer", "null"], "minimum": 1000, "maximum": 999999 },
+            "effectiveBuyHundredthsOfBip": { "type": ["integer", "null"], "minimum": 1000, "maximum": 999999 },
+            "effectiveSellHundredthsOfBip": { "type": ["integer", "null"], "minimum": 1000, "maximum": 999999 },
             "platformHundredthsOfBip": { "const": 1000 },
-            "projectHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 998999 },
-            "formula": { "const": "effective=max(selected,1000);platform=1000;project=effective-1000" },
+            "projectBuyHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 998999 },
+            "projectSellHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 998999 },
+            "formula": { "const": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000" },
             "lpFeeExcluded": { "const": true }
           }
         },
@@ -423,7 +510,7 @@
       "additionalProperties": false,
       "required": ["used", "base", "upgradeable", "sharedAcrossPools", "poolNamespace", "poolAdmission", "permissions", "callbackPolicies", "hookData", "feeMechanism", "customAccounting", "returnDeltaAccounting", "postReturnDeltaAccounting", "erc6909Claims", "nestedActions"],
       "properties": {
-        "used": { "type": ["boolean", "null"], "description": "True only when the canonical launch PoolKey uses a custom hook; false means the ordinary no-custom-hook launch route." },
+        "used": { "type": ["boolean", "null"], "description": "True when the canonical launch PoolKey uses any nonzero hook address, including a project-specific implementation of the standard Programmable fee profile; false means the ordinary no-hook launch route. This field does not distinguish standard-profile from integrated custom behavior." },
         "base": { "type": ["string", "null"], "maxLength": 100 },
         "upgradeable": { "type": ["boolean", "null"] },
         "sharedAcrossPools": { "type": ["boolean", "null"] },
@@ -463,6 +550,7 @@
           "required": [
             "used",
             "classification",
+            "allocationMode",
             "chargedCurrency",
             "swapQuadrants",
             "maximumHundredthsOfBip",
@@ -477,6 +565,7 @@
           "properties": {
             "used": { "type": ["boolean", "null"] },
             "classification": { "enum": ["none", "lp-fee", "hook-owned-fee", "both", null] },
+            "allocationMode": { "enum": ["fixed-ppm", "programmable-rate-formula", null] },
             "chargedCurrency": { "type": ["string", "null"], "maxLength": 500 },
             "swapQuadrants": {
               "type": "object",
@@ -854,9 +943,17 @@
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
         },
+        "githubActionsRunIds": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[1-9][0-9]{0,63}$" },
+          "description": "Exact successful source-repository GitHub Actions runs for this commit. Registry intake checks are not project code tests."
+        },
         "specificationPath": { "type": ["string", "null"] },
         "testEvidencePath": { "type": ["string", "null"] },
         "dependencyLockPath": { "type": ["string", "null"] },
+        "feeConformanceManifestPath": { "type": ["string", "null"], "description": "Exact builder-supplied structural Programmable fee-conformance manifest; maintainers must still rebuild it independently." },
         "gateStatusPath": { "type": ["string", "null"] },
         "reviewTargetPath": { "type": ["string", "null"] },
         "runtimeAssetManifestPath": { "type": ["string", "null"], "description": "Optional path to the closed runtime-assets v1 manifest. Large data assets declared there stay outside the strict source/test byte closure." }
@@ -1251,7 +1348,8 @@
               "items": { "$ref": "#/$defs/autoLiquidityFundingSource" },
               "description": "Every tax, allocation, protocol-revenue, donation, deposit or novel reviewed source that can fund automatic liquidity."
             },
-            "triggerMode": { "enum": ["permissionless-explicit-call", "eligible-non-pool-transfer", null] },
+            "triggerMode": { "enum": ["permissionless-explicit-call", "eligible-non-pool-transfer", "custom-reviewed", null] },
+            "triggerExecutionBoundary": { "enum": ["separate-explicit-action", "embedded-user-transfer", null], "description": "Required for custom-reviewed trigger modes so failure atomicity is checked structurally rather than inferred from prose; null for known trigger modes." },
             "triggerThreshold": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78 },
             "maximumSwapAmount": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78 },
             "slippageHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
@@ -1259,7 +1357,7 @@
             "executionActor": { "type": ["string", "null"], "maxLength": 300 },
             "poolTransferSuppression": { "type": ["boolean", "null"] },
             "reentrancyGuard": { "type": ["boolean", "null"] },
-            "underlyingTransferFailurePolicy": { "enum": ["continue-transfer", null] },
+            "underlyingTransferFailurePolicy": { "enum": ["continue-transfer", "defer-and-continue-trigger", "atomic-revert-explicit-call", null] },
             "mutable": { "type": ["boolean", "null"] },
             "authorityRole": { "type": ["string", "null"], "maxLength": 120 },
             "valueFlowIds": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" } },
@@ -1534,7 +1632,7 @@
       "required": ["role", "sharePpm", "addressSource", "address", "binding", "derivationRule", "mutable", "mutationController", "newAddressValidation", "mutationEvent"],
       "properties": {
         "role": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "sharePpm": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "sharePpm": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000000 },
         "addressSource": { "enum": ["launch-wallet", "fixed-address", "beneficiary-supplied", "derived-contract"] },
         "address": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
         "binding": { "enum": ["launch-transaction-sender", "exact-address", "beneficiary-at-launch", "immutable-derived-contract"] },
@@ -1768,7 +1866,9 @@
       "additionalProperties": false,
       "required": [
         "used",
-        "bridgeDependencyId",
+        "direction",
+        "localBridgeDependencyId",
+        "localBridgeAddress",
         "source",
         "destination",
         "message",
@@ -1782,10 +1882,14 @@
       ],
       "properties": {
         "used": { "type": ["boolean", "null"] },
-        "bridgeDependencyId": {
+        "direction": {
+          "enum": ["inbound-to-launch-chain", "outbound-from-launch-chain", "bidirectional-reviewed", null]
+        },
+        "localBridgeDependencyId": {
           "type": ["string", "null"],
           "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
         },
+        "localBridgeAddress": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
         "source": {
           "type": "object",
           "additionalProperties": false,
@@ -1825,16 +1929,28 @@
         "destination": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["chainId", "domain", "receiver", "receiverDependencyId", "authenticatedBridgeCaller"],
+          "required": ["network", "domain", "receiver"],
           "properties": {
-            "chainId": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 },
-            "domain": { "type": ["string", "null"], "maxLength": 200 },
-            "receiver": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
-            "receiverDependencyId": {
-              "type": ["string", "null"],
-              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            "network": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["namespace", "reference"],
+              "properties": {
+                "namespace": { "type": ["string", "null"], "pattern": "^[-a-z0-9]{3,8}$" },
+                "reference": { "type": ["string", "null"], "pattern": "^[-_a-zA-Z0-9]{1,32}$" }
+              }
             },
-            "authenticatedBridgeCaller": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" }
+            "domain": { "type": ["string", "null"], "maxLength": 200 },
+            "receiver": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["encoding", "value", "canonicalizationRule"],
+              "properties": {
+                "encoding": { "enum": ["evm-address", "bytes32", "base58", "bech32", "bridge-native", null] },
+                "value": { "type": ["string", "null"], "maxLength": 200 },
+                "canonicalizationRule": { "type": ["string", "null"], "maxLength": 1000 }
+              }
+            }
           }
         },
         "message": {
@@ -1882,14 +1998,13 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "bridgeDependencyId",
+                "localBridgeDependencyId",
                 "sourceNetwork",
                 "sourceDomain",
                 "sourceSender",
-                "destinationChainId",
+                "destinationNetwork",
                 "destinationDomain",
-                "receiver",
-                "receiverDependencyId",
+                "destinationReceiver",
                 "modelId",
                 "poolId",
                 "action",
@@ -1899,14 +2014,13 @@
                 "nonce"
               ],
               "properties": {
-                "bridgeDependencyId": { "type": ["boolean", "null"] },
+                "localBridgeDependencyId": { "type": ["boolean", "null"] },
                 "sourceNetwork": { "type": ["boolean", "null"] },
                 "sourceDomain": { "type": ["boolean", "null"] },
                 "sourceSender": { "type": ["boolean", "null"] },
-                "destinationChainId": { "type": ["boolean", "null"] },
+                "destinationNetwork": { "type": ["boolean", "null"] },
                 "destinationDomain": { "type": ["boolean", "null"] },
-                "receiver": { "type": ["boolean", "null"] },
-                "receiverDependencyId": { "type": ["boolean", "null"] },
+                "destinationReceiver": { "type": ["boolean", "null"] },
                 "modelId": { "type": ["boolean", "null"] },
                 "poolId": { "type": ["boolean", "null"] },
                 "action": { "type": ["boolean", "null"] },

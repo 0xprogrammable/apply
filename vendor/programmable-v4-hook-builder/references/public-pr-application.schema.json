@@ -335,11 +335,14 @@
       "additionalProperties": false,
       "required": [
         "unit",
-        "selectedHundredthsOfBip",
+        "selectedBuyHundredthsOfBip",
+        "selectedSellHundredthsOfBip",
         "minimumEffectiveHundredthsOfBip",
-        "effectiveHundredthsOfBip",
+        "effectiveBuyHundredthsOfBip",
+        "effectiveSellHundredthsOfBip",
         "platformHundredthsOfBip",
-        "projectHundredthsOfBip",
+        "projectBuyHundredthsOfBip",
+        "projectSellHundredthsOfBip",
         "formula",
         "lpFeeExcluded"
       ],
@@ -347,7 +350,15 @@
         "unit": {
           "const": "hundredths-of-bip"
         },
-        "selectedHundredthsOfBip": {
+        "selectedBuyHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "selectedSellHundredthsOfBip": {
           "type": [
             "integer",
             "null"
@@ -358,7 +369,15 @@
         "minimumEffectiveHundredthsOfBip": {
           "const": 1000
         },
-        "effectiveHundredthsOfBip": {
+        "effectiveBuyHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1000,
+          "maximum": 999999
+        },
+        "effectiveSellHundredthsOfBip": {
           "type": [
             "integer",
             "null"
@@ -369,7 +388,15 @@
         "platformHundredthsOfBip": {
           "const": 1000
         },
-        "projectHundredthsOfBip": {
+        "projectBuyHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 998999
+        },
+        "projectSellHundredthsOfBip": {
           "type": [
             "integer",
             "null"
@@ -378,7 +405,7 @@
           "maximum": 998999
         },
         "formula": {
-          "const": "effective=max(selected,1000);platform=1000;project=effective-1000"
+          "const": "per-side:effective=max(selected,1000);platform=1000;project=effective-1000"
         },
         "lpFeeExcluded": {
           "const": true

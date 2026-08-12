@@ -8,6 +8,7 @@ import { parseCli, renderHelp } from "./cli-args.mjs";
 import {
   BUILDER_LIFECYCLE_SCHEMA_VERSION,
   BuilderLifecycleError,
+  bundledVersionStatus,
   checkSignedUpdate,
   migrationDryRun,
   planPrivateRelease,
@@ -21,9 +22,9 @@ const MAX_INPUT_BYTES = 4_194_304;
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
 const specs = new Map([
   ["version", {
-    usage: "builder-lifecycle.mjs version --state <installed-state.json> [--human]",
-    summary: "Report the exact local builder and standards version without network access.",
-    options: [fileOption("--state", "state", "installed-state.json", "Read the pinned installed version state."), humanOption()],
+    usage: "builder-lifecycle.mjs version [--state <installed-state.json>] [--human]",
+    summary: "Report bundled builder and standards versions, or inspect an explicit installed-state override, without network access.",
+    options: [fileOption("--state", "state", "installed-state.json", "Optionally override bundled constants with one pinned installed version state."), humanOption()],
     positionals: { min: 0, max: 0 }
   }],
   ["update-check", {
@@ -91,8 +92,13 @@ if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
 
 function execute(command, options) {
   if (command === "version") {
-    requireOptions(options, ["state"]);
-    return versionStatus(readJsonFile(options.state, "installed state"));
+    return options.state === null
+      ? bundledVersionStatus()
+      : {
+          ...versionStatus(readJsonFile(options.state, "installed state")),
+          versionSource: "installed-state-override",
+          installedStateOverrideUsed: true
+        };
   }
   if (command === "update-check") {
     requireOptions(options, ["state", "update", "pin", "now"]);

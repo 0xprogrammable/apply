@@ -6,11 +6,13 @@ import { fileURLToPath } from "node:url";
 import {
   TemplateCatalogError,
   canonicalJson,
+  listImplementationLegos,
   listTemplateCatalog,
   loadTemplateCatalog,
   materializeTemplate,
   parseCustomCapability,
   parseLocalTag,
+  showImplementationLego,
   showTemplateDefinition
 } from "./template-catalog-core.mjs";
 
@@ -29,11 +31,25 @@ try {
         catalogDigest: catalog.catalogDigest,
         entries: listTemplateCatalog(catalog, options)
       });
+    } else if (command === "list-legos") {
+      const options = parseLegoList(args.slice(1));
+      emitSuccess(command, {
+        catalogDigest: catalog.catalogDigest,
+        manifestSha256: catalog.implementationLegos.manifestSha256,
+        entries: listImplementationLegos(catalog, options)
+      });
     } else if (command === "show") {
       const id = parseShow(args.slice(1));
       emitSuccess(command, {
         catalogDigest: catalog.catalogDigest,
         definition: showTemplateDefinition(catalog, id)
+      });
+    } else if (command === "show-lego") {
+      const id = parseShow(args.slice(1), "show-lego");
+      emitSuccess(command, {
+        catalogDigest: catalog.catalogDigest,
+        manifestSha256: catalog.implementationLegos.manifestSha256,
+        definition: showImplementationLego(catalog, id)
       });
     } else if (command === "materialize") {
       const options = parseMaterialize(args.slice(1));
@@ -41,6 +57,7 @@ try {
         catalog,
         starterId: options.starterId,
         packIds: options.packIds,
+        capabilityIds: options.capabilityIds,
         customCapabilities: options.customCapabilities,
         localTags: options.localTags,
         targetDirectory: options.targetDirectory
@@ -85,21 +102,40 @@ function parseList(args) {
   return { kind };
 }
 
-function parseShow(args) {
+function parseShow(args, command = "show") {
   if (args.includes("--help") || args.includes("-h")) {
-    process.stdout.write(showHelp());
+    process.stdout.write(showHelp(command));
     process.exit(0);
   }
   if (args.length !== 1 || args[0].startsWith("-")) {
-    usageError("show requires exactly one catalog id.");
+    usageError(`${command} requires exactly one catalog id.`);
   }
   return args[0];
+}
+
+function parseLegoList(args) {
+  let maturity = null;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--help" || argument === "-h") {
+      process.stdout.write(legoListHelp());
+      process.exit(0);
+    }
+    if (argument === "--maturity") {
+      if (maturity !== null) usageError("--maturity may be provided only once.");
+      maturity = requireValue(args, ++index, "--maturity");
+      continue;
+    }
+    usageError(`Unknown list-legos argument: ${argument}.`);
+  }
+  return { maturity };
 }
 
 function parseMaterialize(args) {
   const options = {
     starterId: null,
     packIds: [],
+    capabilityIds: [],
     customCapabilities: [],
     localTags: [],
     targetDirectory: null
@@ -117,6 +153,10 @@ function parseMaterialize(args) {
     }
     if (argument === "--pack") {
       options.packIds.push(requireValue(args, ++index, "--pack"));
+      continue;
+    }
+    if (argument === "--capability") {
+      options.capabilityIds.push(requireValue(args, ++index, "--capability"));
       continue;
     }
     if (argument === "--custom-capability") {
@@ -166,7 +206,9 @@ function help() {
     "",
     "Commands:",
     "  list         List starters and capability packs.",
+    "  list-legos   List hash-bound implementation Legos.",
     "  show         Show one complete catalog definition.",
+    "  show-lego    Show one complete implementation Lego descriptor.",
     "  materialize  Create one new local template directory.",
     "",
     "Run template-catalog.mjs <command> --help for command options.",
@@ -183,11 +225,23 @@ function listHelp() {
   ].join("\n");
 }
 
-function showHelp() {
+function showHelp(command = "show") {
   return [
-    "Usage: template-catalog.mjs show <id>",
+    `Usage: template-catalog.mjs ${command} <id>`,
     "",
-    "Show one hash-bound starter or capability-pack definition.",
+    command === "show"
+      ? "Show one hash-bound starter or capability-pack definition."
+      : "Show one hash-bound implementation Lego descriptor.",
+    ""
+  ].join("\n");
+}
+
+function legoListHelp() {
+  return [
+    "Usage: template-catalog.mjs list-legos [--maturity code-ready|experimental]",
+    "",
+    "List hash-bound implementation Legos in deterministic id order.",
+    "Maturity is an integration boundary, never an assurance claim.",
     ""
   ].join("\n");
 }
@@ -195,11 +249,14 @@ function showHelp() {
 function materializeHelp() {
   return [
     "Usage: template-catalog.mjs materialize --starter <id> --target <new-directory>",
-    "       [--pack <id>]... [--custom-capability <id>=<visible-label>]... [--local-tag <slug>]...",
+    "       [--pack <id>]... [--capability <known-id>]... [--custom-capability <id>=<visible-label>]...",
+    "       [--local-tag <slug>]...",
     "",
-    "Create planning templates in one exact target directory that does not already exist.",
+    "Create planning artifacts and exact-trigger source accelerators in one new target directory.",
     "--target names the new plan directory itself, not a parent into which another folder is added.",
     "Dependencies and mandatory packs are included automatically.",
+    "Known --capability selections are exact Legos and never expand sibling capabilities from a pack.",
+    "Implementation Lego maturity never implies integration, fee conformance, audit, deployment or production readiness.",
     "Unknown capabilities remain owner-defined and route to architecture review.",
     "Local tags are safe owner-provided discovery labels; they do not require catalog membership or imply provider support.",
     "No Git, network, submission, deployment or publication action occurs.",

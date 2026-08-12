@@ -8,10 +8,12 @@ import { parseCliOrExit } from "./cli-args.mjs";
 import { applyRepositoryClosureToReport } from "./closure-report-core.mjs";
 import { analyzeRepositoryReview } from "./review-target-core.mjs";
 import { assertInsideRepository, resolveRepositoryRoot } from "./repository-root.mjs";
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 import { analyzeSubmission } from "./submission-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.join(scriptDirectory, "..", "references", "submission.schema.json");
+const MAX_JSON_BYTES = 4 * 1024 * 1024;
 const { options, positionals } = parseCliOrExit({
   command: "validate-submission.mjs",
   usage: "validate-submission.mjs <submission.json> [--write-report <path>] [--require-intake-ready | --require-ready | --require-prototype-validated] [--repository-root <path>]",
@@ -39,8 +41,8 @@ try {
     repositoryRoot = resolveRepositoryRoot(options.repositoryRoot);
     submissionPath = assertInsideRepository(repositoryRoot, submissionPath);
   }
-  submission = JSON.parse(fs.readFileSync(submissionPath, "utf8"));
-  schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+  submission = readBoundedStrictJsonFile(submissionPath);
+  schema = readBoundedStrictJsonFile(schemaPath);
 } catch (error) {
   fail(error.message, 2);
 }
@@ -88,4 +90,30 @@ if (
 function fail(message, code) {
   console.error(`validate-submission: ${message}`);
   process.exit(code);
+}
+
+function readBoundedStrictJsonFile(filePath) {
+  const descriptor = fs.openSync(
+    filePath,
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0)
+  );
+  try {
+    const before = fs.fstatSync(descriptor, { bigint: true });
+    if (!before.isFile() || before.size < 2n || before.size > BigInt(MAX_JSON_BYTES)) {
+      throw new Error(`JSON input must be a regular file containing 2 to ${MAX_JSON_BYTES} bytes`);
+    }
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor, { bigint: true });
+    if (
+      before.dev !== after.dev
+      || before.ino !== after.ino
+      || before.size !== after.size
+      || before.mtimeNs !== after.mtimeNs
+      || before.ctimeNs !== after.ctimeNs
+      || BigInt(bytes.length) !== before.size
+    ) throw new Error("JSON input changed while being read");
+    return parseBoundedStrictJsonBytes(bytes, { maxSourceBytes: MAX_JSON_BYTES });
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }

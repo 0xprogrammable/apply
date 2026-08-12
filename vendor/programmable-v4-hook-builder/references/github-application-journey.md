@@ -1,6 +1,6 @@
-# GitHub application journey
+# GitHub Application journey
 
-This reference defines the safe client-side transport from Hookbuilder to **Submit a Launch**. It consumes the
+This reference defines the released client-side transport for the **Public GitHub PR Builder Beta**. It consumes the
 already verified six-file output of `prepare-pr`, plans a public GitHub draft pull request, updates that same draft,
 and reads GitHub review state. It does not create a Connected Submission/W2 application and it never approves,
 merges, deploys, launches, lists, or marks a project ready for review.
@@ -61,7 +61,7 @@ CLI envelope whose `command` is `prepare-pr`, whose `ok` value is `true`, and wh
 
 The client revalidates, rather than trusts, all of the following before any GitHub write:
 
-- the fixed central target `0xprogrammable/submit-launch:main` with numeric repository id `1320171831`;
+- the fixed central target `0xprogrammable/submit-launch:main`, immutable GitHub ID `1320171831`;
 - the application id and `submissions/<application-id>/` path;
 - the exact file order:
   `application.json`, `PROPOSAL.md`, `TEST_PLAN.md`, `THREAT_MODEL.md`, `compatibility-report.json`, and
@@ -73,6 +73,9 @@ The client revalidates, rather than trusts, all of the following before any GitH
 - the builder's immutable GitHub user id;
 - the prepared central commit and tree; and
 - the retained human-confirmation and no-external-action markers.
+
+A package prepared by an older client remains bound to its original transport identity. Never edit its prepared target
+or copy it into the current intake. Current clients prepare new applications only against Submit a Launch.
 
 An altered byte, extra file, path escape, symlinked input, stale base, ambiguous checklist, or inconsistent projection
 fails closed. Regenerate with `prepare-pr`; do not hand-repair its machine output.
@@ -164,15 +167,29 @@ The projection is deliberately small:
 
 | GitHub observation | Client status |
 | --- | --- |
-| Open draft, no running or failing check | `submitted` |
-| Any queued, requested, waiting, pending, or in-progress check | `checks-running` |
-| Latest reviewer state requests changes, or a completed check failed | `changes-requested` |
-| Open, non-draft, no running/failing checks or active change request | `waiting-review` |
+| Open draft before the trusted required checks start | `submitted` |
+| `public-intake` or `Node 24` is missing, skipped, queued, requested, waiting, pending, or in progress | `checks-running` |
+| Latest reviewer state requests changes, or one trusted required check failed | `changes-requested` |
+| Required checks pass and the `builder:architecture-review` label is present | `architecture-review` |
+| Required checks pass and the `builder:review-in-progress` label is present | `review-in-progress` |
+| Open, non-draft, all three trusted required checks passed, no active change request or review label | `waiting-review` |
 | PR has `merged_at` | `review-record-merged` |
 | Closed without merge | `closed` |
 
-The response also preserves check and review axes. A status label never hides that it is GitHub-only and never becomes
+The response also preserves check and review axes, the authoritative `applicationResult`, a deterministic `nextAction`,
+and a `verificationScope`. `applicationResult` comes from the prepared central compatibility report; the legacy local
+design preflight is not overall readiness. A status label never hides that it is GitHub-only and never becomes
 `approved`, `audited`, `deployed`, `launchable`, `indexed`, or `live`.
+Only check runs from the GitHub Actions app id `15368` and slug `github-actions` count. Unrelated optional failures are
+reported separately and cannot block or advance the application status.
+Each trusted required-check row also preserves its canonical GitHub Actions `detailsUrl` when GitHub supplies one, so
+the builder can inspect the exact Registry-CI result. In particular, only Registry `public-intake` authoritatively
+decides whether a primary numeric repository id is already bound to another maintained application. The Builder does
+not download an unbounded application ledger and must not turn a partial local lookup into a green collision claim.
+Those Registry checks validate the six-file application package and its declared public evidence bindings. They do not
+check out or run the project's source, judge source-workflow quality, perform an audit, or prove a deployment or launch.
+`PRIMARY_SOURCE_REPOSITORY_ALREADY_REGISTERED` therefore means change or continue the already-maintained application;
+it is not a generic judgment that the project idea is unsafe.
 
 ## What the action plan binds
 
@@ -267,7 +284,8 @@ node "$SKILL_ROOT/scripts/github-application.mjs" status \
 
 The receipt directory must already exist, must be a real directory, and must be completely outside the source
 repository. The receipt is canonical JSON, smaller than 64 KiB, mode `0600`, content-addressed in its filename, and
-idempotent. It contains only public ids, URLs, hashes, projected GitHub status, and the external-action list.
+idempotent. It contains only public ids, URLs, hashes, the authoritative application result, projected GitHub status,
+and the external-action list.
 
 A local receipt is convenience evidence. It is not an authenticated W2 receipt, reviewer decision, approval record,
 launch permit, deployment receipt, or provider observation.
@@ -307,7 +325,7 @@ writes.
 
 - This client is for the public `github.com` PR beta only. It does not handle private source, GitHub Enterprise, other
   hosts, ZIPs, loose files, pasted source, deployed-only hooks, external pools, or source-free applications.
-- It expects the active user's fork at `<login>/submit-launch`. A renamed existing fork requires manual normalization
+- It expects the active user's fork at `<login>/programmable`. A renamed existing fork requires manual normalization
   or a later reviewed client version; the client will not guess or mutate repositories.
 - Open-PR duplicate discovery uses the deterministic head and canonical Builder Beta title. A deliberately renamed,
   different-branch manual PR may require the exact `--pull-request` number for status and manual maintainer cleanup.

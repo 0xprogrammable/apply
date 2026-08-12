@@ -1,31 +1,32 @@
 #!/usr/bin/env node
-
 import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { TextDecoder } from "node:util";
 import { parseCli, renderHelp } from "./cli-args.mjs";
 import { normalizeCompanionManifest } from "./companion-manifest-contract.mjs";
 import { inspectLocalGitReadiness, preparePullRequest } from "./cli-prepare-pr.mjs";
-import { assertInsideRepository, resolveRepositoryRoot } from "./repository-root.mjs";
-import {
-  CliFailure,
-  emitFailure,
-  emitSuccess,
-  requireJsonResult,
-  runBundledCommand
-} from "./cli-runtime.mjs";
+import { runLaunchBundleV2Cli } from "./launch-bundle-v2.mjs";
+import { assertInsideRepository, resolveInstalledPackageRoot, resolveRepositoryRoot } from "./repository-root.mjs";
+import { CliFailure, emitFailure, emitSuccess, requireJsonResult, runBundledCommand } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
-
+import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
+import { SUBMIT_LAUNCH_INTAKE_CONTRACT as INTAKE } from "./registry-intake-contract.mjs";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const launchTarget = INTAKE.repository;
 const delegatedCommands = new Map([
+  ["open-world", { script: "open-world.mjs", prefix: [] }],
+  ["application-recheck", { script: "application-recheck.mjs", prefix: [] }],
   ["context", { script: "knowledge-router.mjs", prefix: [] }],
   ["templates", { script: "template-catalog.mjs", prefix: [] }],
+  ["discover", { script: "registry-discovery.mjs", prefix: [] }],
+  ["resolve-contract", { script: "resolve-contract.mjs", prefix: [] }],
   ["start", { script: "template-catalog.mjs", prefix: ["materialize"] }],
-  ["profile", { script: "build-profile.mjs", prefix: [] }],
+  ["profile", { script: "build-profile.mjs", prefix: [] }], ["project", { script: "project-compiler.mjs", prefix: [] }],
   ["fee", { script: "fee-conformance.mjs", prefix: [] }],
+  ["launch-bundle", { script: "launch-bundle.mjs", prefix: [] }],
+  ["launch-plan-graph", { script: "launch-plan-graph.mjs", prefix: [] }],
   ["submit", { script: "github-application.mjs", prefix: ["submit"] }],
   ["status", { script: "github-application.mjs", prefix: ["status"] }],
   ["update", { script: "github-application.mjs", prefix: ["update"] }],
@@ -34,7 +35,6 @@ const delegatedCommands = new Map([
   ["migrate", { script: "builder-lifecycle.mjs", prefix: ["migrate"] }],
   ["plan-release", { script: "builder-lifecycle.mjs", prefix: ["plan-release"] }]
 ]);
-
 const commandSpecs = new Map([
   ["doctor", {
     usage: "cli.mjs doctor [--repository-root <path>]",
@@ -54,11 +54,12 @@ const commandSpecs = new Map([
     positionals: { min: 1, max: 1, names: ["model-id"] }
   }],
   ["check", {
-    usage: "cli.mjs check <submission.json> [--write-report <path>] [--require-design-ready | --require-intake-ready | --require-ready | --require-prototype-validated] [--repository-root <path>]",
-    summary: "Run the canonical deterministic compatibility preflight.",
+    usage: "cli.mjs check <submission.json> [--write-report <path> | --no-write] [--require-design-ready | --require-intake-ready | --require-ready | --require-prototype-validated] [--repository-root <path>]",
+    summary: "Generate the canonical compatibility report. Without a --require-* gate, exit 0 means report generation only, not readiness.",
     options: [
       repositoryOption(),
-      { name: "--write-report", key: "reportPath", type: "value", valueName: "path", description: "Write the report inside the repository." },
+      { name: "--write-report", key: "reportPath", type: "value", valueName: "path", description: "Write to this in-repository path; by default compatibility-report.json is written beside the submission." },
+      { name: "--no-write", key: "noWrite", type: "boolean", description: "Return the diagnostic report without changing files." },
       { name: "--require-design-ready", key: "requireDesignReady", type: "boolean", description: "Fail unless the design axis is DESIGN_READY." },
       { name: "--require-intake-ready", key: "requireIntakeReady", type: "boolean", description: "Fail unless implementation is STRUCTURALLY_COMPLETE and repository closure is complete." },
       { name: "--require-ready", key: "requireReady", type: "boolean", description: "Deprecated alias for --require-intake-ready." },
@@ -68,7 +69,7 @@ const commandSpecs = new Map([
   }],
   ["package", {
     usage: "cli.mjs package <submission-directory> [--require-intake-ready | --require-ready] [--repository-root <path>]",
-    summary: "Run the canonical public intake package gate without executing project code.",
+    summary: "Validate the released V1 package; never execute project code.",
     options: [
       repositoryOption(),
       { name: "--require-intake-ready", key: "requireIntakeReady", type: "boolean", description: "Fail unless static package intake is READY." },
@@ -86,11 +87,11 @@ const commandSpecs = new Map([
     positionals: { min: 1, max: 1, names: ["manifest.json"] }
   }],
   ["prepare-pr", {
-    usage: "cli.mjs prepare-pr <submission-directory> [--base <branch>] [--companion-manifest <path>]... [--output-dir <path>] [--replace-existing | --replace-draft] [--repository-root <path>]",
-    summary: "Prepare deterministic PR metadata for one clean, pushed, public GitHub revision without opening it.",
+    usage: "cli.mjs prepare-pr <submission-directory> [--base main] [--companion-manifest <path>]... [--output-dir <path>] [--replace-existing | --replace-draft] [--repository-root <path>]",
+    summary: "Prepare Submit a Launch PR metadata without a GitHub write.",
     options: [
       repositoryOption(),
-      { name: "--base", key: "baseBranch", type: "value", valueName: "branch", description: "Select the fixed 0xprogrammable/submit-launch target base branch. Defaults to main." },
+      { name: "--base", key: "baseBranch", type: "value", valueName: "main", description: `Fixed target: ${launchTarget.slug}:${launchTarget.defaultBranch}.` },
       {
         name: "--companion-manifest",
         key: "companionManifests",
@@ -106,16 +107,30 @@ const commandSpecs = new Map([
     positionals: { min: 1, max: 1, names: ["submission-directory"] }
   }]
 ]);
-const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
-
 const argv = process.argv.slice(2);
 if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
   process.stdout.write(`${globalHelp()}\n`);
   process.exit(0);
 }
-
 const command = argv[0];
-if (delegatedCommands.has(command)) {
+const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0], 10);
+const nodeRuntimeSupported = Number.isInteger(nodeMajor) && nodeMajor >= 24;
+if (command !== "doctor" && !nodeRuntimeSupported) {
+  process.exitCode = emitFailure(command, new CliFailure(
+    "NODE_24_OR_NEWER_REQUIRED",
+    "Programmable v4 Builder requires Node.js 24 or newer"
+  ));
+} else if (command === "start" && (argv.slice(1).includes("--help") || argv.slice(1).includes("-h"))) {
+  process.stdout.write(`${startHelp()}\n`);
+} else if (command === "launch-bundle-v2") {
+  const launchArgs = argv.slice(1);
+  const directArgs = launchArgs.length === 1 && new Set(["--help", "-h", "--version"]).has(launchArgs[0]);
+  process.exitCode = runLaunchBundleV2Cli({
+    argv: directArgs ? launchArgs : ["prepare", ...launchArgs],
+    cwd: process.cwd(),
+    stdout: process.stdout
+  });
+} else if (delegatedCommands.has(command)) {
   process.exitCode = runDelegatedCommand(command, argv.slice(1));
 } else if (!commandSpecs.has(command)) {
   process.exitCode = emitFailure(command, new CliFailure("UNKNOWN_COMMAND", `unknown command ${command}`));
@@ -130,8 +145,13 @@ if (delegatedCommands.has(command)) {
     process.exitCode = emitFailure(command, error);
   }
 }
-
 async function execute(command, options, positionals) {
+  if (command === "prepare-pr" && options.baseBranch !== null && options.baseBranch !== launchTarget.defaultBranch) {
+    throw new CliFailure(
+      "USAGE_ERROR",
+      `the fixed target is ${launchTarget.slug}:${launchTarget.defaultBranch}`
+    );
+  }
   if (command === "prepare-pr" && options.replaceExisting && options.replaceDraft) {
     throw new CliFailure("USAGE_ERROR", "--replace-existing and --replace-draft are mutually exclusive");
   }
@@ -152,12 +172,19 @@ async function execute(command, options, positionals) {
       "--require-design-ready cannot be combined with another readiness requirement"
     );
   }
-  const repositoryRoot = resolveRoot(options.repositoryRoot);
+  if (command === "check" && options.noWrite && options.reportPath !== null) {
+    throw new CliFailure("USAGE_ERROR", "--no-write and --write-report are mutually exclusive");
+  }
+  const repositoryRoot = command === "doctor"
+    ? resolveDoctorRoot(options.repositoryRoot)
+    : resolveRoot(options.repositoryRoot);
   if (command === "doctor") {
+    const doctorArguments = ["--json"];
+    if (options.repositoryRoot !== null) doctorArguments.push("--repository-root", repositoryRoot);
     const tooling = requireJsonResult(
       runBundledCommand(
         "doctor.mjs",
-        ["--json", "--repository-root", repositoryRoot],
+        doctorArguments,
         { cwd: repositoryRoot, failureCode: "DOCTOR_FAILED" }
       ),
       "doctor.mjs"
@@ -202,16 +229,25 @@ async function execute(command, options, positionals) {
       }),
       "validate-submission.mjs"
     );
-    const reportPath = options.reportPath === null
-      ? path.join(path.dirname(submission), "compatibility-report.json")
-      : resolveWritablePath(repositoryRoot, options.reportPath);
-    writeJsonAtomically(reportPath, result);
+    const reportPath = options.noWrite
+      ? null
+      : options.reportPath === null
+        ? path.join(path.dirname(submission), "compatibility-report.json")
+        : resolveWritablePath(repositoryRoot, options.reportPath);
+    if (reportPath !== null) writeJsonAtomically(reportPath, result);
+    const gatePassed = result.readiness?.design === "DESIGN_READY"
+      && result.readiness?.implementation === "STRUCTURALLY_COMPLETE"
+      && result.closure?.status === "complete";
     const completed = {
       ...result,
-      reportWritten: {
-        path: relative(repositoryRoot, reportPath),
-        submissionHash: result.submissionHash
-      }
+      gatePassed,
+      commandOutcome: checkCommandOutcome(result, options),
+      reportWritten: reportPath === null
+        ? null
+        : {
+            path: relative(repositoryRoot, reportPath),
+            submissionHash: result.submissionHash
+          }
     };
     if (options.requirePrototypeValidated) {
       throw new CliFailure(
@@ -276,9 +312,14 @@ async function execute(command, options, positionals) {
     }
     let value;
     try {
-      value = JSON.parse(strictUtf8.decode(bytes));
+      value = parseBoundedStrictJsonBytes(bytes, {
+        maxSourceBytes: 65_536,
+        maxDepth: 128,
+        maxNodes: 20_000,
+        maxNumberCharacters: 65_536
+      });
     } catch {
-      throw new CliFailure("COMPANION_MANIFEST_INVALID", "companion manifest must be UTF-8 JSON");
+      throw new CliFailure("COMPANION_MANIFEST_INVALID", "companion manifest must be duplicate-free UTF-8 JSON");
     }
     let normalized;
     try {
@@ -312,7 +353,6 @@ async function execute(command, options, positionals) {
     replaceDraft: options.replaceDraft
   });
 }
-
 function parseCommand(command, args) {
   try {
     return parseCli({ command: "cli.mjs", ...commandSpecs.get(command) }, args);
@@ -320,7 +360,6 @@ function parseCommand(command, args) {
     throw new CliFailure("USAGE_ERROR", error.message);
   }
 }
-
 function resolveRoot(input) {
   try {
     return resolveRepositoryRoot(input);
@@ -328,7 +367,14 @@ function resolveRoot(input) {
     throw new CliFailure("REPOSITORY_REQUIRED", error.message);
   }
 }
-
+function resolveDoctorRoot(input) {
+  if (input !== null) return resolveRoot(input);
+  try {
+    return resolveInstalledPackageRoot(scriptDirectory);
+  } catch (error) {
+    throw new CliFailure("PACKAGE_ROOT_UNAVAILABLE", error.message);
+  }
+}
 function resolveInside(repositoryRoot, target, { allowMissing = false } = {}) {
   try {
     return assertInsideRepository(repositoryRoot, target, { allowMissing });
@@ -336,36 +382,30 @@ function resolveInside(repositoryRoot, target, { allowMissing = false } = {}) {
     throw new CliFailure("INVALID_PATH", error.message);
   }
 }
-
 function resolveRegularFile(repositoryRoot, input) {
   if (unsafePathInput(input)) throw new CliFailure("INVALID_PATH", "path contains unsafe characters");
   const target = resolveInside(repositoryRoot, path.resolve(repositoryRoot, input));
   if (!fs.statSync(target).isFile()) throw new CliFailure("INVALID_PATH", "path is not a regular file");
   return target;
 }
-
 function resolveDirectory(repositoryRoot, input) {
   if (unsafePathInput(input)) throw new CliFailure("INVALID_PATH", "path contains unsafe characters");
   const target = resolveInside(repositoryRoot, path.resolve(repositoryRoot, input));
   if (!fs.statSync(target).isDirectory()) throw new CliFailure("INVALID_PATH", "path is not a directory");
   return target;
 }
-
 function resolveWritablePath(repositoryRoot, input) {
   if (unsafePathInput(input)) throw new CliFailure("INVALID_PATH", "path contains unsafe characters");
   return resolveInside(repositoryRoot, path.resolve(repositoryRoot, input), { allowMissing: true });
 }
-
 function unsafePathInput(value) {
   return typeof value !== "string"
     || value.length === 0
     || /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value);
 }
-
 function relative(repositoryRoot, target) {
   return path.relative(repositoryRoot, target).split(path.sep).join("/");
 }
-
 function writeJsonAtomically(target, value) {
   const directory = path.dirname(target);
   fs.mkdirSync(directory, { recursive: true });
@@ -378,7 +418,6 @@ function writeJsonAtomically(target, value) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
 }
-
 function writeCanonicalAtomically(target, bytes) {
   const directory = path.dirname(target);
   const temporaryDirectory = fs.mkdtempSync(path.join(directory, ".programmable-companion-"));
@@ -390,7 +429,6 @@ function writeCanonicalAtomically(target, bytes) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
 }
-
 function repositoryOption() {
   return {
     name: "--repository-root",
@@ -400,29 +438,34 @@ function repositoryOption() {
     description: "Use this Git worktree instead of the current directory."
   };
 }
-
 function globalHelp() {
   return [
     "Usage: cli.mjs <command> [options]",
     "",
-    "Host-neutral JSON entry point for the Programmable v4 Builder.",
+    "Programmable v4 Builder JSON entry point.",
     "",
     "Commands:",
+    "  open-world    Prepare open-world v2/Application V3 locally (candidate).",
+    "  application-recheck  Recheck immutable application evidence.",
     "  context       Select the smallest local knowledge profile for this task.",
     "  templates     List, inspect or materialize open starter packs.",
+    "  discover      Search, inspect, or compare the live Programmable project Registry.",
+    "  resolve-contract  Resolve exact public default-branch contract evidence; never infer approval.",
     "  start         Materialize one starter plus capability packs.",
-    "  profile       Detect build profiles without executing project code.",
+    "  profile       Detect build profiles without executing code.", "  project       Validate or execute canonical project output.",
     "  doctor        Inspect local tooling and repository readiness.",
     "  scaffold      Create one isolated proposal package.",
-    "  check         Run deterministic compatibility preflight.",
+    "  check         Generate a compatibility report; readiness gates are opt-in.",
     "  fee           Create or check structural fee-conformance evidence.",
-    "  package       Validate a complete public intake package.",
+    "  launch-bundle Build an unsigned DeploymentSpec candidate from exact local bytes.",
+    "  launch-bundle-v2  Check exact multi-repository V2 bytes read-only; never authorize.",
+    "  package       Validate the released V1 package.",
     "  companion     Validate or canonicalize one companion manifest.",
-    "  prepare-pr    Generate PR metadata without pushing or opening a PR.",
-    "  submit        Plan or exactly confirm a GitHub application.",
-    "  status        Read the GitHub application status.",
-    "  update        Plan or exactly confirm an application update.",
-    "  version       Report an exact installed builder state.",
+    "  prepare-pr    Prepare Submit a Launch PR metadata.",
+    "  submit        Create a draft-only Submit a Launch PR.",
+    "  status        Read Submit a Launch status.",
+    "  update        Update an existing Submit a Launch draft.",
+    "  version       Report bundled versions or an explicit installed-state override.",
     "  update-check  Verify a supplied signed and pinned update.",
     "  migrate       Produce a migration dry-run; never write it.",
     "  plan-release  Plan one private daily release candidate.",
@@ -430,22 +473,65 @@ function globalHelp() {
     "Run 'cli.mjs <command> --help' for command options."
   ].join("\n");
 }
-
+function startHelp() {
+  return [
+    "Usage: cli.mjs start --starter <id> --target <new-directory>",
+    "       [--pack <id>]... [--capability <known-id>]... [--custom-capability <id>=<visible-label>]...",
+    "       [--local-tag <slug>]...",
+    "",
+    "Create one deterministic planning directory from a starter and capability packs.",
+    "--target names the new directory itself; its parent must already exist.",
+    "Keep the plan inside the project repository when it will later be passed to cli.mjs scaffold.",
+    "Dependencies and mandatory packs are included automatically.",
+    "Known --capability selections are exact Legos and never expand sibling capabilities from a pack.",
+    "Unknown capabilities stay eligible and route to architecture review.",
+    "No Git, network, submission, deployment or publication action occurs."
+  ].join("\n");
+}
+function checkCommandOutcome(result, options) {
+  const enforcedGate = options.requirePrototypeValidated
+    ? "independent-prototype-validation"
+    : options.requireDesignReady
+      ? "design-ready"
+      : options.requireIntakeReady || options.requireReady
+        ? "intake-ready"
+        : "none";
+  const blockingFindingsPresent = (result.findings ?? [])
+    .some(({ severity }) => severity === "hard" || severity === "blocker");
+  const designReady = result.readiness?.design === "DESIGN_READY";
+  const intakeReady = result.readiness?.implementation === "STRUCTURALLY_COMPLETE"
+    && result.closure?.status === "complete";
+  const selectedGatePassed = enforcedGate === "design-ready"
+    ? designReady
+    : enforcedGate === "intake-ready"
+      ? intakeReady
+      : enforcedGate === "independent-prototype-validation"
+        ? false
+        : null;
+  return {
+    reportGenerated: true,
+    enforcedGate,
+    selectedGatePassed,
+    blockingFindingsPresent,
+    designReady,
+    intakeReady,
+    zeroExitMeaning: enforcedGate === "none"
+      ? "REPORT_GENERATED_ONLY_NOT_READINESS"
+      : "SELECTED_READINESS_GATE_PASSED",
+    readinessFlags: ["--require-design-ready", "--require-intake-ready", "--require-prototype-validated"]
+  };
+}
 function runDelegatedCommand(command, args) {
   const delegated = delegatedCommands.get(command);
   const scriptPath = path.join(scriptDirectory, delegated.script);
-  const result = childProcess.spawnSync(
-    process.execPath,
-    [scriptPath, ...delegated.prefix, ...args],
-    {
+  const result = childProcess.spawnSync(process.execPath, [scriptPath, ...delegated.prefix, ...args], {
       cwd: process.cwd(),
       encoding: "utf8",
       env: process.env,
       maxBuffer: 32_000_000,
       shell: false,
-      timeout: 120_000
-    }
-  );
+      timeout:120_000+2_580_000*+(command+args[0]+args.includes("--write")==="projectmaterializetrue")
+    });
   if (result.error) {
     return emitFailure(
       command,

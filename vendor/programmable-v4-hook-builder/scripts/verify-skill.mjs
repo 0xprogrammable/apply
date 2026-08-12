@@ -1,21 +1,52 @@
 #!/usr/bin/env node
 
-import childProcess from "node:child_process";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseCliOrExit } from "./cli-args.mjs";
-import {
-  isSafeGitReference,
-  isSupportedGitHubRepositoryUrl,
-  parseCanonicalProvenanceScalar,
-  validateAgainstSchema
-} from "./submission-core.mjs";
+import { parseBoundedLosslessJson } from "./github-public-source-core.mjs";
+import { validateReviewedDriftReceipt } from "./reviewed-drift-receipt-core.mjs";
+import { validateAgainstSchema } from "./submission-core.mjs";
+import { validateStarterCatalogClosure, validateTemplateCatalogHistory } from "./verify-skill-catalog-core.mjs";
+import { scanPins, validateKnowledgeRoutingClosure, validateLocalModuleClosure } from "./verify-skill-closure-core.mjs";
+import { validateScriptsAndTests } from "./verify-skill-execution-core.mjs";
+import { createPortableFilesystem, isForbiddenPortableDirectory, isInside, resolveSkillRootWithoutSymlinks } from "./verify-skill-filesystem-core.mjs";
+import { validateInstalledProvenance } from "./verify-skill-provenance-core.mjs";
+import { markdownHeadingAnchors, parseCanonicalYamlMapping, redactInstalledLocalPathForPortableScan } from "./verify-skill-yaml-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const canonicalSkillRoot = path.resolve(scriptDirectory, "..");
+const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0], 10);
+if (!Number.isInteger(nodeMajor) || nodeMajor < 24) {
+  console.error("verify-skill.mjs: NODE_24_OR_NEWER_REQUIRED");
+  process.exit(1);
+}
+const MAX_PORTABLE_FILES = 640;
+const MAX_PORTABLE_BYTES = 12_000_000;
+const MAX_PORTABLE_FILE_BYTES = 1_000_000;
+const REQUIRED_PORTABLE_TESTS = Object.freeze(`
+application-api-schema application-dependency-core application-v3-prepare-revision-core build-info
+build-profile builder-lifecycle canonical-json-core cli
+cli-central-base cli-central-package cli-entry cli-open-world
+cli-open-world-github cli-output-dir cli-prepare-pr companion-manifest-v2
+composition-checker contract-registry cross-chain-policy dependency-pointer-core
+example-materializer fee-conformance fee-conformance-receipt-v1 fee-conformance-vector-set-v1
+fee-policy-v2 fee-policy-v2-vector-parity github-application github-exact-object-resolver
+github-public-source-core golden-scenarios historical-v1-freeze implementation-legos-runtime
+knowledge-router launch-bundle launch-bundle-v2 launch-bundle-v2-cli
+launch-plan-graph legacy-strict-json-boundaries official-launchpad open-world-migration
+open-world-regressions open-world-runtime open-world-security open-world-source-signals
+open-world-v2 open-world-v2-module-boundaries ordinary-launch-cli package-dependency-contract
+policy-bundle project-compiler project-surfaces public-claims
+raw-git-integrity-core registry-acceptance-v3-github registry-discovery residual-json-boundaries
+resolve-contract-core review-target review-target-contract reviewed-drift-receipt
+runtime-assets-core schema-security semantic-rule-registry source-closure-verifier
+source-evidence-workflow source-manifest strict-json-core submission
+template-catalog trade-capability-manifest typed-launch-contracts-v1 upstream-drift
+v4-hook-semantic-contract verify-package-build-info verify-skill-static
+`.trim().split(/\s+/u).map((stem) => `scripts/test/${stem}.test.mjs`));
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const errors = [];
 const { options } = parseCliOrExit({
   command: "verify-skill.mjs",
@@ -48,6 +79,7 @@ if (skillRoot !== canonicalSkillRoot && !untrustedDataMode) {
   console.error("verify-skill.mjs: a non-canonical --skill-root requires --untrusted-data");
   process.exit(2);
 }
+const { read, relative, walk } = createPortableFilesystem(skillRoot);
 const packageTree = walk(skillRoot);
 const packageSymlinks = packageTree
   .filter((entry) => entry.stat.isSymbolicLink())
@@ -68,6 +100,7 @@ if (transientDirectories.length > 0) {
 const packageEntriesByPath = new Map(packageTree.map((entry) => [relative(entry.path), entry]));
 const packageEntries = packageTree.filter((entry) => entry.stat.isFile());
 const packageFiles = packageEntries.map((entry) => entry.path);
+const packageContext = { packageEntries, packageEntriesByPath, packageFiles, read, relative, skillRoot };
 
 const required = [
   "SKILL.md",
@@ -75,11 +108,46 @@ const required = [
   "THIRD_PARTY_NOTICES.md",
   "agents/openai.yaml",
   "references/agent-entry-and-application.md",
+  "references/architecture-candidates-v1.schema.json",
   "references/application-api.schema.json",
+  "references/approval-criteria.md",
+  "references/business-system-compiler.md",
   "references/build-profiles.md",
+  "references/builder-reviewer-alignment.md",
+  "references/builder-toolchain-lock-v1.json",
+  "references/capability-contract-v1.schema.json",
+  "references/command-receipt-v1.schema.json",
   "references/compatibility-standard.md",
+  "references/execution-gates-and-attestation.md",
+  "references/execution-surface-coverage-v1.schema.json",
+  "references/fee-conformance-receipt-v1.schema.json",
+  "references/fee-conformance-vector-set-v1.schema.json",
+  "references/idea-source-v1.schema.json",
+  "references/intent-contract-v1.schema.json",
+  "references/intent-contract.md",
+  "references/architecture-decisions-v1.schema.json",
+  "references/intent-fidelity-v1.schema.json",
   "references/intake-playbook.md",
   "references/knowledge-routing.json",
+  "references/delegated-payer-sponsor-intent-v1.schema.json",
+  "references/launch-admission-decision-v1.schema.json",
+  "references/normative-property-manifest-v1.json",
+  "references/normative-property-manifest-v1.schema.json",
+  "references/permit2-launch-witness-v1.schema.json",
+  "references/rwa-evidence-profile-v1.schema.json",
+  "references/scientific-data-evidence-profile-v1.schema.json",
+  "references/swap-mode-classification-v1.schema.json",
+  "references/test-evidence-outcome-v1.schema.json",
+  "references/open-world-v2-workflow.md",
+  "references/open-world-v2-output-contract.md",
+  "references/github-application-v3.md",
+  "references/historical-v1-freeze.json",
+  "references/launch-bundle-input-v1.schema.json",
+  "references/launch-bundle-output-v1.schema.json",
+  "references/launch-bundle-input-v2.schema.json",
+  "references/launch-bundle-output-v2.schema.json",
+  "references/launch-plan-graph-input-v1.schema.json",
+  "references/launch-plan-graph-output-v1.schema.json",
   "references/companion-manifests.md",
   "references/companion-manifest-v2.schema.json",
   "references/deployment-snapshot.json",
@@ -88,37 +156,79 @@ const required = [
   "references/github-application-journey.md",
   "references/official-launchpad-deployments.json",
   "references/official-model-patterns.md",
+  "references/programmable-registry-snapshot.json",
   "references/output-contract.md",
   "references/programmable-fee-policy.md",
+  "references/programmable-fee-policy-v2.md",
+  "references/fee-policy-v2.schema.json",
   "references/public-pr-application.schema.json",
+  "references/public-pr-application-v3.schema.json",
+  "references/registry-acceptance-v3.schema.json",
+  "references/source-closure-manifest-v1.schema.json",
+  "references/open-world-security-v1.schema.json",
+  "references/programmable-trade-execution-v1.schema.json",
+  "references/product-graph-v1.schema.json",
+  "references/project-spec-v1.schema.json",
+  "references/project-state-v1.schema.json",
+  "references/project-toolchain-lock-v1.schema.json",
+  "references/repository-plan-v1.schema.json",
+  "references/semantic-rule-registry-v1.json",
+  "references/semantic-rule-registry-v1.schema.json",
+  "references/contract-registry-source-v1.json",
+  "references/contract-registry-v1.json",
+  "references/submission-schema-catalog.json",
+  "references/submission-v2.schema.json",
+  "references/trade-capability-manifest-v1.schema.json",
   "references/routing-and-discovery.md",
   "references/runtime-assets-v1.schema.json",
   "references/runtime-assets.md",
   "references/scenario-matrix.md",
   "references/security-and-evidence.md",
   "references/standard-fee-kernel.md",
+  "references/submission-regressions.md",
   "references/submission-workflow.md",
   "references/submission.schema.json",
   "references/upstream-sources.json",
   "references/upstream-sources.md",
+  "references/upstream-snapshot-2026-08-07.json",
+  "references/upstream-reviewed-drift-v1.json",
+  "references/upstream-reviewed-drift-v1.schema.json",
   "references/upgrades-and-release.md",
   "references/v4-sdk-integration.md",
   "references/v4-hook-lego.md",
   "references/v4-liquidity-and-state.md",
   "references/v4-protocol-mechanics.md",
+  "references/v4-deployment-evidence-v1.schema.json",
+  "references/v4-deployment-preimage-v1.schema.json",
   "references/workflow.md",
   "references/template-catalog.md",
+  "references/template-catalog-history.json",
   "assets/build-profiles/catalog.json",
-  "assets/examples/README.md",
   "assets/examples/dynamic-lp-fee.json",
   "assets/examples/managed-usdc-quote.json",
   "assets/examples/transparent-pool-scoped-fee.json",
   "assets/examples/unsafe-hidden-curve.json",
   "assets/templates/submission.example.json",
+  "assets/templates/open-world-v2/new-idea/architecture-decisions.v1.json",
+  "assets/templates/open-world-v2/new-idea/fee-policy-v2.schema.json",
+  "assets/templates/open-world-v2/new-idea/idea-source.v1.json",
+  "assets/templates/open-world-v2/new-idea/intent-contract.v1.json",
+  "assets/templates/open-world-v2/new-idea/intent-fidelity.v1.json",
+  "assets/templates/open-world-v2/new-idea/schemas/custom-profile.example.schema.json",
+  "assets/templates/open-world-v2/new-idea/security-assessment-v1.schema.json",
+  "assets/templates/open-world-v2/new-idea/security-assessment.v1.json",
+  "assets/templates/open-world-v2/new-idea/submission.v2.json",
+  "assets/templates/open-world-v2/public-pr-application-v3.example.json",
+  "assets/templates/open-world-v2/launch-bundle-input-v2.example.json",
+  "assets/templates/open-world-v2/schemas/contract-price-formation.schema.json",
+  "assets/templates/open-world-v2/source-closure-manifest-v1.example.json",
+  "assets/templates/launch-bundle-input.example.json",
   "assets/templates/no-hook-architecture.example.json",
   "assets/templates/token-mechanics.example.json",
   "assets/templates/runtime-assets.example.json",
   "assets/templates/companion-closure-workflow.yml",
+  "assets/templates/primary-foundry-evidence-workflow.yml",
+  "assets/templates/primary-npm-evidence-workflow.yml",
   "assets/templates/companion-manifest-v2.example.json",
   "assets/templates/deployment-evidence.example.json",
   "assets/templates/dependency-lock.example.json",
@@ -136,6 +246,11 @@ const required = [
   "assets/templates/lifecycle/signed-update.TEST-ONLY.example.json",
   "assets/templates/lifecycle/trusted-pin.TEST-ONLY.example.json",
   "assets/starter-catalog/catalog.json",
+  "assets/test-vectors/admin-launch-authorization-v1.first-freeze.json",
+  "assets/test-vectors/approval-policy-blind-fixtures-v1.json",
+  "assets/test-vectors/blind-eval-definitions-v1.json",
+  "assets/test-vectors/canonical-json-v2.json",
+  "assets/reference-kernels/programmable-volume-fee-v1/.gitignore",
   "assets/reference-kernels/programmable-volume-fee-v1/README.md",
   "assets/reference-kernels/programmable-volume-fee-v1/SECURITY_PROPERTIES.md",
   "assets/reference-kernels/programmable-volume-fee-v1/evidence/fee-conformance-evidence.example.json",
@@ -147,6 +262,33 @@ const required = [
   "assets/reference-kernels/programmable-volume-fee-v1/src/ProgrammableVolumeFeeHookV1.sol",
   "assets/reference-kernels/programmable-volume-fee-v1/test/MockReferenceToken.sol",
   "assets/reference-kernels/programmable-volume-fee-v1/test/ProgrammableVolumeFeeHookV1.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/.gitignore",
+  "assets/reference-kernels/programmable-volume-fee-v2/README.md",
+  "assets/reference-kernels/programmable-volume-fee-v2/SECURITY_PROPERTIES.md",
+  "assets/reference-kernels/programmable-volume-fee-v2/evidence/fee-conformance-evidence.example.json",
+  "assets/reference-kernels/programmable-volume-fee-v2/foundry.toml",
+  "assets/reference-kernels/programmable-volume-fee-v2/package-lock.json",
+  "assets/reference-kernels/programmable-volume-fee-v2/package.json",
+  "assets/reference-kernels/programmable-volume-fee-v2/remappings.txt",
+  "assets/reference-kernels/programmable-volume-fee-v2/src/ProgrammableVolumeFeeHookFactoryV2.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/src/ProgrammableVolumeFeeHookV2.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/MockReferenceToken.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/MockWETH9.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/ProgrammableVolumeFeeHookV2.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/ProgrammableVolumeFeeHookV2Erc20.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/ProgrammableVolumeFeeHookV2Parity.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/ProgrammableVolumeFeeHookV2UniversalRouterErc20.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/ProgrammableVolumeFeeHookV2UniversalRouterNative.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/V4PlannerEncodingParity.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/helpers/ProgrammableVolumeFeeHookV2Erc20Fixture.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/helpers/UniversalRouterV4Fixture.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/invariant/ProgrammableVolumeFeeHookV2.invariant.t.sol",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/sdk-routing-parity.test.mjs",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/vectors/fee-policy-v2-vectors.json",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/vectors/v4-routing-parity-vectors.json",
+  "assets/reference-kernels/programmable-volume-fee-v2/test/vendor/PinnedPermit2Artifact.sol",
+  "scripts/bounded-child-process-core.mjs",
+  "scripts/bounded-network-response-core.mjs",
   "scripts/build-info-core.mjs",
   "scripts/build-profile-core.mjs",
   "scripts/build-profile.mjs",
@@ -154,10 +296,14 @@ const required = [
   "scripts/builder-lifecycle-core.mjs",
   "scripts/builder-lifecycle.mjs",
   "scripts/builder-template-contract.mjs",
+  "scripts/application-recheck.mjs",
+  "scripts/canonical-json-core.mjs",
+  "scripts/canonical-json-legacy-adapters.mjs",
   "scripts/cli-args.mjs",
   "scripts/cli-central-base.mjs",
   "scripts/cli-central-package.mjs",
   "scripts/companion-manifest-contract.mjs",
+  "scripts/contract-registry-core.mjs",
   "scripts/cli-github-source.mjs",
   "scripts/cli-local-draft.mjs",
   "scripts/cli-output-dir.mjs",
@@ -167,67 +313,108 @@ const required = [
   "scripts/cli.mjs",
   "scripts/check-upstream-drift.mjs",
   "scripts/closure-report-core.mjs",
+  "scripts/composition-checker-contract-core.mjs",
+  "scripts/composition-checker-core.mjs",
+  "scripts/composition-checker-protocol-rules.mjs",
+  "scripts/composition-checker-shared.mjs",
+  "scripts/composition-checker-system-rules.mjs",
+  "scripts/composition-checker.mjs",
   "scripts/deployment-core.mjs",
   "scripts/example-materializer-core.mjs",
+  "scripts/evm-encoding-core.mjs",
   "scripts/fee-conformance-core.mjs",
   "scripts/fee-conformance.mjs",
+  "scripts/fee-conformance-v1-constants.mjs",
+  "scripts/fee-conformance-receipt-v1-core.mjs",
+  "scripts/fee-conformance-vector-set-v1-core.mjs",
+  "scripts/fee-policy-v2-core.mjs",
   "scripts/generate-public-pr-application-schema.mjs",
+  "scripts/generate-contract-registry.mjs",
   "scripts/github-exact-object-resolver.mjs",
   "scripts/github-public-source-core.mjs",
   "scripts/github-application-core.mjs",
   "scripts/github-application.mjs",
   "scripts/knowledge-router-core.mjs",
   "scripts/knowledge-router.mjs",
+  "scripts/launch-bundle-core.mjs",
+  "scripts/launch-bundle.mjs",
+  "scripts/launch-bundle-v2-core.mjs",
+  "scripts/launch-bundle-v2.mjs",
+  "scripts/launch-plan-graph-core.mjs",
+  "scripts/launch-plan-graph.mjs",
+  "scripts/registry-acceptance-v3-github-core.mjs",
   "scripts/materialize-example.mjs",
   "scripts/metadata-core.mjs",
   "scripts/official-launchpad-core.mjs",
+  "scripts/open-world-migration-core.mjs",
+  "scripts/open-world-security-core.mjs",
+  "scripts/open-world-source-signals-core.mjs",
+  "scripts/open-world-v2-core.mjs",
+  "scripts/open-world-v2-extension-schema-core.mjs",
+  "scripts/open-world-v2-extension-schema-inspection.mjs",
+  "scripts/open-world-v2-package-io.mjs",
+  "scripts/open-world-v2-primitives.mjs",
+  "scripts/open-world-v2-privacy-core.mjs",
+  "scripts/open-world.mjs",
+  "scripts/no-custom-hook-route-core.mjs",
+  "scripts/normative-policy-core.mjs",
   "scripts/package-dependency-contract.mjs",
   "scripts/project-surfaces-core.mjs",
+  "scripts/project-command-executor-core.mjs",
+  "scripts/project-compiler-core.mjs",
+  "scripts/project-compiler.mjs",
+  "scripts/project-tradable-authoring-core.mjs",
+  "scripts/project-tradable-submission-core.mjs",
+  "scripts/project-contracts-core.mjs",
+  "scripts/project-state-core.mjs",
   "scripts/public-claims-core.mjs",
+  "scripts/public-pr-application-v3-core.mjs",
+  "scripts/registry-discovery-core.mjs",
+  "scripts/registry-discovery.mjs",
   "scripts/repository-root.mjs",
+  "scripts/repository-completion-core.mjs",
+  "scripts/restricted-json-schema-core.mjs",
+  "scripts/restricted-json-schema-definition-core.mjs",
+  "scripts/resolve-contract-core.mjs",
+  "scripts/resolve-contract.mjs",
   "scripts/resolve-deployment.mjs",
+  "scripts/reviewed-drift-receipt-core.mjs",
   "scripts/review-target-contract.mjs",
   "scripts/review-target-core.mjs",
   "scripts/runtime-assets-core.mjs",
   "scripts/scaffold-submission.mjs",
+  "scripts/source-manifest.mjs",
+  "scripts/semantic-rule-registry-core.mjs",
+  "scripts/settlement-policy-core.mjs",
+  "scripts/strict-json-core.mjs",
   "scripts/submission-core.mjs",
+  "scripts/submission-analysis-helpers.mjs",
+  "scripts/submission-constants-core.mjs",
+  "scripts/submission-provenance-core.mjs",
+  "scripts/submission-report-core.mjs",
+  "scripts/submission-target-validation-core.mjs",
+  "scripts/submission-value-core.mjs",
   "scripts/template-catalog-core.mjs",
+  "scripts/typed-launch-contracts-v1-core.mjs",
   "scripts/template-catalog.mjs",
-  "scripts/test/application-api-schema.test.mjs",
-  "scripts/test/build-info.test.mjs",
-  "scripts/test/build-profile.test.mjs",
-  "scripts/test/builder-lifecycle.test.mjs",
-  "scripts/test/cli-central-base.test.mjs",
-  "scripts/test/cli-central-package.test.mjs",
-  "scripts/test/companion-manifest-v2.test.mjs",
-  "scripts/test/cli-entry.test.mjs",
-  "scripts/test/cli-output-dir.test.mjs",
-  "scripts/test/cli-prepare-pr.test.mjs",
-  "scripts/test/cli.test.mjs",
-  "scripts/test/cross-chain-policy.test.mjs",
-  "scripts/test/example-materializer.test.mjs",
-  "scripts/test/github-exact-object-resolver.test.mjs",
-  "scripts/test/github-public-source-core.test.mjs",
-  "scripts/test/golden-scenarios.test.mjs",
-  "scripts/test/fee-conformance.test.mjs",
-  "scripts/test/github-application.test.mjs",
-  "scripts/test/knowledge-router.test.mjs",
-  "scripts/test/official-launchpad.test.mjs",
-  "scripts/test/package-dependency-contract.test.mjs",
-  "scripts/test/policy-bundle.test.mjs",
-  "scripts/test/project-surfaces.test.mjs",
-  "scripts/test/public-claims.test.mjs",
-  "scripts/test/review-target-contract.test.mjs",
-  "scripts/test/review-target.test.mjs",
-  "scripts/test/runtime-assets-core.test.mjs",
-  "scripts/test/schema-security.test.mjs",
-  "scripts/test/submission.test.mjs",
-  "scripts/test/template-catalog.test.mjs",
-  "scripts/test/upstream-drift.test.mjs",
-  "scripts/test/verify-package-build-info.test.mjs",
-  "scripts/test/verify-skill-static.test.mjs",
+  "scripts/token-behavior-validation-core.mjs",
+  "scripts/token-mechanics-policy-core.mjs",
+  "scripts/token-mechanics-resolution-core.mjs",
+  "scripts/trade-capability-manifest-core.mjs",
+  "scripts/update-registry-snapshot.mjs",
+  "scripts/v4-deployment-evidence-core.mjs",
+  "scripts/v4-hook-semantic-contract-core.mjs",
+  "scripts/test/fee-conformance-v1-fixture.mjs",
+  ...REQUIRED_PORTABLE_TESTS,
   "scripts/validate-submission.mjs",
+  "scripts/validate-semantic-rule-registry.mjs",
   "scripts/verify-package.mjs",
+  "scripts/verify-skill-catalog-core.mjs",
+  "scripts/verify-skill-closure-core.mjs",
+  "scripts/verify-skill-execution-core.mjs",
+  "scripts/verify-skill-filesystem-core.mjs",
+  "scripts/verify-skill-provenance-core.mjs",
+  "scripts/verify-skill-yaml-core.mjs",
   "scripts/verify-skill.mjs",
   "scripts/doctor.mjs"
 ];
@@ -237,11 +424,41 @@ for (const relativePath of required) {
   if (!entry?.stat.isFile()) errors.push(`missing ${relativePath}`);
 }
 
+const discoveredPortableTestPaths = packageEntries
+  .map((entry) => relative(entry.path))
+  .filter((relativePath) => /^scripts\/test\/[^/]+\.test\.mjs$/u.test(relativePath))
+  .sort();
+const declaredPortableTestSet = new Set(REQUIRED_PORTABLE_TESTS);
+const discoveredPortableTestSet = new Set(discoveredPortableTestPaths);
+const missingPortableTestPaths = REQUIRED_PORTABLE_TESTS
+  .filter((relativePath) => !discoveredPortableTestSet.has(relativePath))
+  .sort();
+const undeclaredPortableTestPaths = discoveredPortableTestPaths
+  .filter((relativePath) => !declaredPortableTestSet.has(relativePath));
+const duplicatePortableTestDeclarations = REQUIRED_PORTABLE_TESTS
+  .filter((relativePath, index) => REQUIRED_PORTABLE_TESTS.indexOf(relativePath) !== index);
+errors.push(...[[
+    "portable test inventory must exactly match declared required tests",
+    `missing files: ${missingPortableTestPaths.join(", ") || "none"}`,
+    `undeclared tests: ${undeclaredPortableTestPaths.join(", ") || "none"}`,
+    `duplicate declarations: ${[...new Set(duplicatePortableTestDeclarations)].sort().join(", ") || "none"}`
+  ].join("; ")].filter(() => missingPortableTestPaths.length + undeclaredPortableTestPaths.length + duplicatePortableTestDeclarations.length > 0));
+
 const packageBytes = packageEntries.reduce((total, entry) => total + entry.stat.size, 0);
-if (packageFiles.length > 256) errors.push(`portable package has ${packageFiles.length} files; keep it at or below 256`);
-if (packageBytes > 8_000_000) errors.push(`portable package is ${packageBytes} bytes; keep it at or below 8000000`);
+if (packageFiles.length > MAX_PORTABLE_FILES) errors.push(`portable package has ${packageFiles.length} files; keep it at or below ${MAX_PORTABLE_FILES}`);
+if (packageBytes > MAX_PORTABLE_BYTES) errors.push(`portable package is ${packageBytes} bytes; keep it at or below ${MAX_PORTABLE_BYTES}`);
 for (const entry of packageEntries) {
-  if (entry.stat.size > 1_000_000) errors.push(`${relative(entry.path)} exceeds the 1000000-byte per-file limit`);
+  if (entry.stat.size > MAX_PORTABLE_FILE_BYTES) errors.push(`${relative(entry.path)} exceeds the ${MAX_PORTABLE_FILE_BYTES}-byte per-file limit`);
+}
+if (errors.length > 0) failWithErrors(errors);
+
+for (const jsonPath of packageFiles.filter((entry) => entry.toLowerCase().endsWith(".json"))) {
+  try {
+    const source = utf8Decoder.decode(fs.readFileSync(jsonPath));
+    parseBoundedLosslessJson(source);
+  } catch {
+    errors.push(`${relative(jsonPath)}: must be bounded duplicate-free UTF-8 JSON`);
+  }
 }
 if (errors.length > 0) failWithErrors(errors);
 
@@ -345,15 +562,26 @@ if (parsedInterface.errors.length === 0) {
   }
 }
 
+const markdownAnchors = new Map();
 for (const markdownPath of packageFiles.filter((entry) => entry.endsWith(".md"))) {
   const source = fs.readFileSync(markdownPath, "utf8");
   for (const match of source.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g)) {
     const target = match[1].trim();
-    if (!target || target.startsWith("#") || /^https?:\/\//.test(target) || target.startsWith("mailto:")) continue;
-    const pathOnly = decodeURIComponent(target.split("#", 1)[0].split("?", 1)[0]);
-    const absolute = path.resolve(path.dirname(markdownPath), pathOnly);
+    if (!target || /^https?:\/\//.test(target) || target.startsWith("mailto:")) continue;
+    const [targetPath, rawFragment = ""] = target.split("#", 2);
+    const pathOnly = decodeURIComponent(targetPath.split("?", 1)[0]);
+    const absolute = pathOnly === "" ? markdownPath : path.resolve(path.dirname(markdownPath), pathOnly);
     if (!isInside(skillRoot, absolute) || !packageEntriesByPath.has(relative(absolute))) {
       errors.push(`${relative(markdownPath)}: missing or escaping link ${target}`);
+      continue;
+    }
+    if (rawFragment && absolute.endsWith(".md")) {
+      const expectedAnchor = decodeURIComponent(rawFragment).toLowerCase();
+      const anchors = markdownAnchors.get(absolute) ?? markdownHeadingAnchors(fs.readFileSync(absolute, "utf8"));
+      markdownAnchors.set(absolute, anchors);
+      if (!anchors.has(expectedAnchor)) {
+        errors.push(`${relative(markdownPath)}: missing Markdown anchor ${target}`);
+      }
     }
   }
 }
@@ -389,15 +617,51 @@ try {
   errors.push(`runtime asset schema or template JSON: ${error.message}`);
 }
 
-validateStarterCatalogClosure(errors);
-validateKnowledgeRoutingClosure(errors);
-validateLocalModuleClosure(errors);
+try {
+  const candidateLaunchSchema = JSON.parse(read("references/launch-bundle-input-v1.schema.json"));
+  const launchSchema = untrustedDataMode
+    ? JSON.parse(fs.readFileSync(path.join(canonicalSkillRoot, "references", "launch-bundle-input-v1.schema.json"), "utf8"))
+    : candidateLaunchSchema;
+  const launchExample = JSON.parse(read("assets/templates/launch-bundle-input.example.json"));
+  const launchFindings = validateAgainstSchema(launchExample, launchSchema);
+  for (const finding of launchFindings) errors.push(`launch-bundle template ${finding.path}: ${finding.message}`);
+} catch (error) {
+  errors.push(`launch-bundle schema or template JSON: ${error.message}`);
+}
+
+try {
+  const launchOutputSchema = JSON.parse(read("references/launch-bundle-output-v1.schema.json"));
+  if (launchOutputSchema.$id !== "urn:programmable:launch-bundle-output:1.0.0") {
+    errors.push("launch-bundle output schema: unexpected $id");
+  }
+} catch (error) {
+  errors.push(`launch-bundle output schema JSON: ${error.message}`);
+}
+
+validateStarterCatalogClosure(errors, packageContext);
+validateTemplateCatalogHistory(errors, packageContext);
+validateKnowledgeRoutingClosure(errors, packageContext);
+validateLocalModuleClosure(errors, packageContext);
 
 try {
   const sources = JSON.parse(read("references/upstream-sources.json"));
   scanPins(sources, "$", errors);
 } catch (error) {
   errors.push(`upstream-sources.json: ${error.message}`);
+}
+
+try {
+  const sourceBytes = fs.readFileSync(path.join(skillRoot, "references/upstream-sources.json"));
+  const sources = JSON.parse(utf8Decoder.decode(sourceBytes));
+  const receipt = JSON.parse(read("references/upstream-reviewed-drift-v1.json"));
+  const receiptSchema = JSON.parse(read("references/upstream-reviewed-drift-v1.schema.json"));
+  if (receiptSchema.$id !== "urn:programmable:upstream-reviewed-drift:1.0.0") {
+    errors.push("upstream-reviewed-drift-v1.schema.json: unexpected $id");
+  }
+  const availablePaths = new Set(packageEntries.filter((entry) => entry.stat.isFile()).map((entry) => relative(entry.path)));
+  validateReviewedDriftReceipt(receipt, sources, { sourceBytes, availablePaths });
+} catch (error) {
+  errors.push(`upstream-reviewed-drift-v1.json: ${error.message}`);
 }
 
 try {
@@ -412,20 +676,14 @@ try {
   errors.push(`deployment-snapshot.json: ${error.message}`);
 }
 
-for (const script of walk(path.join(skillRoot, "scripts")).filter((entry) => entry.stat.isFile() && entry.path.endsWith(".mjs")).map((entry) => entry.path)) {
-  const result = childProcess.spawnSync(process.execPath, ["--check", script], { encoding: "utf8", shell: false });
-  if (result.status !== 0) errors.push(`${relative(script)}: ${result.stderr.trim()}`);
-}
-
-const testDirectory = path.join(skillRoot, "scripts", "test");
-if (!untrustedDataMode) {
-  const testFiles = fs.readdirSync(testDirectory)
-    .filter((name) => name.endsWith(".test.mjs") && (!installedMode || name === "cli.test.mjs"))
-    .sort()
-    .map((name) => path.join(testDirectory, name));
-  const tests = childProcess.spawnSync(process.execPath, ["--test", ...testFiles], { encoding: "utf8", shell: false });
-  if (tests.status !== 0) errors.push(`deterministic tests failed:\n${tests.stdout}${tests.stderr}`.trim());
-}
+await validateScriptsAndTests({
+  errors,
+  installedMode,
+  relative,
+  skillRoot,
+  untrustedDataMode,
+  walk
+});
 
 if (errors.length > 0) {
   failWithErrors(errors);
@@ -437,502 +695,7 @@ if (untrustedDataMode) {
   console.log(`Validated portable skill structure, schema, links, Git pin shapes, deterministic CLI checks${installedMode ? "" : " and repository fixture tests"} and ${lineCount}-line SKILL.md.`);
 }
 
-function scanPins(value, currentPath, pinErrors) {
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => scanPins(entry, `${currentPath}[${index}]`, pinErrors));
-    return;
-  }
-  if (!value || typeof value !== "object") return;
-  for (const [key, child] of Object.entries(value)) {
-    if (/(commit|revision|sourceCommit|sourceTree)$/i.test(key) && child !== null && (typeof child !== "string" || !/^[a-fA-F0-9]{40}$/.test(child))) {
-      pinErrors.push(`${currentPath}.${key}: expected an exact 40-character Git object id`);
-    }
-    scanPins(child, `${currentPath}.${key}`, pinErrors);
-  }
-}
-
-function validateStarterCatalogClosure(findings) {
-  const catalogRelativePath = "assets/starter-catalog/catalog.json";
-  let catalog;
-  try {
-    catalog = JSON.parse(read(catalogRelativePath));
-  } catch (error) {
-    findings.push(`${catalogRelativePath}: ${error.message}`);
-    return;
-  }
-  if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) {
-    findings.push(`${catalogRelativePath}: expected an object`);
-    return;
-  }
-  if (catalog.schemaVersion !== "1.0.0" || catalog.kind !== "programmable-starter-catalog") {
-    findings.push(`${catalogRelativePath}: unsupported schemaVersion or kind`);
-  }
-  if (!Array.isArray(catalog.entries) || catalog.entries.length === 0) {
-    findings.push(`${catalogRelativePath}: entries must be a non-empty array`);
-    return;
-  }
-
-  const listedPaths = new Set();
-  const listedIds = new Map();
-  for (const [index, entry] of catalog.entries.entries()) {
-    const label = `${catalogRelativePath}: entries[${index}]`;
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      findings.push(`${label} must be an object`);
-      continue;
-    }
-    if (typeof entry.id !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id)) {
-      findings.push(`${label}.id must be kebab-case`);
-    } else if (listedIds.has(entry.id)) {
-      findings.push(`${label}.id duplicates ${entry.id}`);
-    } else {
-      listedIds.set(entry.id, entry.kind);
-    }
-    if (entry.kind !== "starter" && entry.kind !== "pack") {
-      findings.push(`${label}.kind must be starter or pack`);
-      continue;
-    }
-    const expectedPrefix = entry.kind === "starter" ? "starters/" : "packs/";
-    if (!isSafeCatalogMemberPath(entry.path, expectedPrefix)) {
-      findings.push(`${label}.path must be a normalized ${expectedPrefix} JSON path`);
-      continue;
-    }
-    if (listedPaths.has(entry.path)) {
-      findings.push(`${label}.path duplicates ${entry.path}`);
-      continue;
-    }
-    listedPaths.add(entry.path);
-    const memberRelativePath = `assets/starter-catalog/${entry.path}`;
-    const memberEntry = packageEntriesByPath.get(memberRelativePath);
-    if (!memberEntry?.stat.isFile()) {
-      findings.push(`${catalogRelativePath}: missing catalog member ${memberRelativePath}`);
-      continue;
-    }
-    if (typeof entry.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(entry.sha256)) {
-      findings.push(`${label}.sha256 must be a lowercase SHA-256 digest`);
-    } else {
-      const actualDigest = crypto.createHash("sha256").update(fs.readFileSync(memberEntry.path)).digest("hex");
-      if (actualDigest !== entry.sha256) {
-        findings.push(`${catalogRelativePath}: digest mismatch for ${memberRelativePath}`);
-      }
-    }
-    try {
-      const member = JSON.parse(fs.readFileSync(memberEntry.path, "utf8"));
-      if (member.id !== entry.id || member.kind !== entry.kind || member.schemaVersion !== "1.0.0") {
-        findings.push(`${catalogRelativePath}: identity mismatch for ${memberRelativePath}`);
-      }
-    } catch (error) {
-      findings.push(`${memberRelativePath}: ${error.message}`);
-    }
-  }
-
-  for (const mandatoryId of catalog.mandatoryPacks ?? []) {
-    if (listedIds.get(mandatoryId) !== "pack") {
-      findings.push(`${catalogRelativePath}: mandatory pack ${mandatoryId} is not a listed pack`);
-    }
-  }
-
-  const actualMemberPaths = packageEntries
-    .map((entry) => relative(entry.path))
-    .filter((entryPath) => /^assets\/starter-catalog\/(?:packs|starters)\/[^/]+\.json$/.test(entryPath))
-    .map((entryPath) => entryPath.slice("assets/starter-catalog/".length));
-  for (const memberPath of actualMemberPaths) {
-    if (!listedPaths.has(memberPath)) {
-      findings.push(`${catalogRelativePath}: unlisted catalog member assets/starter-catalog/${memberPath}`);
-    }
-  }
-}
-
-function validateKnowledgeRoutingClosure(findings) {
-  const routingRelativePath = "references/knowledge-routing.json";
-  let routing;
-  try {
-    routing = JSON.parse(read(routingRelativePath));
-  } catch (error) {
-    findings.push(`${routingRelativePath}: ${error.message}`);
-    return;
-  }
-  if (
-    routing?.schemaVersion !== "1.0.0"
-    || routing?.kind !== "programmable-knowledge-routing"
-    || routing?.policy?.selectionSemantics !== "minimum-sufficient-progressive-context"
-    || routing?.policy?.unknownCapabilityOutcome !== "preserve-and-route-to-architecture-review"
-    || routing?.policy?.automaticAdverseDecision !== false
-    || routing?.policy?.networkAccess !== "forbidden"
-    || routing?.policy?.estimatedTokenAlgorithm !== "ceil-utf8-bytes-divided-by-four"
-  ) {
-    findings.push(`${routingRelativePath}: identity or non-adverse offline policy is invalid`);
-  }
-
-  const expectedModes = ["explore", "handoff", "preflight", "prototype", "repair", "review", "submit"];
-  const actualModes = Object.keys(routing?.modes ?? {}).sort();
-  if (actualModes.length !== expectedModes.length || actualModes.some((mode, index) => mode !== expectedModes[index])) {
-    findings.push(`${routingRelativePath}: exactly seven builder modes are required`);
-  }
-  const references = [];
-  for (const [mode, profile] of Object.entries(routing?.modes ?? {})) {
-    if (!Array.isArray(profile?.initial) || profile.initial.length < 1 || !Array.isArray(profile?.later)) {
-      findings.push(`${routingRelativePath}: mode ${mode} is incomplete`);
-      continue;
-    }
-    references.push(...profile.initial);
-    for (const deferred of profile.later) {
-      if (typeof deferred?.trigger !== "string" || deferred.trigger.length < 12 || deferred.trigger.length > 500) {
-        findings.push(`${routingRelativePath}: mode ${mode} has an invalid deferred trigger`);
-      }
-      references.push(deferred?.reference);
-    }
-  }
-  for (const [label, routes] of [
-    ["capability", routing?.capabilityRoutes],
-    ["surface", routing?.surfaceRoutes]
-  ]) {
-    if (!Array.isArray(routes) || routes.length < 1 || routes.length > 64) {
-      findings.push(`${routingRelativePath}: ${label} routes are invalid`);
-      continue;
-    }
-    const routeIds = new Set();
-    for (const route of routes) {
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(route?.id ?? "") || routeIds.has(route?.id)) {
-        findings.push(`${routingRelativePath}: ${label} route identity is invalid`);
-      }
-      routeIds.add(route?.id);
-      if (!Array.isArray(route?.matches) || route.matches.length < 1 || !Array.isArray(route?.references) || route.references.length < 1) {
-        findings.push(`${routingRelativePath}: ${label} route ${route?.id ?? "unknown"} is incomplete`);
-      }
-      for (const id of route?.matches ?? []) {
-        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) findings.push(`${routingRelativePath}: ${label} route ${route?.id ?? "unknown"} has an unsafe match id`);
-      }
-      references.push(...(route?.references ?? []));
-    }
-  }
-  if (!Array.isArray(routing?.unknownCapabilityReferences) || routing.unknownCapabilityReferences.length < 1) {
-    findings.push(`${routingRelativePath}: unknown capability fallback is missing`);
-  } else {
-    references.push(...routing.unknownCapabilityReferences);
-  }
-  for (const reference of references) {
-    if (typeof reference !== "string" || !/^[a-z0-9]+(?:[-.][a-z0-9]+)*\.(?:md|json)$/.test(reference)) {
-      findings.push(`${routingRelativePath}: unsafe reference ${String(reference)}`);
-      continue;
-    }
-    const target = `references/${reference}`;
-    if (!packageEntriesByPath.get(target)?.stat.isFile()) findings.push(`${routingRelativePath}: missing routed reference ${target}`);
-  }
-}
-
-function validateLocalModuleClosure(findings) {
-  // Validate the portable runtime modules. Tests deliberately contain hostile
-  // import-like fixture strings and repository-relative integration imports;
-  // their own required-file closure is enforced by the explicit list above.
-  const modulePaths = packageFiles.filter((entry) => /^scripts\/[^/]+\.mjs$/.test(relative(entry)));
-  const specifierPattern = /(?:\bfrom\s*|\bimport\s*\()\s*["'](\.{1,2}\/[^"']+)["']/g;
-  for (const modulePath of modulePaths) {
-    const source = fs.readFileSync(modulePath, "utf8");
-    for (const match of source.matchAll(specifierPattern)) {
-      const target = path.resolve(path.dirname(modulePath), match[1]);
-      if (!isInside(skillRoot, target)) {
-        findings.push(`${relative(modulePath)}: local module import escapes the skill: ${match[1]}`);
-        continue;
-      }
-      const importedPath = relative(target);
-      if (!packageEntriesByPath.get(importedPath)?.stat.isFile()) {
-        findings.push(`${relative(modulePath)}: missing local module import ${importedPath}`);
-      }
-    }
-  }
-}
-
-function isSafeCatalogMemberPath(candidate, expectedPrefix) {
-  if (typeof candidate !== "string" || !candidate.startsWith(expectedPrefix) || !candidate.endsWith(".json")) {
-    return false;
-  }
-  if (candidate.includes("\\") || path.posix.isAbsolute(candidate)) return false;
-  const segments = candidate.split("/");
-  return segments.length === 2 && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
-}
-
-function parseCanonicalYamlMapping(source, documentName, shape, { childIndentation = 2 } = {}) {
-  const findings = [];
-  const result = Object.create(null);
-  const seenRootKeys = new Set();
-  const seenChildKeys = new Map();
-  let activeMapping = null;
-
-  for (const [index, line] of source.split("\n").entries()) {
-    const lineNumber = index + 1;
-    if (line === "") continue;
-    if (line.includes("\t") || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(line)) {
-      findings.push(`${documentName}: line ${lineNumber} contains unsupported whitespace or control characters`);
-      continue;
-    }
-
-    const indentation = line.match(/^ */)[0].length;
-    if (indentation !== 0 && indentation !== childIndentation) {
-      findings.push(`${documentName}: line ${lineNumber} must use zero or ${childIndentation} spaces of indentation`);
-      continue;
-    }
-    const content = line.slice(indentation);
-    const pair = content.match(/^([A-Za-z_][A-Za-z0-9_-]*):(.*)$/);
-    if (!pair) {
-      findings.push(`${documentName}: line ${lineNumber} is outside the supported YAML mapping subset`);
-      continue;
-    }
-
-    const [, key, remainder] = pair;
-    const parentShape = indentation === 0 ? shape : activeMapping?.field?.fields;
-    const parentValue = indentation === 0 ? result : activeMapping?.value;
-    const seenKeys = indentation === 0 ? seenRootKeys : seenChildKeys.get(activeMapping?.key);
-    if (!parentShape || !parentValue || !seenKeys) {
-      findings.push(`${documentName}: line ${lineNumber} has no valid parent mapping`);
-      continue;
-    }
-    if (seenKeys.has(key)) {
-      findings.push(`${documentName}: line ${lineNumber} duplicates key ${key}`);
-      continue;
-    }
-    seenKeys.add(key);
-
-    if (!Object.hasOwn(parentShape, key)) {
-      findings.push(`${documentName}: line ${lineNumber} contains unsupported key ${key}`);
-      continue;
-    }
-    const field = parentShape[key];
-
-    if (field.type === "mapping") {
-      if (indentation !== 0 || remainder !== "") {
-        findings.push(`${documentName}: line ${lineNumber} requires ${key} to be a block mapping`);
-        continue;
-      }
-      const value = Object.create(null);
-      parentValue[key] = value;
-      seenChildKeys.set(key, new Set());
-      activeMapping = { key, field, value };
-      continue;
-    }
-
-    if (!remainder.startsWith(" ") || remainder.length === 1 || remainder !== ` ${remainder.slice(1).trim()}`) {
-      findings.push(`${documentName}: line ${lineNumber} requires one scalar value after ${key}:`);
-      continue;
-    }
-    const scalar = parseCanonicalYamlString(remainder.slice(1), field.type);
-    if (!scalar.ok) {
-      findings.push(`${documentName}: line ${lineNumber} ${scalar.error}`);
-      continue;
-    }
-    parentValue[key] = scalar.value;
-    if (indentation === 0) activeMapping = null;
-  }
-
-  for (const [key, field] of Object.entries(shape)) {
-    if (field.required && !Object.hasOwn(result, key)) {
-      findings.push(`${documentName}: missing required key ${key}`);
-    }
-    if (field.type !== "mapping" || !Object.hasOwn(result, key)) continue;
-    if (Object.keys(result[key]).length === 0) {
-      findings.push(`${documentName}: mapping ${key} may not be empty`);
-    }
-    for (const [childKey, childField] of Object.entries(field.fields)) {
-      if (childField.required && !Object.hasOwn(result[key], childKey)) {
-        findings.push(`${documentName}: missing required key ${key}.${childKey}`);
-      }
-    }
-  }
-
-  return { value: result, errors: findings };
-}
-
-function validateInstalledProvenance(metadata, declaredName) {
-  const findings = [];
-  const keys = Object.keys(metadata).sort();
-  const remoteRequired = ["github-path", "github-ref", "github-repo", "github-tree-sha"];
-  const remoteAllowed = [...remoteRequired, "github-pinned"].sort();
-  const isLocalProfile = keys.length === 1 && keys[0] === "local-path";
-  const isRemoteProfile = keys.every((key) => remoteAllowed.includes(key))
-    && remoteRequired.every((key) => keys.includes(key));
-
-  if (!isLocalProfile && !isRemoteProfile) {
-    findings.push(
-      "SKILL.md frontmatter: installed metadata must be exactly local-path or the GitHub repository, ref, tree and path provenance fields"
-    );
-    return findings;
-  }
-
-  if (isLocalProfile) {
-    const localPath = metadata["local-path"];
-    findings.push(...validateProvenanceScalar("local-path", localPath, 4096));
-    if (!path.posix.isAbsolute(localPath) && !path.win32.isAbsolute(localPath)) {
-      findings.push("SKILL.md frontmatter: metadata.local-path must be an absolute filesystem path");
-    }
-    return findings;
-  }
-
-  for (const key of keys) {
-    findings.push(...validateProvenanceScalar(key, metadata[key], key === "github-path" ? 1024 : 2048));
-  }
-
-  const githubPath = metadata["github-path"];
-  const pathSegments = githubPath.split("/");
-  if (
-    githubPath.startsWith("/")
-    || githubPath.endsWith("/")
-    || githubPath.includes("\\")
-    || pathSegments.some((segment) => segment === "" || segment === "." || segment === "..")
-    || pathSegments.at(-1) !== declaredName
-  ) {
-    findings.push("SKILL.md frontmatter: metadata.github-path must be a normalized relative path ending in the skill name");
-  }
-
-  if (!isSupportedGitHubRepositoryUrl(metadata["github-repo"])) {
-    findings.push("SKILL.md frontmatter: metadata.github-repo must be a canonical HTTPS GitHub repository URL");
-  }
-  if (!isSafeGitReference(metadata["github-ref"])) {
-    findings.push("SKILL.md frontmatter: metadata.github-ref is not a bounded Git reference");
-  }
-  if (Object.hasOwn(metadata, "github-pinned") && !isSafeGitReference(metadata["github-pinned"])) {
-    findings.push("SKILL.md frontmatter: metadata.github-pinned is not a bounded Git reference");
-  }
-  if (!/^[0-9a-f]{40}$/.test(metadata["github-tree-sha"])) {
-    findings.push("SKILL.md frontmatter: metadata.github-tree-sha must be a lowercase 40-character Git object id");
-  }
-
-  return findings;
-}
-
-function validateProvenanceScalar(key, value, maximumBytes) {
-  const findings = [];
-  if (Buffer.byteLength(value, "utf8") > maximumBytes) {
-    findings.push(`SKILL.md frontmatter: metadata.${key} exceeds the ${maximumBytes}-byte provenance limit`);
-  }
-  if (
-    /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value)
-    || [...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint >= 0xd800 && codePoint <= 0xdfff;
-    })
-  ) {
-    findings.push(`SKILL.md frontmatter: metadata.${key} contains control, bidirectional or invalid Unicode characters`);
-  }
-  return findings;
-}
-
-function redactInstalledLocalPathForPortableScan(source, parsedFrontmatter) {
-  if (
-    !parsedFrontmatter
-    || parsedFrontmatter.errors.length > 0
-    || !Object.hasOwn(parsedFrontmatter.value, "metadata")
-    || !Object.hasOwn(parsedFrontmatter.value.metadata, "local-path")
-  ) {
-    return source;
-  }
-  const block = source.match(/^---\n[\s\S]*?\n---\n/);
-  if (!block) return source;
-  const redactedBlock = block[0].replace(
-    /^ {4}local-path:.*$/mu,
-    "    local-path: installed-provenance"
-  );
-  return `${redactedBlock}${source.slice(block[0].length)}`;
-}
-
-function parseCanonicalYamlString(source, type) {
-  if (type === "provenance-string") return parseCanonicalProvenanceScalar(source);
-  if (source.startsWith('"')) {
-    try {
-      const value = JSON.parse(source);
-      if (typeof value !== "string") return { ok: false, error: "requires a string value" };
-      if (value.length === 0) return { ok: false, error: "requires a non-empty string value" };
-      return { ok: true, value };
-    } catch {
-      return { ok: false, error: "contains an invalid double-quoted string" };
-    }
-  }
-  if (type === "quoted-string") {
-    return { ok: false, error: "requires a double-quoted string value" };
-  }
-  if (
-    !/^[A-Za-z]/.test(source)
-    || /^(?:null|true|false|yes|no|on|off)$/i.test(source)
-    || /[\[\]{}]/.test(source)
-    || /(?:^|\s)[!&*|>@`]/.test(source)
-    || /(?:^|\s)#/.test(source)
-    || /:\s|:$/.test(source)
-  ) {
-    return { ok: false, error: "contains a non-canonical plain string" };
-  }
-  return { ok: true, value: source };
-}
-
-function read(relativePath) {
-  return fs.readFileSync(path.join(skillRoot, relativePath), "utf8");
-}
-
-function walk(directory) {
-  const directoryStat = lstatOrNull(directory);
-  if (!directoryStat || !directoryStat.isDirectory() || directoryStat.isSymbolicLink()) return [];
-  const entries = [];
-  for (const name of fs.readdirSync(directory)) {
-    const target = path.join(directory, name);
-    const stat = fs.lstatSync(target);
-    entries.push({ path: target, stat });
-    if (stat.isDirectory() && !stat.isSymbolicLink()) entries.push(...walk(target));
-  }
-  return entries;
-}
-
-function isForbiddenPortableDirectory(relativePath) {
-  const fixedNames = new Set([".git", "node_modules", "out", "cache", "broadcast", "coverage"]);
-  return relativePath.split("/").some((segment) => (
-    fixedNames.has(segment)
-    || /^\.[A-Za-z0-9._-]+\.(?:stage|tmp)-[0-9]+$/.test(segment)
-  ));
-}
-
-function lstatOrNull(target) {
-  try {
-    return fs.lstatSync(target);
-  } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return null;
-    throw error;
-  }
-}
-
-function resolveSkillRootWithoutSymlinks(requestedRoot) {
-  const trustedContainerInput = path.dirname(path.dirname(requestedRoot));
-  const trustedContainerStat = lstatOrNull(trustedContainerInput);
-  if (!trustedContainerStat?.isDirectory() || trustedContainerStat.isSymbolicLink()) {
-    throw new Error(`skill root container is not a real directory: ${trustedContainerInput}`);
-  }
-  const trustedContainer = fs.realpathSync(trustedContainerInput);
-  const relativeRoot = path.relative(trustedContainerInput, requestedRoot);
-  if (relativeRoot === "" || relativeRoot.startsWith("..") || path.isAbsolute(relativeRoot)) {
-    throw new Error(`skill root is not inside its trusted container: ${requestedRoot}`);
-  }
-
-  const segments = relativeRoot.split(path.sep);
-  let current = trustedContainer;
-  for (const [index, segment] of segments.entries()) {
-    current = path.join(current, segment);
-    const stat = lstatOrNull(current);
-    const displayPath = segments.slice(0, index + 1).join("/");
-    if (!stat) throw new Error(`skill root is not a directory: ${requestedRoot}`);
-    if (stat.isSymbolicLink()) {
-      if (index === segments.length - 1) throw new Error(`skill root may not be a symbolic link: ${requestedRoot}`);
-      throw new Error(`skill root path contains a symbolic link: ${displayPath}`);
-    }
-    if (!stat.isDirectory()) throw new Error(`skill root path component is not a directory: ${displayPath}`);
-  }
-  return current;
-}
-
 function failWithErrors(messages) {
   for (const error of [...new Set(messages)].sort()) console.error(`- ${error}`);
   process.exit(1);
-}
-
-function relative(target) {
-  return path.relative(skillRoot, target).replaceAll(path.sep, "/");
-}
-
-function isInside(parent, child) {
-  const result = path.relative(parent, child);
-  return result === "" || (!result.startsWith("..") && !path.isAbsolute(result));
 }
