@@ -8,6 +8,15 @@ const ordinary = fs.readFileSync(path.resolve(".github/workflows/verify.yml"), "
 const postMerge = fs.readFileSync(path.resolve(".github/workflows/verify-post-merge.yml"), "utf8");
 const codeql = fs.readFileSync(path.resolve(".github/workflows/codeql.yml"), "utf8");
 const validator = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
+const ordinaryCandidateJob = ordinary.slice(
+  ordinary.indexOf("  repository:"),
+  ordinary.indexOf("  bounded-application:")
+);
+const ordinaryBoundedJob = ordinary.slice(ordinary.indexOf("  bounded-application:"), ordinary.indexOf("  required:"));
+const ordinaryRequiredJob = ordinary.slice(ordinary.indexOf("  required:"));
+const codeqlCandidateJob = codeql.slice(codeql.indexOf("  codeql:"), codeql.indexOf("  bounded-application:"));
+const codeqlBoundedJob = codeql.slice(codeql.indexOf("  bounded-application:"), codeql.indexOf("  required:"));
+const codeqlRequiredJob = codeql.slice(codeql.indexOf("  required:"));
 const publicJob = intake.slice(intake.indexOf("  public-intake:"));
 const verificationStep = publicJob.slice(
   publicJob.indexOf("- name: Verify closed public application package"),
@@ -63,10 +72,11 @@ test("credentials are removed and maintenance is deferred to ordinary CI", () =>
 
 test("ordinary CI is read-only, credential-free, pinned, and covers Node 20 and 22", () => {
   assert.match(ordinary, /\npermissions:\n  contents: read\n/u);
-  assert.match(ordinary, /persist-credentials: false/u);
-  assert.match(ordinary, /node:\n\s+- 20\n\s+- 22/u);
-  assert.match(ordinary, /run: npm test/u);
-  assert.doesNotMatch(ordinary, /secrets\.|github\.token|contents:\s*write/u);
+  assert.match(ordinaryCandidateJob, /if: github\.event_name != 'pull_request_target'/u);
+  assert.match(ordinaryCandidateJob, /persist-credentials: false/u);
+  assert.match(ordinaryCandidateJob, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(ordinaryCandidateJob, /run: npm test/u);
+  assert.doesNotMatch(ordinaryCandidateJob, /secrets\.|github\.token|contents:\s*write/u);
   for (const source of [intake, ordinary, postMerge, codeql]) {
     const uses = [...source.matchAll(/^\s*uses:\s*([^\s#]+)/gmu)].map((match) => match[1]);
     assert.ok(uses.length >= 2);
@@ -75,10 +85,73 @@ test("ordinary CI is read-only, credential-free, pinned, and covers Node 20 and 
 });
 
 test("CodeQL is read-only apart from security result publication and uses pinned actions", () => {
-  assert.match(codeql, /\npermissions:\n  contents: read\n  security-events: write\n/u);
-  assert.match(codeql, /languages: javascript-typescript/u);
-  assert.match(codeql, /name: CodeQL/u);
+  assert.match(codeql, /\npermissions:\n  contents: read\n/u);
+  assert.match(codeqlCandidateJob, /if: github\.event_name != 'pull_request_target'/u);
+  assert.match(codeqlCandidateJob, /permissions:\n\s+contents: read\n\s+security-events: write/u);
+  assert.match(codeqlCandidateJob, /languages: javascript-typescript/u);
+  assert.match(codeqlCandidateJob, /name: Candidate CodeQL/u);
   assert.doesNotMatch(codeql, /secrets\.|contents:\s*write|pull-requests:\s*write/u);
+  assert.doesNotMatch(codeqlBoundedJob, /security-events:\s*write/u);
+});
+
+test("application-only pull requests get the existing required contexts from trusted metadata", () => {
+  const applicationPaths = [
+    "submissions/*/application.json",
+    "submissions/*/PROPOSAL.md",
+    "submissions/*/TEST_PLAN.md",
+    "submissions/*/THREAT_MODEL.md",
+    "submissions/*/compatibility-report.json",
+    "submissions/*/evidence-index.json"
+  ];
+  for (const source of [ordinary, codeql]) {
+    assert.match(source, /pull_request:\n(?:\s+branches:\n\s+- main\n)?\s+paths-ignore:/u);
+    assert.match(source, /pull_request_target:\n\s+branches:\n\s+- main\n\s+paths:/u);
+    assert.match(source, /group: [^\n]*\$\{\{ github\.event_name \}\}[^\n]*\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/u);
+    for (const applicationPath of applicationPaths) {
+      assert.equal(count(source, `- "${applicationPath}"`), 2);
+    }
+  }
+  assert.match(ordinaryBoundedJob, /if: github\.event_name == 'pull_request_target'/u);
+  assert.match(ordinaryBoundedJob, /name: Bounded application \/ Node \$\{\{ matrix\.node \}\}/u);
+  assert.match(ordinaryBoundedJob, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(codeqlBoundedJob, /if: github\.event_name == 'pull_request_target'/u);
+  assert.match(codeqlBoundedJob, /name: Bounded application \/ CodeQL not applicable/u);
+  for (const source of [ordinaryBoundedJob, codeqlBoundedJob]) {
+    assert.match(source, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/u);
+    assert.match(source, /path: trusted/u);
+    assert.match(source, /persist-credentials: false/u);
+    assert.match(source, /--verify-bounded-application-paths/u);
+    assert.match(source, /--repository "\$\{\{ github\.repository \}\}"/u);
+    assert.match(source, /--pull-request-number "\$\{\{ github\.event\.pull_request\.number \}\}"/u);
+    assert.match(source, /--expected-base-commit "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/u);
+    assert.match(source, /--expected-candidate-commit "\$\{\{ github\.event\.pull_request\.head\.sha \}\}"/u);
+    assert.match(source, /CANDIDATE_READ_TOKEN: \$\{\{ github\.token \}\}/u);
+    assert.doesNotMatch(source, /npm\s+(?:ci|install|test)|github\.event\.pull_request\.head\.sha\s*\}\}\n\s+path:/u);
+  }
+  assert.match(ordinaryRequiredJob, /if: always\(\)/u);
+  assert.match(ordinaryRequiredJob, /needs:\n\s+- repository\n\s+- bounded-application/u);
+  assert.match(ordinaryRequiredJob, /name: Node \$\{\{ matrix\.node \}\}/u);
+  assert.match(codeqlRequiredJob, /if: always\(\)/u);
+  assert.match(codeqlRequiredJob, /needs:\n\s+- codeql\n\s+- bounded-application/u);
+  assert.match(codeqlRequiredJob, /name: CodeQL/u);
+  for (const source of [ordinaryRequiredJob, codeqlRequiredJob]) {
+    assert.match(source, /BOUNDED_RESULT: \$\{\{ needs\.bounded-application\.result \}\}/u);
+    assert.match(source, /EVENT_NAME: \$\{\{ github\.event_name \}\}/u);
+    assert.match(source, /"\$BOUNDED_RESULT" == "success" && "\$CANDIDATE_RESULT" == "skipped"/u);
+    assert.match(source, /"\$CANDIDATE_RESULT" == "success" && "\$BOUNDED_RESULT" == "skipped"/u);
+  }
+  assert.equal(count(ordinary, "\n    name: Node ${{ matrix.node }}\n"), 1);
+  assert.equal(count(codeql, "\n    name: CodeQL\n"), 1);
+});
+
+test("exact main runs repository tests once and still validates every maintained application", () => {
+  assert.doesNotMatch(ordinary, /\n  push:/u);
+  assert.match(codeql, /\n  push:\n\s+branches:\n\s+- main/u);
+  assert.equal(count(postMerge, "run: npm test"), 1);
+  assert.match(postMerge, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(postMerge, /node-version: \$\{\{ matrix\.node \}\}/u);
+  assert.match(postMerge, /if: matrix\.node == 20/u);
+  assert.match(postMerge, /--verify-maintained/u);
 });
 
 test("post-merge verifies the complete repository and every maintained submission", () => {
@@ -90,3 +163,7 @@ test("post-merge verifies the complete repository and every maintained submissio
   assert.match(postMerge, /--verify-maintained/u);
   assert.match(postMerge, /--repository-root "\$source_root"/u);
 });
+
+function count(source, needle) {
+  return source.split(needle).length - 1;
+}
