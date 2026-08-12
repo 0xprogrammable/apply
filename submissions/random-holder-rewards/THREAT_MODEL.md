@@ -7,7 +7,7 @@ Random Holder Rewards
 - Only the immutable PoolManager enters swap callbacks, and only the exact canonical PoolKey is accepted.
 - Every successful canonical swap accrues 10 bps of executed gross ETH quote volume to the immutable Programmable owner.
 - Independent platform and project numerator remainders persist for the canonical pool lifetime, including across claims; positive gross quote below 1,000 wei is rejected.
-- Buy and sell totals are immutable per launch and remain inside 0.1–3% and buy-rate–5% bounds; exactly 10 bps goes to Programmable, then 10% of the project fee funds native VRF and 90% reaches the reward pot.
+- Buy and sell totals are fixed at 1% and 2%; exactly 10 bps goes to Programmable, then 10% of the project fee funds native VRF and 90% reaches the reward pot.
 - Returned deltas are matched by ETH taken in the same callback and all PoolManager deltas finish at zero. Both specified-quote before-swap paths reject partial execution inside the callback flow, while both unspecified-quote after-swap paths derive fees from the executed PoolManager delta.
 - Platform, pot, winner liabilities, and the unfunded VRF reserve never exceed raw ETH backing and are never netted across pools.
 - Only the immutable VRF coordinator fulfills the one pending request; request data binds the snapshot block and holder-index prefix before randomness exists.
@@ -40,19 +40,15 @@ Timestamp controls only earliest request eligibility; modest proposer skew canno
 
 ### Holder-index denial of service
 
-The holder list is append-only, so an attacker can create many former-holder entries. A nonzero 0.1%-supply eligibility floor makes qualifying many addresses expensive but does not stop index growth. Permissionless finalization performs at most `32 + 4 × configured winners` candidates; if enough winners are not found, the pot remains intact and the failed round is observable. This is a known liveness limitation, not silently replaced with trusted selection.
+The holder list is append-only, so an attacker can create many former-holder entries. A nonzero 0.1%-supply eligibility floor makes qualifying many addresses expensive but does not stop index growth. Permissionless finalization performs at most 44 candidates; if three winners are not found, the pot remains intact and the failed round is observable. This is a known liveness limitation, not silently replaced with trusted selection.
 
 ### Sybil capture
 
-Selection is per eligible address. One actor may split enough tokens among several addresses and receive several independent chances. The protocol makes no person-level fairness claim. The configured winners are unique addresses, not necessarily unique people. The UI must display this limitation beside the winner-count control.
+Selection is per eligible address. One actor may split enough tokens among several addresses and receive several independent chances. The protocol makes no person-level fairness claim. The three winners are unique addresses, not necessarily unique people.
 
-### Creator extraction and adverse selection
+### Fixed-economics mismatch
 
-Creators could select taxes that look attractive to holders but make entry or exit uneconomic for traders. Constructor bounds prevent confiscatory values, the sell rate cannot be lower than the buy rate for this stated model, and the UI shows trader retention and the tax wedge before configuration export. Bounds do not prove market equilibrium: traders may rationally avoid any configuration, and a high sell rate may reduce price, liquidity, volume, and rewards.
-
-### UI/configuration mismatch
-
-The UI is not an authority. Its exported integer rates and winner count must match constructor units and bounds exactly. Contract validation remains authoritative and rejects stale, manipulated, out-of-range, or sell-below-buy inputs. The prototype UI creates no wallet request or transaction and must not imply deployment.
+Programmable's current launch UI exposes no model-specific token-creation settings. The hook therefore accepts no creator-supplied fee, threshold, or winner-count inputs: 1% buys, 2% sells, a 0.42 ETH threshold, and three winners are contract constants. Review must reject any product or documentation surface that implies these values are configurable.
 
 ### Forced ETH and accounting drift
 
