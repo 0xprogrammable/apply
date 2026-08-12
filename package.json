@@ -7,10 +7,12 @@
     "node": ">=20"
   },
   "scripts": {
+    "compile:entitlement": "node scripts/compile-launch-entitlement.mjs",
     "generate": "node scripts/generate-registry.mjs --write",
     "check": "node scripts/verify-repository.mjs",
     "review": "node review/cli.mjs",
     "test": "node scripts/verify-repository.mjs",
+    "test:acceptance": "node --test test/acceptance-entitlement.test.mjs",
     "test:intake": "node --test --test-concurrency=1 scripts/test/verify-public-hook-application*.test.mjs",
     "test:registry": "node --test test/*.test.mjs"
   },
