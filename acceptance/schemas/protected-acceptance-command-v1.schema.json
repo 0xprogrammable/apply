@@ -1,0 +1,135 @@
+{
+  "$id": "https://programmable.money/schemas/protected-acceptance-command-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authorization": { "$ref": "#/$defs/authorization" },
+    "command": { "$ref": "#/$defs/command" },
+    "schemaVersion": { "const": "programmable.signed-protected-acceptance-command.v1" }
+  },
+  "required": ["authorization", "command", "schemaVersion"],
+  "type": "object",
+  "$defs": {
+    "authorization": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "keyId": { "pattern": "^ed25519:sha256:[0-9a-f]{64}$", "type": "string" },
+        "signature": { "pattern": "^[A-Za-z0-9_-]{86}$", "type": "string" }
+      },
+      "required": ["algorithm", "keyId", "signature"],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptedAt": { "format": "date-time", "type": "string" },
+        "acceptedBy": {
+          "additionalProperties": false,
+          "properties": {
+            "githubLogin": { "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$", "type": "string" },
+            "githubUserId": { "$ref": "#/$defs/opaqueId" },
+            "mode": { "enum": ["automation-review", "human-review"] }
+          },
+          "required": ["githubLogin", "githubUserId", "mode"],
+          "type": "object"
+        },
+        "action": { "const": "issue-launch-entitlement" },
+        "application": {
+          "additionalProperties": false,
+          "properties": {
+            "applicationId": { "$ref": "#/$defs/applicationId" },
+            "applicationRevision": { "maximum": 1000000, "minimum": 1, "type": "integer" },
+            "builderGitHubUserId": { "$ref": "#/$defs/opaqueId" },
+            "packageContract": { "const": "public-pr-application-v2-six-file-v1" },
+            "packageDigest": { "$ref": "#/$defs/digest" }
+          },
+          "required": ["applicationId", "applicationRevision", "builderGitHubUserId", "packageContract", "packageDigest"],
+          "type": "object"
+        },
+        "entitlement": {
+          "additionalProperties": false,
+          "properties": {
+            "chainId": { "const": 1 },
+            "claimPrincipalPolicy": { "const": "application-builder-github-user-v1" },
+            "launchCount": { "const": 1 },
+            "permitPolicy": { "const": "jit-single-use-v1" },
+            "repositoryKeyPolicy": { "const": "numeric-github-repository-v1" }
+          },
+          "required": ["chainId", "claimPrincipalPolicy", "launchCount", "permitPolicy", "repositoryKeyPolicy"],
+          "type": "object"
+        },
+        "launchPlan": {
+          "additionalProperties": false,
+          "properties": {
+            "byteLength": { "maximum": 1048576, "minimum": 2, "type": "integer" },
+            "gitBlobOid": { "$ref": "#/$defs/gitOid" },
+            "path": { "$ref": "#/$defs/repositoryPath" },
+            "repositoryRole": { "const": "primary" },
+            "sha256": { "$ref": "#/$defs/digest" }
+          },
+          "required": ["byteLength", "gitBlobOid", "path", "repositoryRole", "sha256"],
+          "type": "object"
+        },
+        "pullRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "authorGitHubUserId": { "$ref": "#/$defs/opaqueId" },
+            "baseCommitOid": { "$ref": "#/$defs/gitOid" },
+            "baseRepository": { "const": "0xprogrammable/submit-launch" },
+            "baseRepositoryId": { "const": "1320171831" },
+            "baseTreeOid": { "$ref": "#/$defs/gitOid" },
+            "headCommitOid": { "$ref": "#/$defs/gitOid" },
+            "headRepositoryId": { "$ref": "#/$defs/opaqueId" },
+            "headTreeOid": { "$ref": "#/$defs/gitOid" },
+            "number": { "maximum": 9007199254740991, "minimum": 1, "type": "integer" }
+          },
+          "required": ["authorGitHubUserId", "baseCommitOid", "baseRepository", "baseRepositoryId", "baseTreeOid", "headCommitOid", "headRepositoryId", "headTreeOid", "number"],
+          "type": "object"
+        },
+        "review": {
+          "additionalProperties": false,
+          "properties": {
+            "decision": { "const": "accepted" },
+            "finalVerificationDigest": { "$ref": "#/$defs/digest" },
+            "policyBundleDigest": { "$ref": "#/$defs/digest" },
+            "reviewEvidenceDigest": { "$ref": "#/$defs/digest" },
+            "supersedes": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }
+          },
+          "required": ["decision", "finalVerificationDigest", "policyBundleDigest", "reviewEvidenceDigest", "supersedes"],
+          "type": "object"
+        },
+        "schemaVersion": { "const": "programmable.protected-acceptance-command.v1" },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "companions": { "items": { "$ref": "#/$defs/source" }, "maxItems": 8, "type": "array" },
+            "primary": { "$ref": "#/$defs/source" },
+            "schemaVersion": { "const": "1.0.0" }
+          },
+          "required": ["companions", "primary", "schemaVersion"],
+          "type": "object"
+        },
+        "validUntil": { "format": "date-time", "type": "string" }
+      },
+      "required": ["acceptedAt", "acceptedBy", "action", "application", "entitlement", "launchPlan", "pullRequest", "review", "schemaVersion", "source", "validUntil"],
+      "type": "object"
+    },
+    "applicationId": { "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+    "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "gitOid": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "opaqueId": { "pattern": "^[1-9][0-9]{0,63}$", "type": "string" },
+    "repositoryPath": { "maxLength": 1024, "minLength": 1, "pattern": ".*\\.json$", "type": "string" },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "numericRepositoryId": { "$ref": "#/$defs/opaqueId" },
+        "repositoryUri": { "pattern": "^https://github\\.com/[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?/[a-z0-9._-]{1,100}$", "type": "string" },
+        "revisionObjectId": { "$ref": "#/$defs/gitOid" },
+        "treeObjectId": { "$ref": "#/$defs/gitOid" }
+      },
+      "required": ["numericRepositoryId", "repositoryUri", "revisionObjectId", "treeObjectId"],
+      "type": "object"
+    }
+  }
+}

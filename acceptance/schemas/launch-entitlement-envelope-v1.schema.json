@@ -1,0 +1,91 @@
+{
+  "$id": "https://programmable.money/schemas/launch-entitlement-envelope-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptanceCommand": { "$ref": "https://programmable.money/schemas/protected-acceptance-command-v1.json#/$defs/command" },
+    "adapter": {
+      "additionalProperties": false,
+      "properties": {
+        "launchSpecificationAuthority": { "const": "exact-primary-source-blob" },
+        "nativeSevenFileControlPackage": { "const": false },
+        "profile": { "const": "submit-launch-six-file-source-plan-v1" },
+        "synthesizedLaunchJson": { "const": false }
+      },
+      "required": ["launchSpecificationAuthority", "nativeSevenFileControlPackage", "profile", "synthesizedLaunchJson"],
+      "type": "object"
+    },
+    "authorization": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "keyId": { "pattern": "^ed25519:sha256:[0-9a-f]{64}$", "type": "string" },
+        "signature": { "pattern": "^[A-Za-z0-9_-]{86}$", "type": "string" },
+        "signedCommandDigest": { "$ref": "#/$defs/digest" }
+      },
+      "required": ["algorithm", "keyId", "signature", "signedCommandDigest"],
+      "type": "object"
+    },
+    "controlPackage": {
+      "additionalProperties": false,
+      "properties": {
+        "contract": { "const": "public-pr-application-v2-six-file-v1" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "directory": { "pattern": "^submissions/[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+        "fileCount": { "const": 6 },
+        "files": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "byteLength": { "minimum": 1, "type": "integer" },
+              "gitBlobOid": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+              "path": { "enum": ["application.json", "PROPOSAL.md", "TEST_PLAN.md", "THREAT_MODEL.md", "compatibility-report.json", "evidence-index.json"] },
+              "sha256": { "$ref": "#/$defs/digest" }
+            },
+            "required": ["byteLength", "gitBlobOid", "path", "sha256"],
+            "type": "object"
+          },
+          "maxItems": 6,
+          "minItems": 6,
+          "type": "array"
+        }
+      },
+      "required": ["contract", "digest", "directory", "fileCount", "files"],
+      "type": "object"
+    },
+    "entitlementId": { "$ref": "#/$defs/digest" },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "approvalServiceHandoff": { "const": "authenticated-ingress-requires-native-review-reconciliation-v1" },
+        "durableApprovalGrantState": { "const": "not-issued" },
+        "launchPermitState": { "const": "not-issued" },
+        "registryPublicationState": { "const": "requires-finalized-launch" },
+        "walletBindingState": { "const": "required-at-claim" }
+      },
+      "required": ["approvalServiceHandoff", "durableApprovalGrantState", "launchPermitState", "registryPublicationState", "walletBindingState"],
+      "type": "object"
+    },
+    "launchSpecification": {
+      "additionalProperties": false,
+      "properties": {
+        "byteLength": { "maximum": 1048576, "minimum": 2, "type": "integer" },
+        "gitBlobOid": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+        "path": { "maxLength": 1024, "minLength": 1, "pattern": ".*\\.json$", "type": "string" },
+        "repositoryRole": { "const": "primary" },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "transport": { "const": "exact-source-file-v1" }
+      },
+      "required": ["byteLength", "gitBlobOid", "path", "repositoryRole", "sha256", "transport"],
+      "type": "object"
+    },
+    "schemaVersion": { "const": "programmable.launch-entitlement-envelope.v1" },
+    "source": { "$ref": "https://programmable.money/schemas/protected-acceptance-command-v1.json#/$defs/command/properties/source" },
+    "state": { "const": "accepted" }
+  },
+  "required": ["acceptanceCommand", "adapter", "authorization", "controlPackage", "entitlementId", "execution", "launchSpecification", "schemaVersion", "source", "state"],
+  "type": "object",
+  "$defs": {
+    "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" }
+  }
+}

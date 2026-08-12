@@ -47,6 +47,10 @@ The public checker validates a closed review input and applies the published pol
 project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, or issue a
 launch permit.
 
+After review, maintainers can compile a signed, exact-revision acceptance into the versioned
+[six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md). The bridge does not treat a GitHub
+label, green check, merge, or editable review state as launch authority, and it never issues the wallet-bound permit.
+
 Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and the machine-readable
 [policy](review/policy.v1.json).
 
@@ -128,6 +132,7 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
 - [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)
+- [Acceptance entitlement bridge v1](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md)
 - [Discovery contract](docs/DISCOVERY_CONTRACT.md)
 - [Code maturity assessment](docs/CODE_MATURITY.md)
 - [Contributing](CONTRIBUTING.md)
