@@ -1,6 +1,7 @@
 * @0xprogrammable
 
 /registry/ @0xprogrammable
+/acceptance/ @0xprogrammable
 /scripts/ @0xprogrammable
 /.github/ @0xprogrammable
 /vendor/ @0xprogrammable

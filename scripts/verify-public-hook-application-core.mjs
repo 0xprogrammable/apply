@@ -82,6 +82,7 @@ const REVIEW_FILES = Object.freeze([
   "evidence-index.json"
 ]);
 const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
+  "acceptance/",
   "assets/",
   "docs/",
   "registry/",
@@ -111,6 +112,8 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "package-lock.json",
   "package.json",
   "scripts/generate-registry.mjs",
+  "scripts/acceptance-entitlement-core.mjs",
+  "scripts/compile-launch-entitlement.mjs",
   "scripts/registry-core.mjs",
   "scripts/verify-repository.mjs",
   "scripts/verify-public-hook-application-core.mjs",

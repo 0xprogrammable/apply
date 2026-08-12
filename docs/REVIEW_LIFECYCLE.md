@@ -15,9 +15,11 @@ are documented in [Open Review Standard v1](OPEN_REVIEW_STANDARD.md).
 | Available | Platform release evidence | Programmable currently exposes the project |
 | Suspended or retired | Maintainer lifecycle record | Availability is intentionally restricted or ended |
 
-An application merge does not synthesize an acceptance record. Promotion is a separate maintainer pull request that
-adds an append-only acceptance record, updates or adds the full project record, advances the Registry history version,
-and regenerates the indexes.
+An application merge does not synthesize an acceptance record. For the current six-file application contract, an
+accepted exact revision can instead be compiled into the separate, signed
+[launch-entitlement bridge v1](ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md). That envelope still does not issue a launch
+permit, deploy code, or publish a Registry record. Registry promotion remains a separate maintainer action after
+finalized launch evidence exists.
 
 Acceptance is not an independent audit, deployment authorization, provider guarantee, Uniswap endorsement, or promise
 of future availability. Those claims require their own attributable evidence.
