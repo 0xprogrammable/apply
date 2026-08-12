@@ -82,6 +82,7 @@ const REVIEW_FILES = Object.freeze([
   "evidence-index.json"
 ]);
 const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
+  "acceptance/",
   "assets/",
   "docs/",
   "registry/",

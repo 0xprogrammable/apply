@@ -850,6 +850,7 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "README.md",
     "SECURITY.md",
     "SUPPORT.md",
+    "acceptance/schemas/launch-entitlement-envelope-v1.schema.json",
     "docs/builder/PUBLIC_GITHUB_PR_BETA.md",
     "docs/builder/intake-status.json",
     "docs/DISCOVERY_CONTRACT.md",
