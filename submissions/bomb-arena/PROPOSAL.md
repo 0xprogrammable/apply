@@ -44,7 +44,7 @@ The intended four-quadrant collection paths for native ETH as currency0 are:
 | one-for-zero exact input | unspecified | after-swap return delta |
 | one-for-zero exact output | specified | before-swap return delta |
 
-Because the integration status is pending, the machine-readable fee projection leaves supported modes empty and all four collection-path bindings null. The table above is the proposed implementation target, not a claim that the current source satisfies the v1.1 policy.
+Because the integration status is pending, the machine-readable fee projection leaves supported modes and fee evidence empty, and leaves all collection-path, value-flow, and event bindings null. The table above is the proposed implementation target, not a claim that the current source satisfies the v1.1 policy.
 
 Platform and project streams use independent cumulative lifetime remainders. Claims do not reset them. A positive gross quote amount below 1,000 smallest units must revert under the standard profile. The Programmable liability is keyed by canonical pool, native currency, and immutable owner; it cannot be swept, rescued, cross-pool netted, or redirected by a builder or administrator.
 
