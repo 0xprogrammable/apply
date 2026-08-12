@@ -1,10 +1,10 @@
 # Proposal
 
-Random Holder Rewards
+LUCK Buyer Rewards
 
 ## Outcome
 
-Launch one fixed-supply token and one canonical native-ETH Uniswap v4 pool. The model fixes the buy charge at 1%, the sell charge at 2%, the reward threshold at 0.42 ETH, and each round at exactly three winners. Programmable's current launch UI exposes no model-specific token-creation settings, so none of these values is a creator input. Each charge includes the mandatory 0.1% Programmable volume fee. Ten percent of the remaining project fee accrues into a native VRF reserve and 90% accrues into the holder reward pot. Once at least 30 minutes have passed and the pot contains at least 0.42 ETH, any address may request verifiable randomness. The callback records one random word within a 150,000-gas limit; separate permissionless finalization assigns the snapshotted pot equally to three unique eligible holders as independent pull-claim liabilities.
+Launch the fixed-supply `LUCK` token and one canonical native-ETH Uniswap v4 pool. The model fixes the buy charge at 1%, the sell charge at 2%, the reward threshold at 0.42 ETH, and each round at exactly three winners. Programmable's current launch UI exposes no model-specific token-creation settings, so none of these values is a creator input. Each charge includes the mandatory 0.1% Programmable volume fee. Ten percent of the remaining project fee accrues into a native VRF reserve and 90% accrues into the buyer reward pot. Once at least 30 minutes have passed and the pot contains at least 0.42 ETH, any address may request verifiable randomness. The callback records one random word within a 150,000-gas limit; resumable permissionless finalization scans every wallet in the snapshotted buyer prefix and assigns the pot equally to the three eligible buyers with the lowest VRF-derived scores.
 
 Ordinary ERC-20 transfers carry no tax. Alternative pools do not inherit this behavior.
 
@@ -13,15 +13,15 @@ Ordinary ERC-20 transfers carry no tax. Alternative pools do not inherit this be
 - Ethereum mainnet; native ETH is `currency0` and the launched token is `currency1`.
 - Static 0.30% LP fee and tick spacing 60. The LP fee belongs to liquidity providers.
 - One hook instance for one canonical PoolKey; permission mask `0x00cc`.
-- Fixed one-billion-token supply with 18 decimals and no later mint, burn authority, pause, freeze, blacklist, confiscation, tax, rescue, proxy, or upgrade.
+- Token name and symbol: `LUCK`. Fixed one-billion-token supply with 18 decimals and no later mint, burn authority, pause, freeze, blacklist, confiscation, tax, rescue, proxy, or upgrade.
 - Mandatory fee: 10 bps on gross executed ETH quote volume for every swap.
 - Platform and project fees use independent cumulative numerator remainders for the canonical pool lifetime. Claims do not reset them, and positive gross quote amounts below 1,000 wei revert atomically.
 - Fixed total buy charge: 1%. After the 0.1% platform component, 10% funds VRF and 90% funds rewards.
 - Fixed total sell charge: 2%. The same post-platform 10%/90% split applies.
-- Fixed winners per round: exactly 3. The bounded candidate-attempt budget is 44 (`32 + 4 × 3`).
+- Fixed winners per round: exactly 3. Each finalization transaction scans 32 buyers by default and may scan up to 128. There is no lifetime scan cap; repeated calls cover the complete snapshotted buyer prefix.
 - These values are contract constants, are absent from the constructor, and cannot change after launch.
 - Round interval: 1,800 seconds. Reward threshold: 0.42 ETH.
-- Eligibility: the address appeared in the token's append-only holder index before the snapshot, held at least 0.1% of total supply at the snapshot block, and is not zero, the hook, the token, PoolManager, or a burn address.
+- Eligibility: the address received at least 6,942 LUCK through actual PoolManager ERC-20 settlement after a canonical buy, still has both a token balance and retained canonical-buy balance of at least 6,942 LUCK at the snapshot block, and is not zero, the hook, the token, PoolManager, or a burn address. One wallet gets one equal entry regardless of trade size above the floor.
 - Chainlink VRF v2.5 coordinator, subscription, key hash, confirmation count, and callback gas limit are constructor-bound. The hook must own the subscription, funds its native balance from the isolated reserve, and requests with `nativePayment: true`. Block data is never fallback randomness.
 
 ## Four swap quadrants
@@ -87,21 +87,23 @@ For a 0.420000000000000002 ETH pot, each of the three winners receives `floor(po
 
 `pot before = winner liabilities added + pot remainder`.
 
-If the coordinator call fails, the callback is unauthorized, or fewer than three eligible unique addresses are found inside the 44-attempt budget, no winner liability is created and the complete pot remains available for a later round. Anyone may expire a request that is still awaiting randomness after two hours. Once a seed is stored it cannot be replaced or expired; finalization must use that seed.
+If the coordinator call fails, the callback is unauthorized, or a completed full-prefix scan contains fewer than three eligible buyers, no winner liability is created and the complete pot remains available for a later round. Anyone may expire a request that is still awaiting randomness after two hours. Once a seed is stored it cannot be replaced or expired; finalization must use that seed.
 
 ## Game-theory rationale
 
-For `H` symmetric eligible addresses, `W` winners, and pot `P`, an address is selected with probability approximately `W/H` and receives `P/W`, so its expected value remains approximately `P/H`. Winner count therefore changes variance rather than creating free expected return: fewer winners create lottery-like jackpots; more winners create smaller, steadier payouts.
+For `H` symmetric eligible addresses, `W` winners, and pot `P`, an address is selected with probability `W/H` (when `H >= W`) and receives `P/W` apart from integer dust, so its expected value is approximately `P/H`. Winner count therefore changes variance rather than creating free expected return: fewer winners create lottery-like jackpots; more winners create smaller, steadier payouts.
 
 The sell-tax wedge does not create free value either. Rational buyers price expected future selling friction into the amount they will pay. Very high sell tax can reduce buying, liquidity, and taxable volume enough to shrink the reward pot. The fixed 1% buy, 2% sell, and three-winner model is a transparent focal strategy, not a claim of a unique Nash equilibrium.
 
-Uniform address selection still creates a wallet-splitting incentive. The 0.1%-supply eligibility floor makes splitting costly but does not make it identity-proof or Sybil-proof. This remains a disclosed limitation and an independent economic-review item.
+Uniform address selection still creates a wallet-splitting incentive. The 6,942 LUCK retained canonical-buy floor makes splitting costly but does not make it identity-proof or Sybil-proof. Trade size above the floor does not add entries, which keeps a small qualifying buyer's chance equal to a large qualifying buyer's chance. This remains a disclosed limitation and an independent economic-review item.
 
-## Holder selection and known limits
+## Buyer selection and known limits
 
-The token appends each first-time recipient to a stable index and checkpoints balances by block. A round fixes `snapshotBlock = block.number - 1` and the current index prefix before requesting randomness. The authenticated callback stores only the random word. Permissionless finalization derives candidate index `i` from `keccak256(randomWord, roundId, attempt) % snapshotHolderCount` and skips duplicates and ineligible balances.
+After an executed canonical buy, the hook opens transaction-scoped credit equal to the positive LUCK output. Only subsequent LUCK transfers from the immutable PoolManager can consume that credit, so ordinary peer transfers and alternative-pool activity cannot create buyer credit. The token indexes a wallet once its retained canonical-buy balance reaches 6,942 LUCK and checkpoints both its actual and retained-purchase balances. Any outgoing transfer caps retained-purchase balance to the wallet's remaining token balance.
 
-Eligibility is address-based, not identity-based. A minimum balance raises the cost of splitting holdings but cannot provide person-level Sybil resistance. An append-only index can accumulate former holders, so a sparse eligible set can cause bounded draws to fail. Finalization checks at most 44 candidates. Failure preserves funds and is visible; no administrator may replace winners.
+A round fixes `snapshotBlock = block.number - 1` and the current buyer prefix before requesting randomness. The authenticated callback stores only the random word. Permissionless finalization walks the prefix sequentially and ranks each eligible buyer by `keccak256(randomWord, roundId, buyer)`, using address order only to break a negligible score tie. Retaining the three lowest scores is an equal sample of three unique eligible wallets without replacement. State stores only a cursor and three provisional winners, so every call is bounded while the complete scan remains reachable.
+
+Eligibility is address-based, not identity-based. A minimum retained buy raises the cost of splitting but cannot provide person-level Sybil resistance. The append-only buyer index can accumulate former buyers, making completion require many transactions, but it cannot make an eligible buyer unreachable. If a complete scan finds fewer than three eligible buyers, failure preserves the pot and is visible; no administrator may replace winners.
 
 ## Claims and solvency
 

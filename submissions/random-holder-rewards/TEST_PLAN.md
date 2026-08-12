@@ -1,6 +1,6 @@
 # Test plan
 
-Random Holder Rewards
+LUCK Buyer Rewards
 
 ## Build and structure
 
@@ -19,12 +19,14 @@ Random Holder Rewards
 - Prove alternative PoolKeys, LP fees, token transfers, donations, and router choice cannot satisfy or bypass canonical fee accounting.
 - Exercise create token, initialize pool, add liquidity, four swaps, platform claim, reserve funding, 0.42 ETH threshold accrual, round request, minimal fulfillment, permissionless finalization, three winner claims, liquidity removal, VRF failure, and retry.
 
-## Holder and randomness cases
+## Buyer qualification and randomness cases
 
-- Test first-time holder indexing, no duplicate index, same-block checkpoint replacement, historical lookup, transfers before and after snapshot, and excluded addresses.
-- Test the fixed three-winner count, fewer than three eligible holders, the fixed 44-attempt budget, one unresolved round, two-hour permissionless expiry while awaiting randomness, stored-seed non-expiry, stale callbacks, duplicate/unknown callbacks, wrong coordinator, zero random word, duplicate candidates, attempt exhaustion, and successful unique allocation.
-- Prove holder-count prefix and snapshot block cannot change after request.
-- Test sparse eligibility and Sybil-style address splitting as disclosed behavior, not person-level resistance.
+- Test `LUCK` name, symbol, fixed supply, first-time holder indexing, no duplicate index, same-block checkpoint replacement, historical lookup, transfers before and after snapshot, and excluded addresses.
+- Prove peer transfers, liquidity settlement, and unauthorized callers cannot create buyer credit. Prove the bound hook can open only transaction-scoped credit, actual PoolManager transfers consume no more than that credit once, and real exact-input and exact-output buys credit the output recipient.
+- Test the 6,942 LUCK floor, cumulative qualifying buys, one equal entry per buyer wallet, purchases above the floor without extra entries, outgoing transfers and sells reducing retained-purchase balance, and historical actual/purchased balance checks at the snapshot.
+- Test the fixed three-winner count, fewer than three eligible buyers, one unresolved round, two-hour permissionless expiry while awaiting randomness, stored-seed non-expiry, stale callbacks, duplicate/unknown callbacks, wrong coordinator, zero random word, and successful unique allocation.
+- Prove buyer-count prefix and snapshot block cannot change after request. Prove 0 and batches above 128 revert, the default call advances 32 entries, multiple calls preserve the same provisional top three, and a sparse 70-buyer prefix still reaches three eligible wallets at its end.
+- Test Sybil-style qualifying-buy splitting as disclosed behavior, not person-level resistance.
 - Test VRF request revert, delayed callback, failed round, and retry without pot loss.
 
 ## Claims and custody
@@ -50,7 +52,7 @@ Random Holder Rewards
 - Run `npm run test:fork:sepolia:current` as a separate current-head compatibility smoke. Preserve the exact observed block and distinguish both Sepolia fork suites from signed public-testnet evidence.
 - Before regenerating the corrected launch package, run `npm run verify:vrf-binding` with `VRF_EVIDENCE_BLOCK`, `VRF_SUBSCRIPTION_ID`, and `EXPECTED_HOOK_CONSUMER`. Require the hook as subscription owner, nonzero native balance because requests use `nativePayment: true`, the exact consumer in the public list, and successful request simulation from that consumer.
 - Continue to mock unavailable, reverting, duplicate, stale, and unauthorized VRF responses in deterministic unit tests.
-- Gas bounds: beforeSwap, afterSwap, requestRound, the 150,000-gas seed-only callback, fixed 44-attempt finalization, subscription funding, platform claim, and winner claim.
+- Gas bounds: beforeSwap, afterSwap, requestRound, the 150,000-gas seed-only callback, 32-entry default and 128-entry maximum finalization calls, subscription funding, platform claim, and winner claim. Total completion cost scales with snapshotted buyer count by design.
 - Run Slither and record every finding disposition. If unavailable, report the gate blocked rather than passed.
 
 ## Product and release boundaries
