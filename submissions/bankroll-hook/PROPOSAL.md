@@ -60,7 +60,7 @@ The hook charges 10 bps and allocates the complete amount to `0x4957f49620AFf3Ad
 
 It charges quote-specified paths in `beforeSwap`. This covers ETH-to-token exact input and token-to-ETH exact output. It charges quote-unspecified paths in `afterSwap`. This covers ETH-to-token exact output and token-to-ETH exact input.
 
-For every successful swap the hook adds the prior numerator remainder before dividing by one million and stores the new remainder by PoolId, native currency and owner. This binds both gross and fee-on-top paths to the cumulative identity; 1,000 successful 999-wei gross swaps accrue 999 wei rather than zero. Claiming whole-unit fees does not clear the remainder.
+Every positive executed gross native quote amount below 1,000 wei reverts atomically. For every admissible successful swap the hook adds the prior numerator remainder before dividing by one million and stores the new remainder by PoolId, native currency and owner. This binds both gross and fee-on-top paths to the cumulative identity; claiming whole-unit fees does not clear the remainder.
 
 The hook holds native ERC-6909 claims and records the whole-unit liability by the same PoolId, native currency and owner scope. Only the immutable owner can claim. It selects the destination for each claim. The builder, token creator and bankroll providers receive no share and cannot redirect it.
 

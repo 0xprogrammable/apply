@@ -56,7 +56,7 @@ A staged stake becomes a ticket only after a successful swap. Reverting the swap
 
 A win decreases bankroll assets by exposure and increases player liability by gross payout. A loss moves the stake from open liability into bankroll assets. A timeout moves open stake liability into player liability without changing bankroll assets.
 
-The native Programmable liability must equal its backing PoolManager claim until claim. Claim clears the whole-unit liability, burns the claim and transfers native ETH in one atomic unlock. A separate numerator remainder is carried by canonical PoolId, native currency and immutable owner and is not cleared by claims, so split micro-swaps cannot discard fee dust or net it across pools.
+The native Programmable liability must equal its backing PoolManager claim until claim. Claim clears the whole-unit liability, burns the claim and transfers native ETH in one atomic unlock. Every positive gross native quote amount below 1,000 wei reverts atomically. For admissible swaps, a separate numerator remainder is carried by canonical PoolId, native currency and immutable owner and is not cleared by claims, so split swaps cannot discard fee dust or net it across pools.
 
 ## Main attacks and controls
 

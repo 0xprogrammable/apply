@@ -5,7 +5,7 @@
 The current Foundry suite covers:
 
 - payout, exposure, utilisation and redemption arithmetic
-- cumulative 10 bps gross and fee-on-top identities, including 1,000 successful 999-wei swaps, plus exact-output gross-up arithmetic with 512-run fuzz tests
+- atomic rejection of every positive gross quote below 1,000 wei in all four quadrants, minimum-boundary coverage, cumulative 10 bps identities for admissible gross and fee-on-top swaps, and exact-output gross-up arithmetic with 512-run fuzz tests
 - versioned hook-data round trips and malformed input
 - the exact six permissions and `0x30cc` mined address mask
 - canonical PoolManager initialization and Funding to Active transition
