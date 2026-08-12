@@ -73,7 +73,7 @@ hook-controlled quote claims
 
 ## Current compatibility finding
 
-The repository implementation and documentation declare `programmable-volume-fee-v2@2.0.0`. The installed Submit a Launch standard requires `programmable-volume-fee-v1@1.1.0`, including a 1,000-unit positive-gross minimum and independent lifetime platform/project remainders. The application therefore keeps `programmableFee.collection.status` at `pending-hook-integration`. This PR asks for review of the design and repair path; it does not claim implementation conformance.
+The repository implementation and documentation declare `programmable-volume-fee-v2@2.0.0`. The installed Submit a Launch standard requires `programmable-volume-fee-v1@1.1.0`, including a 1,000-unit positive-gross minimum and independent lifetime platform/project remainders. The application therefore keeps `programmableFee.collection.status` at `pending-hook-integration`. While that status is pending, its swap-mode paths, event and value-flow bindings, and implementation-evidence paths remain intentionally empty rather than claiming conformance. This PR asks for review of the design and repair path; it does not claim implementation conformance.
 
 ## Product integration
 
