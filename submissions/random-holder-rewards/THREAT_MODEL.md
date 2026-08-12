@@ -8,7 +8,7 @@ Random Holder Rewards
 - Every successful canonical swap accrues 10 bps of executed gross ETH quote volume to the immutable Programmable owner.
 - Independent platform and project numerator remainders persist for the canonical pool lifetime, including across claims; positive gross quote below 1,000 wei is rejected.
 - Buy and sell totals are immutable per launch and remain inside 0.1–3% and buy-rate–5% bounds; exactly 10 bps goes to Programmable, then 10% of the project fee funds native VRF and 90% reaches the reward pot.
-- Returned deltas are matched by ETH taken in the same callback and all PoolManager deltas finish at zero.
+- Returned deltas are matched by ETH taken in the same callback and all PoolManager deltas finish at zero. Both specified-quote before-swap paths reject partial execution inside the callback flow, while both unspecified-quote after-swap paths derive fees from the executed PoolManager delta.
 - Platform, pot, winner liabilities, and the unfunded VRF reserve never exceed raw ETH backing and are never netted across pools.
 - Only the immutable VRF coordinator fulfills the one pending request; request data binds the snapshot block and holder-index prefix before randomness exists.
 - Only the platform owner or the entitlement-owning winner initiates its own claim.
@@ -19,6 +19,8 @@ Random Holder Rewards
 ### Fee bypass or wrong quadrant
 
 Routers, alternative pools, donations, token transfers, and LP fees cannot substitute for the mandatory hook fee. Tests cover both directions and exactness modes, partial execution, split-versus-unsplit cumulative rounding, claim-stable remainders, the 1,000-wei minimum, exact-output gross search, wrong PoolKeys, and same-pool self-call absence.
+
+The repository supplies no quote or swap client. PoolManager remains responsible for enforcing the caller's price limit; the hook changes only the declared quote-side return delta, and any later client must independently prove quote/execution parity, final-delta slippage checks, deadlines, native-value refunds, and router compatibility.
 
 ### Callback or settlement forgery
 
