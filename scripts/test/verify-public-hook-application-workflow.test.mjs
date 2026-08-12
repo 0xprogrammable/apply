@@ -70,11 +70,11 @@ test("credentials are removed and maintenance is deferred to ordinary CI", () =>
   assert.match(publicJob, /No maintenance blob is hydrated, parsed, or executed under pull_request_target/u);
 });
 
-test("ordinary CI is read-only, credential-free, pinned, and covers Node 20 and 22", () => {
+test("ordinary CI is read-only, credential-free, pinned, and covers Node 22 and 24", () => {
   assert.match(ordinary, /\npermissions:\n  contents: read\n/u);
   assert.match(ordinaryCandidateJob, /if: github\.event_name != 'pull_request_target'/u);
   assert.match(ordinaryCandidateJob, /persist-credentials: false/u);
-  assert.match(ordinaryCandidateJob, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(ordinaryCandidateJob, /node:\n\s+- 22\n\s+- 24/u);
   assert.match(ordinaryCandidateJob, /run: npm test/u);
   assert.doesNotMatch(ordinaryCandidateJob, /secrets\.|github\.token|contents:\s*write/u);
   for (const source of [intake, ordinary, postMerge, codeql]) {
@@ -113,7 +113,7 @@ test("application-only pull requests get the existing required contexts from tru
   }
   assert.match(ordinaryBoundedJob, /if: github\.event_name == 'pull_request_target'/u);
   assert.match(ordinaryBoundedJob, /name: Bounded application \/ Node \$\{\{ matrix\.node \}\}/u);
-  assert.match(ordinaryBoundedJob, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(ordinaryBoundedJob, /node:\n\s+- 22\n\s+- 24/u);
   assert.match(codeqlBoundedJob, /if: github\.event_name == 'pull_request_target'/u);
   assert.match(codeqlBoundedJob, /name: Bounded application \/ CodeQL not applicable/u);
   for (const source of [ordinaryBoundedJob, codeqlBoundedJob]) {
@@ -148,9 +148,9 @@ test("exact main runs repository tests once and still validates every maintained
   assert.doesNotMatch(ordinary, /\n  push:/u);
   assert.match(codeql, /\n  push:\n\s+branches:\n\s+- main/u);
   assert.equal(count(postMerge, "run: npm test"), 1);
-  assert.match(postMerge, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(postMerge, /node:\n\s+- 22\n\s+- 24/u);
   assert.match(postMerge, /node-version: \$\{\{ matrix\.node \}\}/u);
-  assert.match(postMerge, /if: matrix\.node == 20/u);
+  assert.match(postMerge, /if: matrix\.node == 24/u);
   assert.match(postMerge, /--verify-maintained/u);
 });
 
