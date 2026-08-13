@@ -23,6 +23,7 @@ const RULE_ID = /^[A-Z][A-Z0-9_]*(?:\.[A-Z][A-Z0-9_]*)+$/u;
 const EVIDENCE_ID = /^[a-z0-9][a-z0-9-]{1,79}$/u;
 const HANDLER_ID = /^[a-z0-9][a-z0-9-]{1,79}$/u;
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
+const trustedPolicyRecords = new WeakSet();
 
 export class LaunchPolicyError extends Error {
   constructor(code, message, options) {
@@ -150,7 +151,7 @@ export function readTrustedLaunchPolicyFromGit(options) {
     fail("LAUNCH_POLICY_GIT_OBJECT_INVALID", "Trusted policy Git blob size does not match its declared size.");
   }
   const parsed = parseLaunchPolicyBytes(bytes);
-  return Object.freeze({
+  const policyRecord = Object.freeze({
     ...parsed,
     repository: REPOSITORY,
     numericRepositoryId: NUMERIC_REPOSITORY_ID,
@@ -159,10 +160,12 @@ export function readTrustedLaunchPolicyFromGit(options) {
     path: POLICY_PATH,
     gitBlobOid
   });
+  trustedPolicyRecords.add(policyRecord);
+  return policyRecord;
 }
 
 export function buildLaunchPolicyBinding(policyRecord, profileId) {
-  requirePlainObject(policyRecord, "policyRecord");
+  assertTrustedPolicyRecord(policyRecord);
   const required = ["baseCommit", "baseTree", "gitBlobOid", "numericRepositoryId", "path", "policy", "repository", "sha256"];
   if (!required.every((key) => Object.hasOwn(policyRecord, key))) {
     fail("LAUNCH_POLICY_BINDING_SOURCE_INVALID", "A binding requires an exact trusted Git policy record.");
@@ -219,10 +222,7 @@ export function rulesForProfile(policy, profileId) {
 }
 
 export function evaluateLaunchPolicyRules({ policyRecord, profileId, subject, evidence }) {
-  if (!isPlainObject(policyRecord) || !isPlainObject(policyRecord.policy)) {
-    fail("LAUNCH_POLICY_RECORD_INVALID", "A parsed launch policy record is required.");
-  }
-  validateLaunchPolicy(policyRecord.policy);
+  assertTrustedPolicyRecord(policyRecord);
   const profile = selectLaunchPolicyProfile(policyRecord.policy, profileId);
   if (!profile.enabled) fail("LAUNCH_POLICY_PROFILE_DISABLED", `Launch policy profile ${profileId} is disabled.`);
   if (!isPlainObject(subject) || !isPlainObject(evidence)) {
@@ -301,10 +301,11 @@ function validateProfiles(profiles) {
   const production = profiles[1];
   const canary = profiles[2];
   if (!build.enabled || build.outcome !== "BUILT_NOT_REVIEWED") fail("LAUNCH_POLICY_PROFILE_INVALID", "Build profile outcome is invalid.");
-  if (production.enabled || production.outcome !== null || Object.values(production.authority).some(Boolean)) fail("LAUNCH_POLICY_PROFILE_INVALID", "Production launch profile must remain fully disabled.");
-  if (!canary.enabled || canary.outcome !== "CANARY_WORKFLOW_PASSED" || canary.authority.publicRoutingAllowed || canary.authority.productionDiscoveryAllowed || canary.authority.realUserFundsAllowed) {
-    fail("LAUNCH_POLICY_PROFILE_INVALID", "Workflow canary authority is invalid.");
-  }
+  if (!closedAuthority(build.authority, true)) fail("LAUNCH_POLICY_AUTHORITY_INVALID", "Build authority must remain checker-only and non-production.");
+  if (production.enabled || production.outcome !== null) fail("LAUNCH_POLICY_PROFILE_INVALID", "Production launch profile must remain disabled without an outcome.");
+  if (!closedAuthority(production.authority, false)) fail("LAUNCH_POLICY_AUTHORITY_INVALID", "Production launch authority must remain fully disabled.");
+  if (!canary.enabled || canary.outcome !== "CANARY_WORKFLOW_PASSED") fail("LAUNCH_POLICY_PROFILE_INVALID", "Workflow canary outcome is invalid.");
+  if (!closedAuthority(canary.authority, true)) fail("LAUNCH_POLICY_AUTHORITY_INVALID", "Workflow canary authority must remain checker-only and non-production.");
 }
 
 function validateRules(rules, profiles) {
@@ -332,8 +333,9 @@ function validateRule(rule, profileIds) {
   assertSortedUnique(rule.evidence, `rule ${rule.id} evidence ids`);
   validateApplicability(rule);
   validateEnforcement(rule);
+  if (rule.status === "active" && rule.applicability.mode === "historical") fail("LAUNCH_POLICY_RULE_INVALID", `active rule ${rule.id} cannot use historical applicability.`);
   if (rule.status === "active" && rule.retiredIn !== null) fail("LAUNCH_POLICY_RULE_INVALID", `active rule ${rule.id} cannot be retired.`);
-  if (rule.status === "inactive" && (rule.retiredIn === null || canonicalJson(rule.profiles) !== canonicalJson(["production-launch"]))) fail("LAUNCH_POLICY_RULE_INVALID", `inactive rule ${rule.id} must remain retired production-only history.`);
+  if (rule.status === "inactive" && (rule.applicability.mode !== "historical" || rule.retiredIn === null || canonicalJson(rule.profiles) !== canonicalJson(["production-launch"]))) fail("LAUNCH_POLICY_RULE_INVALID", `inactive rule ${rule.id} must remain retired production-only history.`);
   if (Object.hasOwn(rule, "parameters")) validateJsonValue(rule.parameters, 0);
 }
 
@@ -380,6 +382,33 @@ function ruleApplies(applicability, subject) {
   if (applicability.mode === "always") return true;
   if (applicability.mode === "historical") return false;
   return applicability.field.split(".").reduce((value, key) => value?.[key], subject) === applicability.equals;
+}
+
+function assertTrustedPolicyRecord(policyRecord) {
+  if (!isPlainObject(policyRecord) || !trustedPolicyRecords.has(policyRecord)) {
+    fail("LAUNCH_POLICY_TRUST_INVALID", "Policy authority requires the exact record returned by the trusted Git reader.");
+  }
+  let reparsed;
+  try {
+    reparsed = parseLaunchPolicyBytes(policyRecord.bytes);
+  } catch (error) {
+    fail("LAUNCH_POLICY_TRUST_INVALID", "Trusted policy bytes no longer satisfy the canonical policy contract.", error);
+  }
+  if (
+    reparsed.sha256 !== policyRecord.sha256
+    || canonicalJson(reparsed.policy) !== canonicalJson(policyRecord.policy)
+  ) {
+    fail("LAUNCH_POLICY_TRUST_INVALID", "Trusted policy bytes, digest, and policy value must remain exactly bound.");
+  }
+}
+
+function closedAuthority(authority, checkerOnly) {
+  return authority.checkerOnly === checkerOnly
+    && authority.independentAudit === false
+    && authority.launchAuthorized === false
+    && authority.productionDiscoveryAllowed === false
+    && authority.publicRoutingAllowed === false
+    && authority.realUserFundsAllowed === false;
 }
 
 export function canonicalJson(value) {

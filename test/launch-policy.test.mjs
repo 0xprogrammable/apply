@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020.js";
 
 import {
   buildLaunchPolicyBinding,
@@ -41,6 +42,25 @@ function runGit(repositoryRoot, args) {
       GIT_COMMITTER_NAME: "Policy Test"
     }
   }).trim();
+}
+
+function trustedPolicyFixture(t) {
+  const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-git-"));
+  t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(repositoryRoot, "policy"), { recursive: true });
+  fs.copyFileSync(policyPath, path.join(repositoryRoot, "policy/launch-policy.v1.json"));
+  runGit(repositoryRoot, ["init", "--initial-branch=main"]);
+  runGit(repositoryRoot, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
+  runGit(repositoryRoot, ["add", "policy/launch-policy.v1.json"]);
+  runGit(repositoryRoot, ["commit", "-m", "fixture policy"]);
+  const baseCommit = runGit(repositoryRoot, ["rev-parse", "HEAD^{commit}"]);
+  return {
+    baseCommit,
+    baseTree: runGit(repositoryRoot, ["rev-parse", "HEAD^{tree}"]),
+    blob: runGit(repositoryRoot, ["rev-parse", "HEAD:policy/launch-policy.v1.json"]),
+    record: readTrustedLaunchPolicyFromGit({ repositoryRoot, expectedBaseCommit: baseCommit }),
+    repositoryRoot
+  };
 }
 
 test("canonical policy exposes exactly build canary and disabled production profiles", () => {
@@ -129,8 +149,37 @@ test("policy semantic validation rejects field and UTF-8 ordering drift", () => 
   assert.throws(() => validateLaunchPolicy(evidenceOrder), hasCode("LAUNCH_POLICY_ORDER_INVALID"));
 });
 
-test("active deterministic rules require their declared evidence before a profile can pass", () => {
-  const record = canonicalPolicyRecord();
+test("active rules cannot become non-enforcing historical records", () => {
+  const policy = structuredClone(canonicalPolicyRecord().policy);
+  for (const rule of policy.rules.filter(({ status }) => status === "active")) {
+    rule.applicability = { mode: "historical" };
+  }
+  assert.throws(() => validateLaunchPolicy(policy), hasCode("LAUNCH_POLICY_RULE_INVALID"));
+});
+
+test("build and canary authority cannot carry routing discovery or real-user funds", () => {
+  for (const profileId of ["build", "workflow-canary"]) {
+    for (const [field, invalidValue] of [
+      ["checkerOnly", false],
+      ["independentAudit", true],
+      ["launchAuthorized", true],
+      ["productionDiscoveryAllowed", true],
+      ["publicRoutingAllowed", true],
+      ["realUserFundsAllowed", true]
+    ]) {
+      const policy = structuredClone(canonicalPolicyRecord().policy);
+      policy.profiles.find(({ id }) => id === profileId).authority[field] = invalidValue;
+      assert.throws(
+        () => validateLaunchPolicy(policy),
+        hasCode("LAUNCH_POLICY_AUTHORITY_INVALID"),
+        `${profileId}.${field}`
+      );
+    }
+  }
+});
+
+test("active deterministic rules require their declared evidence before a profile can pass", (t) => {
+  const { record } = trustedPolicyFixture(t);
   const evidence = Object.fromEntries(
     rulesForProfile(record.policy, "workflow-canary")
       .flatMap(({ evidence: evidenceIds }) => evidenceIds)
@@ -159,20 +208,43 @@ test("active deterministic rules require their declared evidence before a profil
   );
 });
 
-test("trusted Git reader binds fixed protected-base identity and rejects substitutions", (t) => {
-  const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-git-"));
-  t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
-  fs.mkdirSync(path.join(repositoryRoot, "policy"), { recursive: true });
-  fs.copyFileSync(policyPath, path.join(repositoryRoot, "policy/launch-policy.v1.json"));
-  runGit(repositoryRoot, ["init", "--initial-branch=main"]);
-  runGit(repositoryRoot, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
-  runGit(repositoryRoot, ["add", "policy/launch-policy.v1.json"]);
-  runGit(repositoryRoot, ["commit", "-m", "fixture policy"]);
-  const baseCommit = runGit(repositoryRoot, ["rev-parse", "HEAD^{commit}"]);
-  const baseTree = runGit(repositoryRoot, ["rev-parse", "HEAD^{tree}"]);
-  const blob = runGit(repositoryRoot, ["rev-parse", "HEAD:policy/launch-policy.v1.json"]);
+test("fabricated records cannot mint bindings or evaluate policy", () => {
+  const parsed = canonicalPolicyRecord();
+  const fabricated = {
+    ...parsed,
+    repository: "0xprogrammable/submit-launch",
+    numericRepositoryId: "1320171831",
+    baseCommit: "0".repeat(40),
+    baseTree: "0".repeat(40),
+    path: "policy/launch-policy.v1.json",
+    gitBlobOid: "0".repeat(40),
+    sha256: `sha256:${"0".repeat(64)}`
+  };
+  assert.throws(
+    () => buildLaunchPolicyBinding(fabricated, "workflow-canary"),
+    hasCode("LAUNCH_POLICY_TRUST_INVALID")
+  );
+  assert.throws(
+    () => evaluateLaunchPolicyRules({ policyRecord: fabricated, profileId: "workflow-canary", subject: {}, evidence: {} }),
+    hasCode("LAUNCH_POLICY_TRUST_INVALID")
+  );
+});
 
-  const record = readTrustedLaunchPolicyFromGit({ repositoryRoot, expectedBaseCommit: baseCommit });
+test("trusted record bytes are revalidated and redigested at every authority boundary", (t) => {
+  const { record } = trustedPolicyFixture(t);
+  record.bytes[0] ^= 0xff;
+  assert.throws(
+    () => buildLaunchPolicyBinding(record, "workflow-canary"),
+    hasCode("LAUNCH_POLICY_TRUST_INVALID")
+  );
+  assert.throws(
+    () => evaluateLaunchPolicyRules({ policyRecord: record, profileId: "workflow-canary", subject: {}, evidence: {} }),
+    hasCode("LAUNCH_POLICY_TRUST_INVALID")
+  );
+});
+
+test("trusted Git reader binds fixed protected-base identity and rejects substitutions", (t) => {
+  const { baseCommit, baseTree, blob, record, repositoryRoot } = trustedPolicyFixture(t);
   assert.equal(record.baseCommit, baseCommit);
   assert.equal(record.baseTree, baseTree);
   assert.equal(record.gitBlobOid, blob);
@@ -206,6 +278,28 @@ test("trusted Git reader binds fixed protected-base identity and rejects substit
     () => readTrustedLaunchPolicyFromGit({ repositoryRoot, expectedBaseCommit: baseCommit, path: "attacker.json" }),
     hasCode("LAUNCH_POLICY_READER_ARGUMENTS_INVALID")
   );
+});
+
+test("JSON Schema rejects profile duplication production enablement approval and authority escalation", () => {
+  const schema = JSON.parse(fs.readFileSync(path.join(root, "policy/schemas/launch-policy.v1.schema.json"), "utf8"));
+  const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
+  const canonical = canonicalPolicyRecord().policy;
+  assert.equal(validate(canonical), true, JSON.stringify(validate.errors));
+
+  const mutations = [
+    (policy) => { policy.profiles[0] = structuredClone(policy.profiles[2]); },
+    (policy) => { policy.profiles[0].authority.checkerOnly = false; },
+    (policy) => { policy.profiles[0].authority.publicRoutingAllowed = true; },
+    (policy) => { policy.profiles[1].enabled = true; },
+    (policy) => { policy.profiles[1].outcome = "LAUNCH_APPROVED"; },
+    (policy) => { policy.profiles[2].authority.realUserFundsAllowed = true; },
+    (policy) => { policy.rules.find(({ status }) => status === "active").applicability = { mode: "historical" }; }
+  ];
+  for (const mutate of mutations) {
+    const policy = structuredClone(canonical);
+    mutate(policy);
+    assert.equal(validate(policy), false, JSON.stringify(policy.profiles));
+  }
 });
 
 test("Markdown projection identifies itself as generated and binds exact policy bytes", () => {
