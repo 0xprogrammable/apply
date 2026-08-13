@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +16,7 @@ import {
 } from "../review/launch-policy-review-core.mjs";
 import {
   buildLaunchPolicyBinding,
+  canonicalJson,
   readTrustedLaunchPolicyFromGit,
   rulesForProfile
 } from "../scripts/launch-policy-core.mjs";
@@ -233,9 +235,9 @@ test("decisions and digests are deterministic and timestamp-free", (t) => {
   const first = evaluate(fixture, input);
   input.observations.reverse();
   const second = evaluate(fixture, input);
-  assert.equal(canonicalLaunchPolicyDecision(first), canonicalLaunchPolicyDecision(second));
+  assert.equal(canonicalLaunchPolicyDecision(first, fixture.policyRecord), canonicalLaunchPolicyDecision(second, fixture.policyRecord));
   assert.equal(first.digest, second.digest);
-  assert.equal(first.digest, digestLaunchPolicyDecision(first));
+  assert.equal(first.digest, digestLaunchPolicyDecision(first, fixture.policyRecord));
   assert.match(first.digest, /^sha256:[0-9a-f]{64}$/u);
   assert.doesNotMatch(JSON.stringify(first), /timestamp|createdAt|reviewedAt/iu);
 });
@@ -246,13 +248,83 @@ test("canonical decision validation rejects re-digested authority or outcome esc
 
   const authority = structuredClone(original);
   authority.authority.launchAuthorized = true;
-  authority.digest = digestLaunchPolicyDecision(authority);
-  assert.throws(() => canonicalLaunchPolicyDecision(authority), hasCode("REVIEW_DECISION_AUTHORITY_INVALID"));
+  authority.digest = unsafeDecisionDigest(authority);
+  assert.throws(() => canonicalLaunchPolicyDecision(authority, fixture.policyRecord), hasCode("REVIEW_DECISION_AUTHORITY_INVALID"));
 
   const outcome = structuredClone(original);
   outcome.outcome = "LAUNCH_APPROVED";
-  outcome.digest = digestLaunchPolicyDecision(outcome);
-  assert.throws(() => canonicalLaunchPolicyDecision(outcome), hasCode("REVIEW_DECISION_OUTCOME_INVALID"));
+  outcome.digest = unsafeDecisionDigest(outcome);
+  assert.throws(() => canonicalLaunchPolicyDecision(outcome, fixture.policyRecord), hasCode("REVIEW_DECISION_OUTCOME_INVALID"));
+});
+
+test("canonical validation re-establishes binding subject and verdict semantics from trusted policy", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const original = evaluate(fixture, validInput(fixture.policyRecord));
+  assert.equal(canonicalLaunchPolicyDecision(original, fixture.policyRecord), canonicalJson(original));
+  assert.equal(digestLaunchPolicyDecision(original, fixture.policyRecord), original.digest);
+  assert.throws(() => canonicalLaunchPolicyDecision(original), hasCode("REVIEW_TRUSTED_POLICY_REQUIRED"));
+  assert.throws(() => digestLaunchPolicyDecision(original), hasCode("REVIEW_TRUSTED_POLICY_REQUIRED"));
+  runGit(fixture.repositoryRoot, ["commit", "--allow-empty", "-m", "later trusted base"]);
+  const laterBaseCommit = runGit(fixture.repositoryRoot, ["rev-parse", "HEAD^{commit}"]);
+  const laterPolicyRecord = readTrustedLaunchPolicyFromGit({ repositoryRoot: fixture.repositoryRoot, expectedBaseCommit: laterBaseCommit });
+  assert.throws(
+    () => canonicalLaunchPolicyDecision(original, laterPolicyRecord),
+    hasCode("REVIEW_DECISION_POLICY_PROJECTION_INVALID")
+  );
+
+  const binding = structuredClone(original);
+  binding.expectedPolicyBinding.sha256 = `sha256:${"0".repeat(64)}`;
+  binding.digest = unsafeDecisionDigest(binding);
+  assert.throws(() => canonicalLaunchPolicyDecision(binding, fixture.policyRecord), hasCode("REVIEW_DECISION_STATUS_INVALID"));
+  assert.throws(() => digestLaunchPolicyDecision(binding, fixture.policyRecord), hasCode("REVIEW_DECISION_STATUS_INVALID"));
+
+  const subjectDrift = structuredClone(original);
+  subjectDrift.currentSubject.commit = "d".repeat(40);
+  subjectDrift.digest = unsafeDecisionDigest(subjectDrift);
+  assert.throws(() => canonicalLaunchPolicyDecision(subjectDrift, fixture.policyRecord), hasCode("REVIEW_DECISION_STATUS_INVALID"));
+  assert.throws(() => digestLaunchPolicyDecision(subjectDrift, fixture.policyRecord), hasCode("REVIEW_DECISION_STATUS_INVALID"));
+
+  const violation = structuredClone(original);
+  violation.evaluations[0].state = "violated";
+  violation.evaluations = canonicalSort(violation.evaluations);
+  violation.digest = unsafeDecisionDigest(violation);
+  assert.throws(() => canonicalLaunchPolicyDecision(violation, fixture.policyRecord), hasCode("REVIEW_DECISION_STATUS_INVALID"));
+  assert.throws(() => digestLaunchPolicyDecision(violation, fixture.policyRecord), hasCode("REVIEW_DECISION_STATUS_INVALID"));
+});
+
+test("canonical validation reconstructs analyzer and every finding field from trusted policy", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const input = validInput(fixture.policyRecord);
+  input.evaluations.find(({ ruleId }) => ruleId === "CANARY.EXACT_PUBLIC_SOURCE").state = "violated";
+  const original = evaluate(fixture, input);
+  assert.equal(original.status, "changes_requested");
+
+  const analyzer = structuredClone(original);
+  analyzer.evaluations.find(({ ruleId }) => ruleId === "CANARY.EXACT_PUBLIC_SOURCE").analyzer = { kind: "llm", id: "llm-1" };
+  analyzer.evaluations = canonicalSort(analyzer.evaluations);
+  analyzer.digest = unsafeDecisionDigest(analyzer);
+  assert.throws(() => canonicalLaunchPolicyDecision(analyzer, fixture.policyRecord), hasCode("REVIEW_DECISION_POLICY_PROJECTION_INVALID"));
+  assert.throws(() => digestLaunchPolicyDecision(analyzer, fixture.policyRecord), hasCode("REVIEW_DECISION_POLICY_PROJECTION_INVALID"));
+
+  for (const mutate of [
+    (finding) => { finding.requirement = "Attacker-authored requirement."; },
+    (finding) => { finding.severity = "required"; },
+    (finding) => { finding.enforcement.owner = "maintainer"; },
+    (finding) => { finding.enforcement.handlerId = "attacker-handler-v1"; }
+  ]) {
+    const decision = structuredClone(original);
+    mutate(decision.findings[0]);
+    decision.findings = canonicalSort(decision.findings);
+    decision.digest = unsafeDecisionDigest(decision);
+    assert.throws(
+      () => canonicalLaunchPolicyDecision(decision, fixture.policyRecord),
+      hasCode("REVIEW_DECISION_POLICY_PROJECTION_INVALID")
+    );
+    assert.throws(
+      () => digestLaunchPolicyDecision(decision, fixture.policyRecord),
+      hasCode("REVIEW_DECISION_POLICY_PROJECTION_INVALID")
+    );
+  }
 });
 
 test("new schemas compile strictly and validate examples and decisions", (t) => {
@@ -268,6 +340,17 @@ test("new schemas compile strictly and validate examples and decisions", (t) => 
     const decision = evaluate(fixture, input);
     assert.equal(validateDecision(decision), true, `${name}: ${JSON.stringify(validateDecision.errors)}`);
   }
+
+  const passed = evaluate(fixture, validInput(fixture.policyRecord));
+  const contradicted = structuredClone(passed);
+  contradicted.evaluations[0].state = "violated";
+  assert.equal(validateDecision(contradicted), false, "passed schema must reject a violation evaluation");
+
+  const pendingInput = validInput(fixture.policyRecord);
+  pendingInput.evaluations.pop();
+  const pending = structuredClone(evaluate(fixture, pendingInput));
+  pending.evaluations[0].state = "violated";
+  assert.equal(validateDecision(pending), false, "pending schema must reject a violation evaluation");
 });
 
 test("published enabled examples reproduce against their exact recorded policy snapshot", () => {
@@ -295,4 +378,13 @@ function readJson(relativePath) {
 
 function hasCode(code) {
   return (error) => error?.code === code;
+}
+
+function canonicalSort(values) {
+  return [...values].sort((left, right) => Buffer.compare(Buffer.from(canonicalJson(left)), Buffer.from(canonicalJson(right))));
+}
+
+function unsafeDecisionDigest(decision) {
+  const withoutDigest = Object.fromEntries(Object.entries(decision).filter(([key]) => key !== "digest"));
+  return `sha256:${crypto.createHash("sha256").update(canonicalJson(withoutDigest), "utf8").digest("hex")}`;
 }

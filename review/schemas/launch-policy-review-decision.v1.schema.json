@@ -1,6 +1,7 @@
 {
   "$id": "https://programmable.money/schemas/launch-policy-review-decision.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Structural validation is necessary but not sufficient. Canonical semantic validation requires the exact trusted Git policy record.",
   "$defs": {
     "advisory": {
       "additionalProperties": false,
@@ -183,6 +184,10 @@
       "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"], "type": "object" },
       "then": {
         "properties": {
+          "evaluations": {
+            "items": { "properties": { "state": { "const": "passed" } }, "required": ["state"], "type": "object" },
+            "type": "array"
+          },
           "findings": { "maxItems": 0, "type": "array" },
           "outcome": { "enum": ["BUILT_NOT_REVIEWED", "CANARY_WORKFLOW_PASSED"] },
           "pendingRuleIds": { "maxItems": 0, "type": "array" }
@@ -193,11 +198,31 @@
     },
     {
       "if": { "properties": { "status": { "const": "changes_requested" } }, "required": ["status"], "type": "object" },
-      "then": { "properties": { "findings": { "minItems": 1, "type": "array" } }, "type": "object" }
+      "then": {
+        "properties": {
+          "evaluations": {
+            "contains": { "properties": { "state": { "const": "violated" } }, "required": ["state"], "type": "object" },
+            "minContains": 1,
+            "type": "array"
+          },
+          "findings": { "minItems": 1, "type": "array" }
+        },
+        "type": "object"
+      }
     },
     {
       "if": { "properties": { "status": { "const": "analysis_pending" } }, "required": ["status"], "type": "object" },
-      "then": { "properties": { "findings": { "maxItems": 0, "type": "array" }, "pendingRuleIds": { "minItems": 1, "type": "array" } }, "type": "object" }
+      "then": {
+        "properties": {
+          "evaluations": {
+            "items": { "properties": { "state": { "enum": ["analysis_pending", "passed"] } }, "required": ["state"], "type": "object" },
+            "type": "array"
+          },
+          "findings": { "maxItems": 0, "type": "array" },
+          "pendingRuleIds": { "minItems": 1, "type": "array" }
+        },
+        "type": "object"
+      }
     },
     {
       "if": { "properties": { "status": { "enum": ["policy_drift", "profile_disabled", "subject_drift"] } }, "required": ["status"], "type": "object" },

@@ -863,7 +863,7 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "docs/builder/intake-status.json",
     "docs/DISCOVERY_CONTRACT.md",
     "registry/schema/project.schema.json",
-    "review/policy.v1.json",
+    "review/launch-policy-review-core.mjs",
     "scripts/acceptance-entitlement-core.mjs",
     "scripts/compile-launch-entitlement.mjs",
     "scripts/test/schema-validator/package.json",

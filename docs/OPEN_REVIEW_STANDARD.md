@@ -60,7 +60,9 @@ Every decision has this fixed authority:
 ```
 
 Decisions contain no timestamps. Their digest covers the deterministic canonical decision bytes, including exact
-policy and subject identity.
+policy and subject identity. Canonical validation and digest recomputation additionally require the exact trusted policy
+record returned by the fixed Git reader. They re-derive binding drift, subject drift, applicability, analyzer identity,
+pending rules, findings, status, and outcome from those trusted bytes; a digest by itself is not authenticity.
 
 ## Schemas and examples
 
@@ -76,6 +78,8 @@ a later base correctly returns `policy_drift`.
 
 The generic protected interface is `evaluateTrustedLaunchPolicyReview({ input, repositoryRoot, expectedBaseCommit })`.
 The surrounding protected workflow owns those trusted checkout arguments; applicant input does not.
+Downstream consumers use `canonicalLaunchPolicyDecision(decision, trustedPolicyRecord)` and
+`digestLaunchPolicyDecision(decision, trustedPolicyRecord)`. Neither accepts a caller-fabricated policy-shaped object.
 
 ## Legacy Open Review compatibility
 

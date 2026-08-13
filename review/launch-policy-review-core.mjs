@@ -103,6 +103,7 @@ export function evaluateTrustedLaunchPolicyReview(options) {
   if (!profile.enabled) {
     for (const evaluation of input.evaluations) advisories.push(unboundEvaluationAdvisory(evaluation));
     return createDecision({
+      policyRecord,
       input,
       trustedPolicy,
       currentPolicyBinding: null,
@@ -119,6 +120,7 @@ export function evaluateTrustedLaunchPolicyReview(options) {
   const currentPolicyBinding = buildLaunchPolicyBinding(policyRecord, input.profileId);
   if (!compareLaunchPolicyBindings(input.expectedPolicyBinding, currentPolicyBinding)) {
     return createDecision({
+      policyRecord,
       input,
       trustedPolicy,
       currentPolicyBinding,
@@ -134,6 +136,7 @@ export function evaluateTrustedLaunchPolicyReview(options) {
 
   if (canonicalJson(input.expectedSubject) !== canonicalJson(input.currentSubject)) {
     return createDecision({
+      policyRecord,
       input,
       trustedPolicy,
       currentPolicyBinding,
@@ -190,6 +193,7 @@ export function evaluateTrustedLaunchPolicyReview(options) {
       ? "analysis_pending"
       : "passed";
   return createDecision({
+    policyRecord,
     input,
     trustedPolicy,
     currentPolicyBinding,
@@ -203,17 +207,18 @@ export function evaluateTrustedLaunchPolicyReview(options) {
   });
 }
 
-export function canonicalLaunchPolicyDecision(decision) {
-  validateLaunchPolicyDecision(decision);
+export function canonicalLaunchPolicyDecision(decision, trustedPolicyRecord) {
+  validateLaunchPolicyDecision(decision, trustedPolicyRecord, { verifyDigest: true });
   return canonicalJson(decision);
 }
 
-export function digestLaunchPolicyDecision(decision) {
-  const value = decisionWithoutDigest(decision);
-  return `sha256:${crypto.createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
+export function digestLaunchPolicyDecision(decision, trustedPolicyRecord) {
+  validateLaunchPolicyDecision(decision, trustedPolicyRecord, { verifyDigest: false });
+  return hashLaunchPolicyDecision(decision);
 }
 
 function createDecision({
+  policyRecord,
   input,
   trustedPolicy,
   currentPolicyBinding,
@@ -244,13 +249,13 @@ function createDecision({
   };
   const decision = {
     ...decisionWithoutDigestValue,
-    digest: `sha256:${crypto.createHash("sha256").update(canonicalJson(decisionWithoutDigestValue), "utf8").digest("hex")}`
+    digest: hashLaunchPolicyDecision(decisionWithoutDigestValue)
   };
-  validateLaunchPolicyDecision(decision);
+  validateLaunchPolicyDecision(decision, policyRecord, { verifyDigest: true });
   return deepFreeze(decision);
 }
 
-function validateLaunchPolicyDecision(decision) {
+function validateLaunchPolicyDecision(decision, trustedPolicyRecord, { verifyDigest }) {
   requirePlainObject(decision, "review decision", "REVIEW_DECISION_INVALID");
   exactKeys(decision, [...DECISION_KEYS, "digest"], "REVIEW_DECISION_FIELDS_INVALID", "Review decision");
   if (decision.schemaVersion !== DECISION_SCHEMA_VERSION || !PROFILES.has(decision.profileId) || !STATUS_VALUES.has(decision.status)) {
@@ -270,57 +275,16 @@ function validateLaunchPolicyDecision(decision) {
   validateRuleIdSet(decision.notApplicableRuleIds, "notApplicableRuleIds");
   validateFindings(decision.findings, decision.evaluations);
   validateAdvisories(decision.advisories);
-
-  if (decision.profileId === "production-launch") {
-    if (decision.expectedPolicyBinding !== null || decision.currentPolicyBinding !== null || decision.status !== "profile_disabled") {
-      fail("REVIEW_DECISION_PROFILE_INVALID", "Disabled production review cannot carry an enabled policy binding or another status.");
-    }
-  } else {
-    validatePolicyBinding(decision.expectedPolicyBinding);
-    validatePolicyBinding(decision.currentPolicyBinding);
-    if (
-      decision.expectedPolicyBinding.profileId !== decision.profileId
-      || decision.currentPolicyBinding.profileId !== decision.profileId
-      || decision.status === "profile_disabled"
-    ) {
-      fail("REVIEW_DECISION_PROFILE_INVALID", "Enabled review profile and policy bindings must match exactly.");
-    }
-    for (const key of ["baseCommit", "baseTree", "gitBlobOid", "numericRepositoryId", "path", "policyId", "policyVersion", "profileId", "repository", "sha256"]) {
-      if (decision.currentPolicyBinding[key] !== decision.trustedPolicy[key]) {
-        fail("REVIEW_DECISION_POLICY_INVALID", "Current binding and trusted policy projection must describe the same exact policy.");
-      }
-    }
-  }
-
-  const expectedOutcome = decision.profileId === "build"
-    ? "BUILT_NOT_REVIEWED"
-    : decision.profileId === "workflow-canary"
-      ? "CANARY_WORKFLOW_PASSED"
-      : null;
-  if ((decision.status === "passed") !== (decision.outcome !== null) || (decision.status === "passed" && decision.outcome !== expectedOutcome)) {
-    fail("REVIEW_DECISION_OUTCOME_INVALID", "Only a passed enabled profile may expose its declared non-authoritative outcome.");
-  }
-  if (decision.status === "passed" && (decision.findings.length !== 0 || decision.pendingRuleIds.length !== 0)) {
-    fail("REVIEW_DECISION_STATUS_INVALID", "Passed decisions cannot contain findings or pending rules.");
-  }
-  if (decision.status === "changes_requested" && decision.findings.length === 0) {
-    fail("REVIEW_DECISION_STATUS_INVALID", "Changes requested requires at least one policy-projected finding.");
-  }
-  if (decision.status === "analysis_pending" && (decision.pendingRuleIds.length === 0 || decision.findings.length !== 0)) {
-    fail("REVIEW_DECISION_STATUS_INVALID", "Analysis pending requires pending rules and no violation finding.");
-  }
-  if (new Set([...decision.pendingRuleIds, ...decision.notApplicableRuleIds]).size !== decision.pendingRuleIds.length + decision.notApplicableRuleIds.length) {
-    fail("REVIEW_DECISION_STATUS_INVALID", "Pending and not-applicable rule sets must be disjoint.");
-  }
-  if (new Set(["policy_drift", "profile_disabled", "subject_drift"]).has(decision.status)) {
-    if ([decision.evaluations, decision.pendingRuleIds, decision.notApplicableRuleIds, decision.findings].some((items) => items.length !== 0)) {
-      fail("REVIEW_DECISION_STATUS_INVALID", "Drift and disabled terminal decisions cannot contain semantic results.");
-    }
-  }
-  if (!SHA256.test(decision.digest ?? "") || decision.digest !== digestLaunchPolicyDecision(decision)) {
+  validateDecisionAgainstTrustedPolicy(decision, trustedPolicyRecord);
+  if (verifyDigest && (!SHA256.test(decision.digest ?? "") || decision.digest !== hashLaunchPolicyDecision(decision))) {
     fail("REVIEW_DECISION_DIGEST_INVALID", "Review decision digest does not bind the exact canonical decision.");
   }
   return true;
+}
+
+function hashLaunchPolicyDecision(decision) {
+  const value = decisionWithoutDigest(decision);
+  return `sha256:${crypto.createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
 }
 
 function decisionWithoutDigest(decision) {
@@ -364,6 +328,134 @@ function validateTrustedPolicyProjection(value, profileId) {
   ) {
     fail("REVIEW_DECISION_POLICY_INVALID", "Trusted policy projection is invalid.");
   }
+}
+
+function validateDecisionAgainstTrustedPolicy(decision, policyRecord) {
+  if (!isPlainObject(policyRecord)) {
+    fail("REVIEW_TRUSTED_POLICY_REQUIRED", "Canonical review validation requires the exact trusted Git policy record.");
+  }
+  try {
+    // The build binding is an authority-neutral trust probe. Task 1 permits it
+    // only for the exact WeakSet-bound record returned by the trusted Git reader
+    // and revalidates the record's canonical bytes on every call.
+    buildLaunchPolicyBinding(policyRecord, "build");
+  } catch (error) {
+    fail("REVIEW_TRUSTED_POLICY_REQUIRED", "Canonical review validation requires the exact trusted Git policy record.", error);
+  }
+
+  const profile = selectLaunchPolicyProfile(policyRecord.policy, decision.profileId);
+  const exactProjection = projectTrustedPolicy(policyRecord, decision.profileId);
+  if (canonicalJson(decision.trustedPolicy) !== canonicalJson(exactProjection)) {
+    fail("REVIEW_DECISION_POLICY_PROJECTION_INVALID", "Decision policy identity does not match the exact trusted policy record.");
+  }
+
+  if (!profile.enabled) {
+    if (
+      decision.profileId !== "production-launch"
+      || decision.expectedPolicyBinding !== null
+      || decision.currentPolicyBinding !== null
+      || decision.status !== "profile_disabled"
+      || decision.outcome !== null
+      || !semanticArraysEmpty(decision)
+    ) {
+      fail("REVIEW_DECISION_STATUS_INVALID", "A disabled profile can emit only the empty profile_disabled decision.");
+    }
+    return;
+  }
+
+  validatePolicyBinding(decision.expectedPolicyBinding);
+  validatePolicyBinding(decision.currentPolicyBinding);
+  const exactCurrentBinding = buildLaunchPolicyBinding(policyRecord, decision.profileId);
+  if (!compareLaunchPolicyBindings(decision.currentPolicyBinding, exactCurrentBinding)) {
+    fail("REVIEW_DECISION_POLICY_PROJECTION_INVALID", "Current decision binding does not match the exact trusted policy record.");
+  }
+  const bindingMatches = compareLaunchPolicyBindings(decision.expectedPolicyBinding, exactCurrentBinding);
+  const subjectMatches = canonicalJson(decision.expectedSubject) === canonicalJson(decision.currentSubject);
+
+  if (decision.status === "policy_drift") {
+    if (bindingMatches || decision.outcome !== null || !semanticArraysEmpty(decision)) {
+      fail("REVIEW_DECISION_STATUS_INVALID", "Policy drift requires one well-formed unequal recorded binding and no semantic result.");
+    }
+    return;
+  }
+  if (!bindingMatches) {
+    fail("REVIEW_DECISION_STATUS_INVALID", "A non-drift decision requires exact expected and current policy binding equality.");
+  }
+
+  if (decision.status === "subject_drift") {
+    if (subjectMatches || decision.outcome !== null || !semanticArraysEmpty(decision)) {
+      fail("REVIEW_DECISION_STATUS_INVALID", "Subject drift requires unequal closed subjects and no semantic result.");
+    }
+    return;
+  }
+  if (!subjectMatches) {
+    fail("REVIEW_DECISION_STATUS_INVALID", "A semantic decision requires exact expected and current subject equality.");
+  }
+  if (!new Set(["analysis_pending", "changes_requested", "passed"]).has(decision.status)) {
+    fail("REVIEW_DECISION_STATUS_INVALID", "Enabled policy profiles support only drift or derived semantic statuses.");
+  }
+
+  validateSemanticRuleClosure(decision, policyRecord, profile);
+}
+
+function validateSemanticRuleClosure(decision, policyRecord, profile) {
+  const activeRules = rulesForProfile(policyRecord.policy, decision.profileId);
+  const applicableRules = activeRules.filter((rule) => ruleApplies(rule, decision.currentSubject));
+  const nonApplicableRuleIds = activeRules
+    .filter((rule) => !ruleApplies(rule, decision.currentSubject))
+    .map(({ id }) => id)
+    .sort(compareUtf8);
+  if (canonicalJson(decision.notApplicableRuleIds) !== canonicalJson(nonApplicableRuleIds)) {
+    fail("REVIEW_DECISION_POLICY_PROJECTION_INVALID", "Not-applicable Rule IDs must be derived exactly from trusted policy applicability.");
+  }
+
+  const applicableById = new Map(applicableRules.map((rule) => [rule.id, rule]));
+  const evaluationById = new Map();
+  for (const evaluation of decision.evaluations) {
+    const rule = applicableById.get(evaluation.ruleId);
+    if (
+      !rule
+      || rule.enforcement.mode !== "deterministic"
+      || evaluation.analyzer.kind !== rule.enforcement.mode
+      || evaluation.analyzer.id !== rule.enforcement.handlerId
+    ) {
+      fail("REVIEW_DECISION_POLICY_PROJECTION_INVALID", "Every authoritative evaluation must match one applicable deterministic trusted-policy rule and handler.");
+    }
+    evaluationById.set(evaluation.ruleId, evaluation);
+  }
+
+  const exactPendingRuleIds = [];
+  const exactFindings = [];
+  for (const rule of applicableRules) {
+    const evaluation = evaluationById.get(rule.id);
+    if (!evaluation || evaluation.state === "analysis_pending") exactPendingRuleIds.push(rule.id);
+    if (evaluation?.state === "violated") exactFindings.push(projectFinding(rule, evaluation));
+  }
+  exactPendingRuleIds.sort(compareUtf8);
+  const exactSortedFindings = sortByCanonical(exactFindings);
+  if (canonicalJson(decision.pendingRuleIds) !== canonicalJson(exactPendingRuleIds)) {
+    fail("REVIEW_DECISION_STATUS_INVALID", "Pending Rule IDs must equal missing and analysis-pending applicable policy rules.");
+  }
+  const exactStatus = exactFindings.length > 0
+    ? "changes_requested"
+    : exactPendingRuleIds.length > 0
+      ? "analysis_pending"
+      : "passed";
+  const exactOutcome = exactStatus === "passed" ? profile.outcome : null;
+  if (decision.status !== exactStatus) {
+    fail("REVIEW_DECISION_STATUS_INVALID", "Status and outcome must be derived exactly from trusted-policy evaluation closure.");
+  }
+  if (decision.outcome !== exactOutcome) {
+    fail("REVIEW_DECISION_OUTCOME_INVALID", "Outcome must be derived exactly from the trusted enabled profile and semantic status.");
+  }
+  if (canonicalJson(decision.findings) !== canonicalJson(exactSortedFindings)) {
+    fail("REVIEW_DECISION_POLICY_PROJECTION_INVALID", "Every finding field must be reconstructed exactly from trusted policy and its violation evaluation.");
+  }
+}
+
+function semanticArraysEmpty(decision) {
+  return [decision.evaluations, decision.pendingRuleIds, decision.notApplicableRuleIds, decision.findings]
+    .every((items) => items.length === 0);
 }
 
 function projectFinding(rule, evaluation) {
