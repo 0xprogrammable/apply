@@ -72,9 +72,11 @@ pending rules, findings, status, and outcome from those trusted bytes; a digest 
 - [`canary-analysis-pending.json`](../review/examples/canary-analysis-pending.json)
 - [`production-disabled.json`](../review/examples/production-disabled.json)
 
-The enabled-profile examples bind the exact documented Submit Launch snapshot in their eleven-field binding. Consumers
-must replace that record with the current protected-base binding before a new review; reusing the example binding against
-a later base correctly returns `policy_drift`.
+The enabled-profile examples are immutable snapshot fixtures. They bind exact Submit Launch commit
+`599cbb7f9e6c6daf8a1aeca85340429db5a4f134` and policy 1.1.0 in their eleven-field binding; they are not current-HEAD
+bindings. A protected consumer never treats those example fields as current. It resolves the live exact protected base
+it was invoked for and requires the applicant's binding to match it. Reusing a snapshot fixture against a later base
+correctly returns `policy_drift`.
 
 The generic protected interface is `evaluateTrustedLaunchPolicyReview({ input, repositoryRoot, expectedBaseCommit })`.
 The surrounding protected workflow owns those trusted checkout arguments; applicant input does not.

@@ -96,7 +96,7 @@ npm run review -- review/examples/disclosed-high-fee.json
 ```
 
 The bundled legacy example returns `profile_disabled` because production launch is currently disabled. Old obligations
-and witnesses survive only as bounded advisories. Inspect the [current examples](review/examples),
+and witnesses survive only as bounded advisories. Inspect the [bundled snapshot examples](review/examples),
 [policy-bound input schema](review/schemas/launch-policy-review-input.v1.schema.json), and
 [policy-bound decision schema](review/schemas/launch-policy-review-decision.v1.schema.json). The old
 [`open-review-input.v1`](review/schemas/open-review-input.v1.schema.json) grammar remains only as a compatibility input.

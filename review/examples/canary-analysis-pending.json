@@ -5,14 +5,14 @@
     "schemaVersion": "programmable.launch-policy-binding.v1",
     "repository": "0xprogrammable/submit-launch",
     "numericRepositoryId": "1320171831",
-    "baseCommit": "616c55c0584a02b17f64e9a884d3c0d58e0cf114",
-    "baseTree": "66d124b3b6d8db4ea3d7270b1e76c90f5d074bf4",
+    "baseCommit": "599cbb7f9e6c6daf8a1aeca85340429db5a4f134",
+    "baseTree": "3a3ffe028ff3e528bbdfb49d10f287a5d6f23b5a",
     "path": "policy/launch-policy.v1.json",
-    "gitBlobOid": "ca8fb8160cc1c59456a47c0c4d2c65dd8f4bdace",
+    "gitBlobOid": "9310a2a83b13430686aadc07a726cca754f2dc70",
     "policyId": "programmable-central-launch-policy",
-    "policyVersion": "1.0.0",
+    "policyVersion": "1.1.0",
     "profileId": "workflow-canary",
-    "sha256": "sha256:018dcaeca64d340ac38049c38777db0a07c8b5c41117260e244b41cff6aa17b6"
+    "sha256": "sha256:e157665625b2a8cf9e62ed33ba62b087d7a7b7c4027da83b74b9476a355d1fe4"
   },
   "expectedSubject": {
     "numericRepositoryId": "1001",

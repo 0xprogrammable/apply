@@ -388,8 +388,8 @@ test("new schemas compile strictly and validate examples and decisions", (t) => 
   assert.equal(validateDecision(pending), false, "pending schema must reject a violation evaluation");
 });
 
-test("published enabled examples reproduce against their exact recorded policy snapshot", () => {
-  const expectedBaseCommit = "616c55c0584a02b17f64e9a884d3c0d58e0cf114";
+test("published immutable snapshot examples reproduce only against their exact recorded policy commit", () => {
+  const expectedBaseCommit = "599cbb7f9e6c6daf8a1aeca85340429db5a4f134";
   const passed = evaluateTrustedLaunchPolicyReview({
     input: readJson("review/examples/canary-passed.json"),
     repositoryRoot: root,
@@ -404,7 +404,7 @@ test("published enabled examples reproduce against their exact recorded policy s
     expectedBaseCommit
   });
   assert.equal(pending.status, "analysis_pending");
-  assert.deepEqual(pending.pendingRuleIds, ["CANARY.NO_REAL_USER_FUNDS", "CANARY.REPRODUCIBLE_INERT_ARTIFACT"]);
+  assert.deepEqual(pending.pendingRuleIds, ["CANARY.NO_REAL_USER_FUNDS", "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"]);
 });
 
 function readJson(relativePath) {
