@@ -26,13 +26,23 @@ Signing bytes are UTF-8
 `programmable.submit-launch.protected-canary-eligibility-command.v1`, one zero byte, then canonical JSON of the inner
 command. This domain is distinct from the legacy production-entitlement domain. The signature is canonical unpadded
 base64url Ed25519 and `keyId` is SHA-256 of the pinned public key's SPKI DER bytes.
+A dedicated Canary key is recommended operationally even though the separate domain prevents cross-protocol signature
+reuse when one physical key is shared.
 
 The command includes the full current workflow-canary policy binding. Its validity window must be positive, no longer
 than 900,000 milliseconds, and the compiler and Website both require `issuedAt <= now <= validUntil`.
 
-`eligibilityId` is SHA-256 of the separate eligibility-id domain plus the canonical immutable application, PR, source,
-policy, Workflow Canary result, and eligibility objects. Reissuing the same exact result deduplicates to the same id;
-changing application bytes/revision, PR head or merge, source, policy, result, or review decision changes the id.
+It also signs one closed Website audience: `programmable.market:hidden-canary:preview`,
+`programmable.market:hidden-canary:staging`, or `programmable.market:hidden-canary:production`. The Website verifier
+must receive its exact expected audience from trusted deployment configuration. An audience copied from the envelope
+is never authority, and a command signed for one environment is rejected in every other environment. The word
+`production` here names the Website environment only; all production routing, real-funds, and launch-authority flags
+remain false.
+
+`eligibilityId` is SHA-256 of the separate eligibility-id domain plus the canonical immutable audience, application,
+PR, source, policy, Workflow Canary result, and eligibility objects. Reissuing the same exact result for the same
+audience deduplicates to the same id; changing audience, application bytes/revision, PR head or merge, source, policy,
+result, or review decision changes the id.
 Issuer display metadata, timestamps, key, and signature are excluded from that id.
 
 ## Envelope meaning
@@ -49,9 +59,9 @@ The output is `programmable.canary-eligibility-envelope.v1` and always contains:
 }
 ```
 
-The envelope embeds the full application and full Workflow Canary result so the Website can reconstruct their exact
-canonical bytes and rerun the same parsers against its own pinned key and exact trusted policy record. The envelope's
-policy binding is never used as the source of policy authority.
+The envelope embeds the signed audience, full application, and full Workflow Canary result so the Website can
+reconstruct their exact canonical bytes and rerun the same parsers against its own expected audience, pinned key, and
+exact trusted policy record. Neither the envelope's audience nor its policy binding is used as the source of authority.
 
 Compile without writing repository state:
 

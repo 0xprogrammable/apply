@@ -4,6 +4,7 @@
   "additionalProperties": false,
   "properties": {
     "applicationDocument": { "$ref": "https://programmable.money/schemas/workflow-canary-application-v1.schema.json" },
+    "audience": { "$ref": "https://programmable.money/schemas/protected-canary-eligibility-command-v1.schema.json#/$defs/audience" },
     "authorization": {
       "additionalProperties": false,
       "properties": {
@@ -22,7 +23,7 @@
     "state": { "const": "eligible" },
     "workflowCanaryResult": { "$ref": "https://programmable.money/schemas/workflow-canary-result-v1.schema.json" }
   },
-  "required": ["schemaVersion", "state", "canaryCommand", "authorization", "applicationDocument", "workflowCanaryResult", "eligibility", "eligibilityId"],
+  "required": ["schemaVersion", "state", "audience", "canaryCommand", "authorization", "applicationDocument", "workflowCanaryResult", "eligibility", "eligibilityId"],
   "title": "Programmable Hidden Canary Eligibility Envelope V1",
   "type": "object",
   "$defs": {

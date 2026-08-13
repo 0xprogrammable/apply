@@ -35,6 +35,8 @@ import { classifyPublicIntakePullRequest } from "../scripts/verify-public-hook-a
 
 const root = path.resolve(import.meta.dirname, "..");
 const NOW = new Date("2026-08-13T10:05:00.000Z");
+const STAGING_AUDIENCE = "programmable.market:hidden-canary:staging";
+const PRODUCTION_AUDIENCE = "programmable.market:hidden-canary:production";
 const SOURCE = Object.freeze({
   repository: "alice/example-hook",
   numericRepositoryId: "123456789",
@@ -50,6 +52,8 @@ test("signed canary pass produces only deterministic hidden non-production eligi
   assert.deepEqual(first, second);
   assert.equal(first.schemaVersion, CANARY_ELIGIBILITY_ENVELOPE_VERSION);
   assert.equal(first.state, "eligible");
+  assert.equal(first.audience, STAGING_AUDIENCE);
+  assert.equal(first.canaryCommand.audience, STAGING_AUDIENCE);
   assert.deepEqual(first.eligibility, {
     surface: "hidden-canary",
     publicDiscovery: false,
@@ -65,10 +69,53 @@ test("signed canary pass produces only deterministic hidden non-production eligi
       envelope: first,
       trustedAuthorityPublicKey: fixture.publicKey,
       trustedPolicyRecord: fixture.policyRecord,
+      expectedAudience: STAGING_AUDIENCE,
       expectedPolicyBinding: fixture.policyBinding,
       now: NOW
     }).eligibilityId,
     first.eligibilityId
+  );
+});
+
+test("signed audience prevents Canary eligibility reuse across Website environments", async (t) => {
+  const fixture = await createEligibilityFixture(t);
+  const staging = compileFixture(fixture);
+  assert.equal(verifyWebsite(fixture, staging, NOW, STAGING_AUDIENCE).state, "eligible");
+  assert.throws(
+    () => verifyWebsite(fixture, staging, NOW, PRODUCTION_AUDIENCE),
+    hasCode("CANARY_AUDIENCE_MISMATCH")
+  );
+
+  const productionCommand = makeCommand(fixture, { audience: PRODUCTION_AUDIENCE });
+  const production = compileFixture(fixture, {
+    signedCommand: signFixtureCommand(fixture, productionCommand)
+  });
+  assert.equal(verifyWebsite(fixture, production, NOW, PRODUCTION_AUDIENCE).audience, PRODUCTION_AUDIENCE);
+  assert.throws(
+    () => verifyWebsite(fixture, production, NOW, STAGING_AUDIENCE),
+    hasCode("CANARY_AUDIENCE_MISMATCH")
+  );
+  assert.notEqual(production.eligibilityId, staging.eligibilityId);
+
+  const unsupported = makeCommand(fixture, { audience: "programmable.market:hidden-canary:local" });
+  assert.throws(() => canaryEligibilitySigningBytes(unsupported), hasCode("CANARY_AUDIENCE_INVALID"));
+
+  assert.throws(
+    () => verifyWebsiteCanaryEligibility({
+      envelope: staging,
+      trustedAuthorityPublicKey: fixture.publicKey,
+      trustedPolicyRecord: fixture.policyRecord,
+      expectedPolicyBinding: fixture.policyBinding,
+      now: NOW
+    }),
+    hasCode("CANARY_EXPECTED_AUDIENCE_INVALID")
+  );
+
+  const transplanted = structuredClone(staging);
+  transplanted.audience = PRODUCTION_AUDIENCE;
+  assert.throws(
+    () => verifyWebsite(fixture, transplanted, NOW, PRODUCTION_AUDIENCE),
+    hasCode("CANARY_ENVELOPE_INVALID")
   );
 });
 
@@ -275,6 +322,7 @@ test("Website verifier rejects legacy build unsigned and tampered envelopes", as
       envelope,
       trustedAuthorityPublicKey: fixture.publicKey,
       trustedPolicyRecord: fixture.policyRecord,
+      expectedAudience: STAGING_AUDIENCE,
       expectedPolicyBinding: staleBinding,
       now: NOW
     }),
@@ -444,6 +492,7 @@ function makeCommand(fixture, overrides = {}) {
   return {
     schemaVersion: CANARY_ELIGIBILITY_COMMAND_VERSION,
     action: "issue-hidden-canary-eligibility",
+    audience: overrides.audience ?? STAGING_AUDIENCE,
     issuedAt: overrides.issuedAt ?? "2026-08-13T10:00:00.000Z",
     issuedBy: {
       githubLogin: "programmable-maintainer",
@@ -504,11 +553,12 @@ function compileFixture(fixture, overrides = {}) {
   });
 }
 
-function verifyWebsite(fixture, envelope, now = NOW) {
+function verifyWebsite(fixture, envelope, now = NOW, expectedAudience = STAGING_AUDIENCE) {
   return verifyWebsiteCanaryEligibility({
     envelope,
     trustedAuthorityPublicKey: fixture.publicKey,
     trustedPolicyRecord: fixture.policyRecord,
+    expectedAudience,
     expectedPolicyBinding: fixture.policyBinding,
     now
   });

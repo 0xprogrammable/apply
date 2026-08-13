@@ -32,6 +32,13 @@
       "type": "object"
     },
     "applicationId": { "maxLength": 128, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+    "audience": {
+      "enum": [
+        "programmable.market:hidden-canary:preview",
+        "programmable.market:hidden-canary:staging",
+        "programmable.market:hidden-canary:production"
+      ]
+    },
     "authorization": {
       "additionalProperties": false,
       "properties": {
@@ -65,6 +72,7 @@
       "properties": {
         "action": { "const": "issue-hidden-canary-eligibility" },
         "application": { "$ref": "#/$defs/application" },
+        "audience": { "$ref": "#/$defs/audience" },
         "eligibility": { "$ref": "#/$defs/eligibility" },
         "issuedAt": { "format": "date-time", "type": "string" },
         "issuedBy": {
@@ -85,7 +93,7 @@
         "validUntil": { "format": "date-time", "type": "string" },
         "workflowCanaryResult": { "$ref": "#/$defs/resultBinding" }
       },
-      "required": ["schemaVersion", "action", "issuedAt", "issuedBy", "validUntil", "application", "pullRequest", "source", "policyBinding", "workflowCanaryResult", "eligibility", "supersedes"],
+      "required": ["schemaVersion", "action", "audience", "issuedAt", "issuedBy", "validUntil", "application", "pullRequest", "source", "policyBinding", "workflowCanaryResult", "eligibility", "supersedes"],
       "type": "object"
     },
     "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },

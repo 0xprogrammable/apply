@@ -18,6 +18,11 @@ export const CANARY_ELIGIBILITY_COMMAND_VERSION = "programmable.protected-canary
 export const SIGNED_CANARY_ELIGIBILITY_COMMAND_VERSION = "programmable.signed-protected-canary-eligibility-command.v1";
 export const CANARY_ELIGIBILITY_ENVELOPE_VERSION = "programmable.canary-eligibility-envelope.v1";
 export const MAXIMUM_CANARY_ELIGIBILITY_LIFETIME_MS = 15 * 60 * 1000;
+export const CANARY_ELIGIBILITY_AUDIENCES = Object.freeze([
+  "programmable.market:hidden-canary:preview",
+  "programmable.market:hidden-canary:staging",
+  "programmable.market:hidden-canary:production"
+]);
 
 const PROFILE_ID = "workflow-canary";
 const RESULT_VERSION = "programmable.workflow-canary-result.v1";
@@ -37,6 +42,7 @@ const OPAQUE_ID = /^[1-9][0-9]{0,63}$/u;
 const APPLICATION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const AUDIENCES = new Set(CANARY_ELIGIBILITY_AUDIENCES);
 const ELIGIBILITY = Object.freeze({
   surface: "hidden-canary",
   publicDiscovery: false,
@@ -92,6 +98,7 @@ export function compileCanaryEligibilityEnvelope({
   const envelope = {
     schemaVersion: CANARY_ELIGIBILITY_ENVELOPE_VERSION,
     state: "eligible",
+    audience: signedCommand.command.audience,
     canaryCommand: structuredClone(signedCommand.command),
     authorization: {
       ...structuredClone(signedCommand.authorization),
@@ -113,6 +120,7 @@ export function verifyWebsiteCanaryEligibility({
   envelope,
   trustedAuthorityPublicKey,
   trustedPolicyRecord,
+  expectedAudience,
   expectedPolicyBinding,
   now
 }) {
@@ -128,6 +136,10 @@ export function verifyWebsiteCanaryEligibility({
     fail("CANARY_ENVELOPE_UNSUPPORTED", "Unsigned, legacy, build, result-only, and partial objects are not Canary eligibility envelopes.");
   }
   validateEnvelopeShape(envelope);
+  validateAudience(expectedAudience, "CANARY_EXPECTED_AUDIENCE_INVALID");
+  if (envelope.audience !== expectedAudience || envelope.canaryCommand.audience !== expectedAudience) {
+    fail("CANARY_AUDIENCE_MISMATCH", "Canary eligibility is not signed for this exact Website environment.");
+  }
   const currentPolicyBinding = deriveCurrentPolicyBinding(trustedPolicyRecord);
   if (!compareLaunchPolicyBindings(expectedPolicyBinding, currentPolicyBinding)) {
     fail("CANARY_EXPECTED_POLICY_BINDING_MISMATCH", "Website policy expectation does not match the current exact trusted policy.");
@@ -342,12 +354,13 @@ function validateSignedCommand(value) {
 function validateCommand(command) {
   requireObject(command, "CANARY_COMMAND_INVALID");
   exactKeys(command, [
-    "action", "application", "eligibility", "issuedAt", "issuedBy", "policyBinding",
+    "action", "application", "audience", "eligibility", "issuedAt", "issuedBy", "policyBinding",
     "pullRequest", "schemaVersion", "source", "supersedes", "validUntil", "workflowCanaryResult"
   ], "CANARY_COMMAND_INVALID");
   if (command.schemaVersion !== CANARY_ELIGIBILITY_COMMAND_VERSION || command.action !== "issue-hidden-canary-eligibility") {
     fail("CANARY_COMMAND_UNSUPPORTED", "Canary eligibility command identity or action is unsupported.");
   }
+  validateAudience(command.audience, "CANARY_AUDIENCE_INVALID");
   canonicalTimestamp(command.issuedAt, "CANARY_COMMAND_TIME_INVALID");
   canonicalTimestamp(command.validUntil, "CANARY_COMMAND_TIME_INVALID");
   validateIssuer(command.issuedBy);
@@ -475,7 +488,7 @@ function validateResultBinding(value) {
 function validateEnvelopeShape(envelope) {
   requireObject(envelope, "CANARY_ENVELOPE_INVALID");
   exactKeys(envelope, [
-    "applicationDocument", "authorization", "canaryCommand", "eligibility", "eligibilityId",
+    "applicationDocument", "audience", "authorization", "canaryCommand", "eligibility", "eligibilityId",
     "schemaVersion", "state", "workflowCanaryResult"
   ], "CANARY_ENVELOPE_INVALID");
   if (
@@ -483,6 +496,7 @@ function validateEnvelopeShape(envelope) {
     || envelope.state !== "eligible"
     || !SHA256.test(envelope.eligibilityId ?? "")
   ) fail("CANARY_ENVELOPE_INVALID", "Canary eligibility envelope identity is malformed.");
+  validateAudience(envelope.audience, "CANARY_ENVELOPE_INVALID");
   try {
     validateCommand(envelope.canaryCommand);
   } catch (error) {
@@ -495,6 +509,7 @@ function validateEnvelopeShape(envelope) {
     || !/^ed25519:sha256:[0-9a-f]{64}$/u.test(envelope.authorization.keyId ?? "")
     || !/^[A-Za-z0-9_-]{86}$/u.test(envelope.authorization.signature ?? "")
     || !SHA256.test(envelope.authorization.signedCommandDigest ?? "")
+    || envelope.audience !== envelope.canaryCommand.audience
     || canonicalJson(envelope.eligibility) !== canonicalJson(ELIGIBILITY)
   ) fail("CANARY_ENVELOPE_INVALID", "Canary envelope authorization or non-production constants are malformed.");
   requireObject(envelope.applicationDocument, "CANARY_ENVELOPE_INVALID");
@@ -518,6 +533,7 @@ function validateTimeWindow(command, now) {
 function calculateEligibilityId(command) {
   const immutable = {
     application: command.application,
+    audience: command.audience,
     eligibility: command.eligibility,
     policyBinding: command.policyBinding,
     pullRequest: command.pullRequest,
@@ -525,6 +541,12 @@ function calculateEligibilityId(command) {
     workflowCanaryResult: command.workflowCanaryResult
   };
   return digest(Buffer.concat([ELIGIBILITY_ID_DOMAIN, Buffer.from(canonicalJson(immutable), "utf8")]));
+}
+
+function validateAudience(value, code) {
+  if (!AUDIENCES.has(value)) {
+    fail(code, "Canary audience must name one closed hidden-canary Website environment.");
+  }
 }
 
 function parseCanonicalJsonBytes(bytes, invalidCode, noncanonicalCode) {
