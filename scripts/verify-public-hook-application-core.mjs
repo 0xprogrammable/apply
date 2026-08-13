@@ -81,6 +81,7 @@ const REVIEW_FILES = Object.freeze([
   "compatibility-report.json",
   "evidence-index.json"
 ]);
+const EXECUTABLE_BUILDER_VENDOR_PREFIX = "vendor/programmable-v4-hook-builder/";
 const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   "acceptance/",
   "assets/",
@@ -89,7 +90,7 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   "review/",
   "scripts/test/schema-validator/",
   "test/",
-  "vendor/programmable-v4-hook-builder/"
+  EXECUTABLE_BUILDER_VENDOR_PREFIX
 ]);
 const REGISTRY_MAINTENANCE_FILES = new Set([
   ".github/CODEOWNERS",
@@ -168,7 +169,7 @@ const PROGRAMMABLE_FEE_SWAP_MODES = Object.freeze([
 ]);
 
 const DEFAULT_LIMITS = Object.freeze({
-  maximumChangedFiles: 256,
+  maximumChangedFiles: 700,
   maximumGitEntries: 200_000,
   maximumGitTreeBytes: 64 * 1024 * 1024,
   maximumFindings: 128,
@@ -2281,8 +2282,15 @@ function rejectUnsafeChangedEntries(changes) {
     if (change.after && (change.after.mode === "120000" || change.after.type === "commit" || change.after.mode === "160000")) {
       reject("LINKED_CONTENT_FORBIDDEN", "Candidate symlinks and submodules are forbidden in trusted intake paths.");
     }
-    if (change.after && (change.after.mode !== "100644" || change.after.type !== "blob")) {
-      reject("FILE_MODE_FORBIDDEN", "Changed intake files must be non-executable regular Git blobs.");
+    const allowedExecutableVendorBlob = change.after?.type === "blob"
+      && change.after.mode === "100755"
+      && change.path.startsWith(EXECUTABLE_BUILDER_VENDOR_PREFIX);
+    const allowedNonExecutableBlob = change.after?.type === "blob" && change.after.mode === "100644";
+    if (change.after && !allowedNonExecutableBlob && !allowedExecutableVendorBlob) {
+      reject(
+        "FILE_MODE_FORBIDDEN",
+        "Changed intake files must be regular Git blobs; executable mode is allowed only under the exact Builder vendor path."
+      );
     }
   }
 }

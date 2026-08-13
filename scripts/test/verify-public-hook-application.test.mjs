@@ -875,6 +875,55 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
   assert.equal(result.mode, "registry-maintenance");
 });
 
+test("bounded Registry maintenance accepts 700 changed files and rejects 701", async (t) => {
+  for (const [changedFileCount, expectedMode, expectedCode] of [
+    [700, "registry-maintenance", null],
+    [701, null, "TOO_MANY_CHANGED_FILES"]
+  ]) {
+    await t.test(String(changedFileCount), (t2) => {
+      const fixture = createRevisionPair(t2);
+      for (let index = 0; index < changedFileCount; index += 1) {
+        writeFile(
+          fixture.candidate,
+          `vendor/programmable-v4-hook-builder/capacity-fixture/file-${String(index).padStart(3, "0")}.txt`,
+          "bounded maintenance fixture\n"
+        );
+      }
+      const candidateCommit = commitAll(fixture.candidate, `${changedFileCount}-file registry maintenance change`);
+      const classify = () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+      if (expectedCode === null) {
+        const result = classify();
+        assert.equal(result.mode, expectedMode);
+        assert.equal(result.changes.length, changedFileCount);
+      } else {
+        assert.throws(classify, hasCode(expectedCode));
+      }
+    });
+  }
+});
+
+test("expanded maintenance capacity preserves the exact six-file application closure", async (t) => {
+  await t.test("six files", (t2) => {
+    const fixture = createRevisionPair(t2);
+    writePackage(fixture.candidate, makePackage());
+    const candidateCommit = commitAll(fixture.candidate, "closed six-file application");
+    const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+    assert.equal(result.mode, "application");
+    assert.equal(result.changes.length, PUBLIC_APPLICATION_FILES.length);
+  });
+
+  await t.test("seventh file", (t2) => {
+    const fixture = createRevisionPair(t2);
+    writePackage(fixture.candidate, makePackage());
+    writeFile(fixture.candidate, "submissions/example-hook/extra.json", "{}\n");
+    const candidateCommit = commitAll(fixture.candidate, "application with a seventh file");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED")
+    );
+  });
+});
+
 test("the exact versioned vendor receipt is trusted Registry maintenance", (t) => {
   const fixture = createRevisionPair(t);
   writeFile(fixture.candidate, "vendor/receipt.json", "{\"release\":\"v0.4.2\"}\n");
@@ -1124,27 +1173,81 @@ test("registry maintenance cannot be mixed with unrelated central-repository cha
   );
 });
 
-test("unsafe registry-maintenance Git entries are rejected before candidate code can run", (t) => {
-  const fixture = createRevisionPair(t);
-  const skillPath = path.join(fixture.candidate, "vendor/programmable-v4-hook-builder/SKILL.md");
-  fs.mkdirSync(path.dirname(skillPath), { recursive: true });
-  fs.symlinkSync("../../../README.md", skillPath);
-  const candidateCommit = commitAll(fixture.candidate, "symlinked maintenance file");
-  assert.throws(
-    () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
-    hasCode("LINKED_CONTENT_FORBIDDEN")
-  );
+test("only the exact Builder vendor path permits executable maintenance blobs", async (t) => {
+  await t.test("exact vendor path", (t2) => {
+    const fixture = createRevisionPair(t2);
+    const marker = path.join(fixture.root, "candidate-vendor-script-executed");
+    const executablePath = "vendor/programmable-v4-hook-builder/scripts/candidate-tool.mjs";
+    writeFile(
+      fixture.candidate,
+      executablePath,
+      `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(marker)}, "executed");\n`
+    );
+    fs.chmodSync(path.join(fixture.candidate, executablePath), 0o755);
+    const candidateCommit = commitAll(fixture.candidate, "executable exact-vendor maintenance blob");
+    const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+    assert.equal(result.mode, "registry-maintenance");
+    assert.equal(fs.existsSync(marker), false);
+  });
+
+  await t.test("vendor sibling", (t2) => {
+    const fixture = createRevisionPair(t2);
+    const executablePath = "vendor/programmable-v4-hook-builder-copy/scripts/candidate-tool.mjs";
+    writeFile(fixture.candidate, executablePath, "export {};\n");
+    fs.chmodSync(path.join(fixture.candidate, executablePath), 0o755);
+    const candidateCommit = commitAll(fixture.candidate, "executable vendor-sibling blob");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED")
+    );
+  });
+
+  for (const [name, executablePath] of [
+    ["root maintenance file", "README.md"],
+    ["Registry file", "registry/schema/candidate.json"],
+    ["documentation file", "docs/candidate.md"],
+    ["trusted script file", "scripts/verify-repository.mjs"]
+  ]) {
+    await t.test(name, (t2) => {
+      const fixture = createRevisionPair(t2);
+      writeFile(fixture.candidate, executablePath, "executable non-vendor maintenance blob\n");
+      fs.chmodSync(path.join(fixture.candidate, executablePath), 0o755);
+      const candidateCommit = commitAll(fixture.candidate, `executable ${name}`);
+      assert.throws(
+        () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+        hasCode("FILE_MODE_FORBIDDEN")
+      );
+    });
+  }
 });
 
-test("executable registry-maintenance Git entries are rejected deterministically", (t) => {
-  const fixture = createRevisionPair(t);
-  writeFile(fixture.candidate, "docs/builder/PUBLIC_GITHUB_PR_BETA.md", "executable documentation\n");
-  fs.chmodSync(path.join(fixture.candidate, "docs/builder/PUBLIC_GITHUB_PR_BETA.md"), 0o755);
-  const candidateCommit = commitAll(fixture.candidate, "executable maintenance file");
-  assert.throws(
-    () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
-    hasCode("FILE_MODE_FORBIDDEN")
-  );
+test("exact Builder vendor symlinks and gitlinks remain forbidden", async (t) => {
+  await t.test("symlink", (t2) => {
+    const fixture = createRevisionPair(t2);
+    const skillPath = path.join(fixture.candidate, "vendor/programmable-v4-hook-builder/SKILL.md");
+    fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+    fs.symlinkSync("../../../README.md", skillPath);
+    const candidateCommit = commitAll(fixture.candidate, "symlinked vendor maintenance file");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("LINKED_CONTENT_FORBIDDEN")
+    );
+  });
+
+  await t.test("gitlink", (t2) => {
+    const fixture = createRevisionPair(t2);
+    git(fixture.candidate, [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `160000,${fixture.baseCommit},vendor/programmable-v4-hook-builder/linked-repository`
+    ]);
+    const candidateCommit = git(fixture.candidate, ["commit", "-m", "gitlinked vendor maintenance path"]);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("LINKED_CONTENT_FORBIDDEN")
+    );
+  });
 });
 
 test("candidate scripts are rejected as unexpected data and never executed", async (t) => {
