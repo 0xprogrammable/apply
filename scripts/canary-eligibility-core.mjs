@@ -42,6 +42,7 @@ const OPAQUE_ID = /^[1-9][0-9]{0,63}$/u;
 const APPLICATION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const CANONICAL_TIMESTAMP = /^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\.[0-9]{3}Z$/u;
 const AUDIENCES = new Set(CANARY_ELIGIBILITY_AUDIENCES);
 const ELIGIBILITY = Object.freeze({
   surface: "hidden-canary",
@@ -576,22 +577,24 @@ function readStableRegularFile(filePath, maximumBytes, code) {
   } catch (error) {
     fail(code, "A required Canary input file is unavailable.", error);
   }
-  if (
-    initial.isSymbolicLink()
-    || !initial.isFile()
-    || initial.nlink !== 1n
-    || (initial.mode & 0o111n) !== 0n
-    || initial.size < 2n
-    || initial.size > BigInt(maximumBytes)
-  ) fail(code, "Canary input must be a bounded non-executable single-link regular file.");
+  if (!isSafeRegularFileSnapshot(initial, maximumBytes)) {
+    fail(code, "Canary input must be a bounded non-executable single-link regular file.");
+  }
   const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_CLOEXEC ?? 0);
   let descriptor;
   try {
     descriptor = fs.openSync(target, flags);
     const before = fs.fstatSync(descriptor, { bigint: true });
-    const bytes = fs.readFileSync(descriptor);
+    if (!sameFile(initial, before) || !isSafeRegularFileSnapshot(before, maximumBytes)) {
+      fail(code, "Canary input path changed before its bounded read.");
+    }
+    const bytes = readBoundedDescriptor(descriptor, maximumBytes, code);
     const after = fs.fstatSync(descriptor, { bigint: true });
-    if (!sameFile(before, after) || BigInt(bytes.length) !== after.size || after.nlink !== 1n) {
+    if (
+      !sameFile(before, after)
+      || !isSafeRegularFileSnapshot(after, maximumBytes)
+      || BigInt(bytes.length) !== after.size
+    ) {
       fail(code, "Canary input changed during its bounded read.");
     }
     return Buffer.from(bytes);
@@ -603,9 +606,33 @@ function readStableRegularFile(filePath, maximumBytes, code) {
   }
 }
 
+function isSafeRegularFileSnapshot(snapshot, maximumBytes) {
+  return snapshot.isFile()
+    && snapshot.nlink === 1n
+    && (snapshot.mode & 0o111n) === 0n
+    && snapshot.size >= 2n
+    && snapshot.size <= BigInt(maximumBytes);
+}
+
+function readBoundedDescriptor(descriptor, maximumBytes, code) {
+  const buffer = Buffer.allocUnsafe(maximumBytes + 1);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const bytesRead = fs.readSync(descriptor, buffer, offset, buffer.length - offset, null);
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  if (offset > maximumBytes) {
+    fail(code, "Canary input exceeded its byte limit during the bounded read.");
+  }
+  return buffer.subarray(0, offset);
+}
+
 function sameFile(left, right) {
   return left.dev === right.dev
     && left.ino === right.ino
+    && left.mode === right.mode
+    && left.nlink === right.nlink
     && left.size === right.size
     && left.mtimeNs === right.mtimeNs
     && left.ctimeNs === right.ctimeNs;
@@ -633,7 +660,9 @@ function decodeSignature(value) {
 }
 
 function canonicalTimestamp(value, code) {
-  if (typeof value !== "string") fail(code, "Canary timestamp is malformed.");
+  if (typeof value !== "string" || !CANONICAL_TIMESTAMP.test(value)) {
+    fail(code, "Canary timestamp is malformed.");
+  }
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value) {
     fail(code, "Canary timestamps must be canonical UTC ISO-8601 with milliseconds.");

@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 
 import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020.js";
+import addFormats from "../scripts/test/schema-validator/node_modules/ajv-formats/dist/index.js";
 
 import { canonicalJson, readTrustedLaunchPolicyFromGit } from "../scripts/launch-policy-core.mjs";
 import {
@@ -33,7 +34,7 @@ test("legacy command and envelope schemas remain strict historical contracts", (
   const commandSchema = readJson("acceptance/schemas/protected-acceptance-command-v1.schema.json");
   const envelopeSchema = readJson("acceptance/schemas/launch-entitlement-envelope-v1.schema.json");
   const ajv = new Ajv2020({ allErrors: true, strict: true });
-  ajv.addFormat("date-time", canonicalDateTime);
+  addFormats(ajv, { mode: "full" });
   ajv.addSchema(commandSchema);
   assert.doesNotThrow(() => ajv.compile(envelopeSchema));
 });
@@ -279,11 +280,6 @@ function gitBlobOid(bytes) {
     .update(Buffer.from(`blob ${bytes.length}\0`, "utf8"))
     .update(bytes)
     .digest("hex");
-}
-
-function canonicalDateTime(value) {
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
 
 function writeFile(repositoryRoot, relativePath, contents) {

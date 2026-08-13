@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 
 import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020.js";
+import addFormats from "../scripts/test/schema-validator/node_modules/ajv-formats/dist/index.js";
 
 import {
   CANARY_ELIGIBILITY_COMMAND_VERSION,
@@ -16,6 +17,7 @@ import {
   canaryEligibilityAuthorityKeyId,
   canaryEligibilitySigningBytes,
   compileCanaryEligibilityEnvelope,
+  readCanaryEligibilityApplicationFile,
   verifyWebsiteCanaryEligibility
 } from "../scripts/canary-eligibility-core.mjs";
 import {
@@ -129,7 +131,7 @@ test("strict command and envelope schemas compile and validate runtime output", 
   const resultSchema = readJson("canary/schemas/workflow-canary-result-v1.schema.json");
   const commandSchema = readJson("acceptance/schemas/protected-canary-eligibility-command-v1.schema.json");
   const envelopeSchema = readJson("acceptance/schemas/canary-eligibility-envelope-v1.schema.json");
-  ajv.addFormat("date-time", canonicalDateTime);
+  addFormats(ajv, { mode: "full" });
   ajv.addSchema(applicationSchema);
   ajv.addSchema(reviewSchema);
   ajv.addSchema(resultSchema);
@@ -151,6 +153,28 @@ test("strict command and envelope schemas compile and validate runtime output", 
     () => verifyWebsite(fixture, missing),
     hasCode("CANARY_ENVELOPE_INVALID")
   );
+
+  for (const [label, value] of [
+    ["valid RFC3339 without milliseconds", "2026-08-13T10:00:00Z"],
+    ["UTC offset instead of Z", "2026-08-13T10:00:00.000+00:00"],
+    ["two fractional digits", "2026-08-13T10:00:00.00Z"],
+    ["lowercase RFC3339 separators", "2026-08-13t10:00:00.000z"]
+  ]) {
+    for (const field of ["issuedAt", "validUntil"]) {
+      const noncanonical = structuredClone(signedCommand);
+      noncanonical.command[field] = value;
+      assert.equal(
+        validateCommand(noncanonical),
+        false,
+        `${field} schema must reject ${label}: ${JSON.stringify(validateCommand.errors)}`
+      );
+      assert.throws(
+        () => canaryEligibilitySigningBytes(noncanonical.command),
+        hasCode("CANARY_COMMAND_TIME_INVALID"),
+        `${field} runtime must reject ${label}`
+      );
+    }
+  }
 });
 
 test("exact reissue deduplicates eligibility while authorization digest changes", async (t) => {
@@ -260,6 +284,43 @@ test("raw application and result bytes are canonical authority and cross-bound",
     () => compileFixture(fixture, { signedCommand, decisionBytes: rawTask3Decision }),
     hasCode("CANARY_RESULT_FIELDS_INVALID")
   );
+});
+
+test("stable Canary file reads reject replacements between lstat and open", (t) => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "canary-stable-file-race-"));
+  t.after(() => fs.rmSync(fixtureRoot, { recursive: true, force: true }));
+  const target = path.join(fixtureRoot, "application.json");
+  const originalOpenSync = fs.openSync;
+
+  for (const [name, replace] of [
+    ["oversized", () => replaceWithFile(target, Buffer.alloc(64 * 1024 + 1, 0x61), 0o600)],
+    ["executable", () => replaceWithFile(target, Buffer.from("{}\n", "utf8"), 0o700)],
+    ["nonregular", () => {
+      fs.unlinkSync(target);
+      fs.mkdirSync(target);
+    }]
+  ]) {
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.writeFileSync(target, Buffer.from("{}\n", "utf8"), { mode: 0o600 });
+    let intercepted = false;
+    fs.openSync = function interceptedOpen(filePath, flags, ...args) {
+      if (!intercepted && path.resolve(filePath) === path.resolve(target)) {
+        intercepted = true;
+        replace();
+      }
+      return originalOpenSync.call(fs, filePath, flags, ...args);
+    };
+    try {
+      assert.throws(
+        () => readCanaryEligibilityApplicationFile(target),
+        hasCode("CANARY_APPLICATION_FILE_INVALID"),
+        `${name} path replacement must fail before bytes are trusted`
+      );
+      assert.equal(intercepted, true, `${name} regression must replace the path between lstat and open`);
+    } finally {
+      fs.openSync = originalOpenSync;
+    }
+  }
 });
 
 test("command and current trusted policy must close over every identity", async (t) => {
@@ -672,6 +733,13 @@ function writeFile(repositoryRoot, relativePath, contents) {
   fs.writeFileSync(target, contents);
 }
 
+function replaceWithFile(target, bytes, mode) {
+  const replacement = `${target}.replacement`;
+  fs.writeFileSync(replacement, bytes, { mode });
+  fs.chmodSync(replacement, mode);
+  fs.renameSync(replacement, target);
+}
+
 function jsonBytes(value) {
   return Buffer.from(`${canonicalJson(value)}\n`, "utf8");
 }
@@ -682,11 +750,6 @@ function sha256(bytes) {
 
 function readJson(relativePath) {
   return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8"));
-}
-
-function canonicalDateTime(value) {
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
 
 function hasCode(code) {
