@@ -21,7 +21,10 @@ hook data, settlement, and refund rules. The application profile sets
 client, and executable tests inspect the final action bytes or trace rather than only a source-level enum name.
 
 For decreases, validate minimum output against principal after separating accrued fees. A decrease with zero liquidity
-is the supported fee-collection shape; bind the exact recipient and final currency balances. Burning, collecting, or
+is the supported fee-collection shape, but core classifies every `liquidityDelta <= 0` as removal. Fee-only collection
+therefore invokes `beforeRemoveLiquidity` and `afterRemoveLiquidity`; if the matching return-delta bit is enabled, the
+hook's two-currency delta is accounted and subtracted from the caller exactly as on a non-zero removal. Bind the exact
+hook data, return shape, recipient, caller-versus-hook delta, and final currency balances. Burning, collecting, or
 transferring a position must not silently change project, creator, Programmable, or LP fee rights.
 
 ## Position identity and authority
@@ -78,7 +81,8 @@ read budgets: large tick or reserve scans can exceed provider simulation limits.
 - explicit mint and increase with adverse price movement, `amount0Max`, `amount1Max`, deadline, native value, Permit2,
   refunds, and hook data;
 - final encoded actions and traces contain neither deprecated from-deltas action;
-- decrease, fee collection with zero liquidity change, burn, transfer, permit, approval, and exact recipient balances;
+- decrease, fee collection with zero liquidity change, both remove-liquidity callbacks, enabled remove return delta,
+  burn, transfer, permit, approval, and exact caller/hook/recipient balances;
 - accrued-fee separation, donation inflation, donate-and-collect in one unlock, and no reward or revenue trust in
   `feesAccrued`;
 - subscriber revert, gas exhaustion, code removal, upgrade, malicious unsubscribe callback, and user exit;

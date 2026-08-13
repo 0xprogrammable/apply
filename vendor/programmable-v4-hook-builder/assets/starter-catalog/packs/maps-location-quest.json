@@ -8,9 +8,7 @@
   "eligibilityEffect": "none",
   "unknownCapabilityPolicy": "preserve-and-route",
   "reviewRoute": "architecture-review-required",
-  "requires": [
-    "signed-outcome-service"
-  ],
+  "requires": [],
   "conflictsWith": [],
   "capabilities": [
     "external-map-service",
@@ -19,11 +17,11 @@
   ],
   "projectSurfaces": [
     "application",
-    "contract",
-    "service"
+    "contract"
   ],
   "requiredFacts": [
-    "Location precision, proof source, acceptance radius and time window",
+    "Location precision, chosen proof architecture, acceptance radius and time window",
+    "Whether evidence uses a physical marker, local or onchain attestation, zero knowledge, or a signed service",
     "Spoofing and replay resistance",
     "Which map or geolocation provider is trusted and its outage behavior",
     "Personal-data collection, retention, deletion and user consent"

@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   PROGRAMMABLE_FEE_OWNER,
+  PROGRAMMABLE_FEE_POLICY_HASH,
   REQUIRED_EVIDENCE_SCENARIOS,
   collectionPathFor,
   computeExactOutputFeeSplit,
@@ -25,6 +26,10 @@ const referenceRoot = path.join(
 const cliPath = path.join(skillRoot, "scripts/fee-conformance.mjs");
 
 test("fee math enforces the non-additive 10 bps floor", () => {
+  assert.equal(
+    PROGRAMMABLE_FEE_POLICY_HASH,
+    "0x72fea66c0711467846f805d8dbe08e5243460ef604cbf3c2626c011c0c0fdac6"
+  );
   for (const selected of [0n, 500n, 1_000n]) {
     const split = computeGrossFeeSplit(1_000_000n, selected);
     assert.equal(split.effectiveHundredthsOfBip, 1_000n);
@@ -135,6 +140,36 @@ test("candidate integrity changes fail closed", (t) => {
   const result = validateFeeConformance({ root: fixture.root, manifestPath: fixture.manifestPath });
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), /source SHA-256 does not match manifest/);
+});
+
+test("fee policy hash must be exact in both source and ABI", (t) => {
+  const fixture = createFixture(t);
+  const source = fs.readFileSync(fixture.sourcePath, "utf8").replace(
+    'keccak256("programmable-volume-fee-v1")',
+    'keccak256("wrong-fee-policy")'
+  );
+  fs.writeFileSync(fixture.sourcePath, source);
+
+  const artifact = JSON.parse(fs.readFileSync(fixture.artifactPath, "utf8"));
+  artifact.abi = artifact.abi.filter((entry) => entry.name !== "PROGRAMMABLE_FEE_POLICY_HASH");
+  fs.writeFileSync(fixture.artifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
+
+  const buildInfo = JSON.parse(fs.readFileSync(fixture.buildInfoPath, "utf8"));
+  buildInfo.input.sources[fixture.sourceRelative].content = source;
+  buildInfo.output.contracts[fixture.sourceRelative][fixture.contractName].abi = artifact.abi;
+  fs.writeFileSync(fixture.buildInfoPath, `${JSON.stringify(buildInfo, null, 2)}\n`);
+
+  const evidence = JSON.parse(fs.readFileSync(fixture.evidencePath, "utf8"));
+  evidence.integrity.sourceSha256 = sha256File(fixture.sourcePath);
+  evidence.integrity.artifactSha256 = sha256File(fixture.artifactPath);
+  evidence.integrity.buildInfoSha256 = sha256File(fixture.buildInfoPath);
+  fs.writeFileSync(fixture.evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  writeManifest(fixture);
+
+  const result = validateFeeConformance({ root: fixture.root, manifestPath: fixture.manifestPath });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /source must expose PROGRAMMABLE_FEE_POLICY_HASH/);
+  assert.match(result.errors.join("\n"), /ABI is missing function PROGRAMMABLE_FEE_POLICY_HASH/);
 });
 
 test("the standard reference cannot silently enable dynamic LP fees or unguarded registration", (t) => {
@@ -380,6 +415,7 @@ function writeManifest(fixture) {
 function completeAbi() {
   const functions = [
     "PROGRAMMABLE_FEE_OWNER",
+    "PROGRAMMABLE_FEE_POLICY_HASH",
     "PROGRAMMABLE_HUNDREDTHS_OF_BIP",
     "MINIMUM_EFFECTIVE_HUNDREDTHS_OF_BIP",
     "MAX_SELECTED_HUNDREDTHS_OF_BIP",
@@ -396,7 +432,19 @@ function completeAbi() {
     "quoteExactOutputFees",
     "claimProjectFees",
     "getHookPermissions"
-  ].map((name) => ({ type: "function", name, stateMutability: "view", inputs: [], outputs: [] }));
+  ].map((name) => ({
+    type: "function",
+    name,
+    stateMutability: "view",
+    inputs: [],
+    outputs: name === "PROGRAMMABLE_FEE_OWNER"
+      ? [{ name: "", type: "address" }]
+      : name === "PROGRAMMABLE_FEE_POLICY_HASH"
+        ? [{ name: "", type: "bytes32" }]
+        : name === "PROGRAMMABLE_HUNDREDTHS_OF_BIP"
+          ? [{ name: "", type: "uint32" }]
+          : []
+  }));
   functions.push({
     type: "function",
     name: "claimProgrammableFees",

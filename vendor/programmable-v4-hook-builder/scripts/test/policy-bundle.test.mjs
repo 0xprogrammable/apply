@@ -5,66 +5,49 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { normativePolicyInventory } from "../submission-core.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(testDirectory, "..", "..");
 
-for (const policyPath of [
-  "assets/build-profiles/catalog.json",
-  "assets/starter-catalog/catalog.json",
-  "assets/reference-kernels/programmable-volume-fee-v1/SECURITY_PROPERTIES.md",
-  "assets/reference-kernels/programmable-volume-fee-v1/src/ProgrammableVolumeFeeHookFactoryV1.sol",
-  "assets/reference-kernels/programmable-volume-fee-v1/src/ProgrammableVolumeFeeHookV1.sol",
-  "assets/reference-kernels/programmable-volume-fee-v1/test/ProgrammableVolumeFeeHookV1.t.sol",
-  "references/build-profiles.md",
-  "references/github-application-journey.md",
-  "references/official-launchpad-deployments.json",
-  "references/official-model-patterns.md",
-  "references/programmable-fee-policy.md",
-  "references/public-pr-application.schema.json",
-  "references/routing-and-discovery.md",
-  "references/standard-fee-kernel.md",
-  "references/submission.schema.json",
-  "references/template-catalog.md",
-  "references/upgrades-and-release.md",
-  "scripts/build-profile-core.mjs",
-  "scripts/builder-lifecycle-core.mjs",
-  "scripts/builder-template-contract.mjs",
-  "scripts/fee-conformance-core.mjs",
-  "scripts/github-application-core.mjs",
-  "scripts/metadata-core.mjs",
-  "scripts/public-claims-core.mjs",
-  "scripts/official-launchpad-core.mjs",
-  "scripts/template-catalog-core.mjs"
-]) {
-  test(`policy bundle binds ${policyPath}`, () => {
-    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-policy-bundle-"));
-    const copiedSkill = path.join(fixtureRoot, "programmable-v4-hook-builder");
+test("normative manifest binds every policy, template, enforcement file and blind fixture", () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-policy-bundle-"));
+  const copiedSkill = path.join(fixtureRoot, "programmable-v4-hook-builder");
 
-    try {
-      fs.cpSync(skillRoot, copiedSkill, { recursive: true });
-      const firstHash = validate(copiedSkill).toolchain.policyBundleSha256;
+  try {
+    fs.cpSync(skillRoot, copiedSkill, { recursive: true });
+    const policyPaths = normativePolicyInventory();
+    assert.ok(policyPaths.includes("references/normative-property-manifest-v1.json"));
+    assert.ok(policyPaths.includes("assets/templates/EVIDENCE.md"));
+    assert.ok(policyPaths.includes("assets/templates/PROPOSAL.md"));
+    assert.ok(policyPaths.includes("assets/templates/TEST_PLAN.md"));
+    assert.ok(policyPaths.includes("assets/templates/THREAT_MODEL.md"));
+    assert.ok(policyPaths.includes("assets/test-vectors/approval-policy-blind-fixtures-v1.json"));
+    assert.ok(policyPaths.includes("assets/test-vectors/blind-eval-definitions-v1.json"));
+    assert.ok(policyPaths.includes("scripts/resolve-contract-core.mjs"));
+    assert.ok(policyPaths.includes("scripts/resolve-contract.mjs"));
+    assert.ok(policyPaths.includes("scripts/test/resolve-contract-core.test.mjs"));
+    assert.ok(policyPaths.includes("scripts/test/cli.test.mjs"));
+    assert.ok(policyPaths.includes("references/launch-plan-graph-input-v1.schema.json"));
+    assert.ok(policyPaths.includes("references/launch-plan-graph-output-v1.schema.json"));
+    assert.ok(policyPaths.includes("scripts/launch-plan-graph-core.mjs"));
+    assert.ok(policyPaths.includes("scripts/launch-plan-graph.mjs"));
+    assert.ok(policyPaths.includes("scripts/test/launch-plan-graph.test.mjs"));
+    const firstHash = validate(copiedSkill).toolchain.policyBundleSha256;
+
+    for (const policyPath of policyPaths) {
       const target = path.join(copiedSkill, policyPath);
-      if (policyPath.endsWith(".json")) {
-        const source = fs.readFileSync(target, "utf8");
-        assert.ok(source.includes("{"));
-        fs.writeFileSync(target, source.replace("{", "{ "));
-      } else {
-        const fixtureChange = policyPath.endsWith(".mjs")
-          ? "\n// Policy fixture change.\n"
-          : "\nPolicy fixture change.\n";
-        fs.appendFileSync(target, fixtureChange);
-      }
+      const sourceBytes = fs.readFileSync(target);
+      fs.writeFileSync(target, Buffer.concat([sourceBytes, Buffer.from("\n")]));
       const secondHash = validate(copiedSkill).toolchain.policyBundleSha256;
-
-      assert.match(firstHash, /^sha256:[a-f0-9]{64}$/);
       assert.match(secondHash, /^sha256:[a-f0-9]{64}$/);
-      assert.notEqual(secondHash, firstHash);
-    } finally {
-      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      assert.notEqual(secondHash, firstHash, policyPath);
+      fs.writeFileSync(target, sourceBytes);
     }
-  });
-}
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
 
 test("policy bundle normalizes only exact gh installer changes", () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-installed-policy-bundle-"));

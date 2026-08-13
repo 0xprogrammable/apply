@@ -76,6 +76,7 @@
           "feeMechanism": {
             "used": true,
             "classification": "hook-owned-fee",
+            "allocationMode": "fixed-ppm",
             "chargedCurrency": "The unspecified swap currency: gross output for exact-input swaps and gross input for exact-output swaps.",
             "swapQuadrants": {
               "zeroForOneExactInput": {

@@ -2526,13 +2526,16 @@ function validateProgrammableFeeProjection(fee, source) {
       "submissionBinding"
     ], "application.programmableFee");
     expectClosedObject(fee.rates, [
-      "effectiveHundredthsOfBip",
+      "effectiveBuyHundredthsOfBip",
+      "effectiveSellHundredthsOfBip",
       "formula",
       "lpFeeExcluded",
       "minimumEffectiveHundredthsOfBip",
       "platformHundredthsOfBip",
-      "projectHundredthsOfBip",
-      "selectedHundredthsOfBip",
+      "projectBuyHundredthsOfBip",
+      "projectSellHundredthsOfBip",
+      "selectedBuyHundredthsOfBip",
+      "selectedSellHundredthsOfBip",
       "unit"
     ], "application.programmableFee.rates");
     expectClosedObject(fee.basis, ["quoteAsset", "volume"], "application.programmableFee.basis");
@@ -2598,7 +2601,7 @@ function validateProgrammableFeeProjection(fee, source) {
   );
   exact(
     fee.rates.formula,
-    "effective=max(selected,1000);platform=1000;project=effective-1000",
+    "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
     "Fee allocation formula"
   );
   exact(fee.rates.lpFeeExcluded, true, "LP-fee exclusion");
@@ -2642,20 +2645,22 @@ function validateProgrammableFeeProjection(fee, source) {
     invalidFee("The exact submission binding must be declared in primary.sourcePaths.");
   }
 
-  const selected = fee.rates.selectedHundredthsOfBip;
-  const effective = fee.rates.effectiveHundredthsOfBip;
-  const project = fee.rates.projectHundredthsOfBip;
-  if (selected === null) {
-    if (effective !== null || project !== null) {
-      invalidFee("Unresolved selected fees must keep effective and project fee projections unresolved.");
+  for (const side of ["Buy", "Sell"]) {
+    const selected = fee.rates[`selected${side}HundredthsOfBip`];
+    const effective = fee.rates[`effective${side}HundredthsOfBip`];
+    const project = fee.rates[`project${side}HundredthsOfBip`];
+    if (selected === null) {
+      if (effective !== null || project !== null) {
+        invalidFee(`An unresolved selected ${side.toLowerCase()} fee must keep its effective and project fee projections unresolved.`);
+      }
+      continue;
     }
-  } else {
     if (!Number.isInteger(selected) || selected < 0 || selected > 999_999) {
-      invalidFee("The selected total fee must be an integer in hundredths of a basis point.");
+      invalidFee(`The selected ${side.toLowerCase()} fee must be an integer in hundredths of a basis point.`);
     }
     const expectedEffective = Math.max(selected, PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP);
     if (effective !== expectedEffective || project !== expectedEffective - PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP) {
-      invalidFee("Effective and project fees must be derived from max(selected, 1000) without adding the platform fee twice.");
+      invalidFee(`Effective and project ${side.toLowerCase()} fees must be derived from max(selected, 1000) without adding the platform fee twice.`);
     }
   }
 
@@ -2784,7 +2789,7 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
   }
   if (
     !isPlainObject(submission)
-    || submission.standardVersion !== "1.5.0"
+    || submission.standardVersion !== "1.6.0"
     || submission.schemaVersion !== 1
     || submission.model?.id !== application.applicationId
     || !isPlainObject(submission.builderTemplate)
@@ -2792,7 +2797,7 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
   ) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
-      "The exact source submission must use the current 1.5.0 contract and match the application id."
+      "The exact source submission must use the current 1.6.0 contract and match the application id."
     );
   }
   let sourceBuilderTemplate;
@@ -2828,7 +2833,7 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
   if (!arraysEqual(sourceFeeKeys, expectedSourceFeeKeys)) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
-      "The source programmableFee record is not closed under the current 1.5.0 contract."
+      "The source programmableFee record is not closed under the current 1.6.0 contract."
     );
   }
   const recomputed = {

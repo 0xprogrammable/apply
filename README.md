@@ -56,7 +56,7 @@ Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and the m
 
 ## Run the checker
 
-Node.js 22 or newer is required. CI verifies both Node 22 and the current Node 24 LTS line. The checker has no runtime dependencies and never executes candidate code.
+Node.js 24 or newer is required. CI verifies the current Node 24 LTS line. The checker has no runtime dependencies and never executes candidate code.
 
 ```bash
 git clone --depth 1 https://github.com/0xprogrammable/submit-launch.git

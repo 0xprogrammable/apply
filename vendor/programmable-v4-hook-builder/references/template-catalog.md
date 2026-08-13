@@ -7,12 +7,21 @@
 - [Commands](#commands)
 - [Starters](#starters)
 - [Capability packs](#capability-packs)
+- [Implementation Legos](#implementation-legos)
 - [Owner-defined capabilities](#owner-defined-capabilities)
 - [Owner-defined local tags](#owner-defined-local-tags)
 - [Composition rules](#composition-rules)
 - [Materialized files](#materialized-files)
 - [Adding a catalog entry](#adding-a-catalog-entry)
 - [Evidence boundary](#evidence-boundary)
+- [Release history](#release-history)
+
+## Release history
+
+`template-catalog-history.json` preserves each prior released Builder commit, skill tree, catalog digest, raw manifest
+digest, and every starter or pack definition digest. Old template bytes remain reconstructable from the immutable
+release tag; a later Builder never silently rewrites an old definition. A project plan retains its catalog and
+definition digests, so migration can compare the exact prior composition before changing anything.
 
 ## Purpose
 
@@ -24,9 +33,10 @@ Never infer that an idea is unsafe, rejected or unsupported because its category
 capability, describe its actors, assets, authorities, value flows, dependencies and failure behavior, and route it to
 architecture review. Objective hard findings still come from the main policy and evidence workflow, not this catalog.
 
-Every starter includes the mandatory Programmable volume-fee, metadata/disclosure and test/evidence packs. This helps
-builders remember required launch facts. The generated planning files do not prove that the fee implementation or any
-other behavior exists.
+Every starter includes the Programmable fee-applicability, metadata/disclosure and test/evidence planning packs. The fee
+pack first derives whether any `programmable-canonical` execution scope exists. Canonical scopes require the real Fee V2
+instance and evidence; an exact zero-scope plan remains `not-applicable` and must not invent a market, PoolKey, hook or
+receipt. Generated artifacts prove no integrated implementation or runtime behavior.
 
 ## Selection model
 
@@ -37,10 +47,12 @@ Choose one starter, then add any number of capability packs:
    remains standard.
 3. Use `custom-hook` when the canonical pool needs custom callbacks; token-side packs can still be added.
 4. Use `blank-custom` when a known starter would distort the idea.
-5. Add packs for each actual behavior or product surface.
-6. Add every unlisted behavior with `--custom-capability` rather than omitting or renaming it.
-7. Add any safe project-specific discovery slugs with repeatable `--local-tag`; catalog membership is not required.
-8. Resolve a template-composition conflict by selecting a better foundation. A composition conflict is not a safety or
+5. Add packs when their complete behavior and dependency closure applies.
+6. Add a known behavior atomically with repeatable `--capability` when sibling capabilities from its source pack do not
+   apply. The selection keeps exact definition receipts, requirements and digests without pack expansion.
+7. Add every unlisted behavior with `--custom-capability` rather than omitting or renaming it.
+8. Add any safe project-specific discovery slugs with repeatable `--local-tag`; catalog membership is not required.
+9. Resolve a template-composition conflict by selecting a better foundation. A composition conflict is not a safety or
    eligibility decision.
 
 Pack dependencies are included automatically. Output ordering, definition hashes, catalog digest and selection digest
@@ -67,6 +79,14 @@ Inspect one hash-bound definition:
 
 ```bash
 node "$SKILL_ROOT/scripts/template-catalog.mjs" show threejs-pvp-rewards
+```
+
+Inspect the separate implementation-Lego layer:
+
+```bash
+node "$SKILL_ROOT/scripts/template-catalog.mjs" list-legos
+node "$SKILL_ROOT/scripts/template-catalog.mjs" list-legos --maturity experimental
+node "$SKILL_ROOT/scripts/template-catalog.mjs" show-lego zero-amm-fee-adapter
 ```
 
 Materialize a conventional launch into a target that does not exist:
@@ -97,6 +117,15 @@ node "$SKILL_ROOT/scripts/template-catalog.mjs" materialize \
   --target /absolute/path/to/new-game-plan
 ```
 
+Materialize only the known randomness Lego, without selecting loot or rewards:
+
+```bash
+node "$SKILL_ROOT/scripts/template-catalog.mjs" materialize \
+  --starter blank-custom \
+  --capability randomness \
+  --target /absolute/path/to/new-randomness-plan
+```
+
 The command performs local reads and creates only the new target. It does not initialize Git, fetch dependencies, run
 project code, connect a wallet, submit an application, deploy or publish.
 
@@ -124,7 +153,7 @@ a rejection or safety decision.
 
 | Pack | Covers |
 | --- | --- |
-| `programmable-volume-fee` | Mandatory non-additive 0.1 percent platform share, all swap quadrants, claims and liabilities |
+| `programmable-volume-fee` | Fee applicability and, for each canonical scope, the mandatory non-additive 0.1 percent share, exposed execution modes, claims and liabilities |
 | `custom-hook-behavior` | Callback purpose, PoolManager authentication, permission bits, deltas and settlement |
 | `dynamic-lp-fee` | Bounded LP-fee changes and input manipulation resistance |
 | `hook-owned-project-fee` | Disclosed project share inside the selected total fee |
@@ -134,14 +163,18 @@ a rejection or safety decision.
 | `tax-financed-auto-liquidity` | Transfer-tax accumulator feeding token-managed liquidity, solvency and LP custody |
 | `launch-distribution-vesting-lp-custody` | Conserved allocations, vesting claims, LP ownership, locks and exits |
 | `continuous-clearing-auction` | Clearing-price math, bids, fills, refunds, finalization and pool transition |
+| `contract-priced-sell-and-burn` | Standalone contract-priced sales, payment settlement, irreversible burn and supply accounting without assuming a pool or hook |
+| `contract-priced-sell-and-burn-v4-custom-accounting` | Optional canonical v4 custom-accounting adapter for the standalone sell-and-burn mechanism |
 | `limit-orders-twamm` | Escrowed price-triggered and long-term orders, virtual execution and liveness |
 | `mev-protection` | Named MEV adversary, protection mechanism, bypass, outage and trust boundaries |
 | `staking-liquidity-incentives` | Reward funding, accrual, custody, claims and emergency exits |
-| `randomness-loot-rewards` | Entropy, loot odds, reward reservation, replay and provider failure |
+| `verifiable-randomness` | Entropy lifecycle, provider failure, replay, manipulation and fixed-seed evidence without assuming loot or rewards |
+| `randomness-loot-rewards` | Loot odds, reward reservation, replay and solvency on top of verifiable randomness |
 | `multi-pool-hooks` | Pool registration, PoolKey domain separation, isolation and cross-pool actions |
-| `threejs-pvp-rewards` | Game outcome authority, anti-cheat, replay, disputes and reward solvency |
-| `maps-location-quest` | Location evidence, spoofing, privacy, retention and map-service failure |
+| `threejs-pvp-rewards` | Game outcome authority, anti-cheat, replay, disputes and reward solvency without assuming a signer architecture |
+| `maps-location-quest` | Location evidence, spoofing, privacy, retention and provider failure without assuming a signer architecture |
 | `wallet-transaction-quest` | EOA and smart-account attribution, reorgs, replay and one-time claims |
+| `v4-claim-client` | ERC-6909 claim ownership, operator authority, mint/burn preparation and confirmed reconciliation |
 | `v4-swap-client` | Hooked quote simulation, explicit router generation, per-hop hookData, price bounds and final slippage |
 | `v4-liquidity-position-client` | Safe explicit PositionManager actions, deprecated-action exclusion, discovery, fee collection and reconciliation |
 | `position-subscriber-automation` | Subscriber callback trust, donation-inflated fees, keeper liveness, unsubscribe and user exit |
@@ -158,17 +191,56 @@ a rejection or safety decision.
 | `metadata-disclosures` | Names, tags, URIs, media hashes, affiliations, fees and provider states |
 | `test-evidence-threat-model` | Project-specific properties, commands, results and evidence separation |
 
-Selecting `token-transfer-tax`, `token-managed-automatic-liquidity`, or `tax-financed-auto-liquidity` requires the
-corresponding fields in the top-level `tokenMechanics` profile. The standard-fee-hook custom-token starter keeps those
-mechanics token-side; it does not force `custom-hook-behavior`. Legacy unpublished `1.4.0` drafts may retain an
-equivalent nested profile under `noHookArchitecture`, but two divergent declarations are invalid.
+Selecting `token-transfer-tax`, `token-managed-automatic-liquidity`, or `tax-financed-auto-liquidity` requires matching
+Submission V2 assets, components, value flows, authorities and capability-profile records. The standard-fee-hook
+custom-token starter keeps those mechanics token-side; it does not force `custom-hook-behavior`. Historical V1
+`tokenMechanics` and `noHookArchitecture` fields belong only to explicit V1 reproduction or migration and are not fields
+in a new Submission V2 graph.
 
 Packs are composable prompts and output templates, not code mixins. A selected pack still requires an implementation
 that matches the project, plus the main skill's compatibility, security, source-binding and review gates.
+The game and location packs deliberately do not auto-select `signed-outcome-service`: physical markers, onchain or
+zero-knowledge attestations, and other reviewed proof systems remain possible. Add the signed-service pack only after
+the owner chooses that trust model.
+
+## Implementation Legos
+
+Implementation Legos are a separate, hash-bound source layer under
+`assets/starter-catalog/implementation-legos/`. They never change whether an idea is eligible. Exact starter, pack or
+known-capability triggers may select a reusable source file; dependencies add only the explicitly required Lego. When
+no Lego matches, the project and every owner-defined capability remain intact and route through the normal custom
+architecture review.
+
+Each closed descriptor binds its source bytes, materialized target path, integration facts, dependency requirements,
+exact unsafe behavior predicates, review route and fee-applicability state. The top-level catalog digest binds the Lego
+manifest, every descriptor and every source hash. Extra, missing, traversing, duplicated or modified source files fail
+before composition.
+
+Maturity has only these meanings:
+
+- `code-ready`: deterministic reusable source is packaged and hash-bound; project integration, compilation, tests and
+  review are still required.
+- `experimental`: reference scaffold only; project-specific implementation and evidence are required before prototype
+  readiness.
+
+Neither label claims fee conformance, safety, audit, deployment, production readiness or provider support. Every
+descriptor records those claims as false or not claimed. Exact hard-conflict predicates address concrete unsafe
+behavior; they are never category bans.
+
+Every materialized plan also carries the immutable Programmable fee owner
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`, the 10-basis-point platform share and the 10-basis-point effective total
+fee floor for each applicable canonical execution scope, including a selected total fee of zero. Until each actual
+standard-AMM, zero-AMM, async/batched or custom-reviewed path has scope-specific code and tests, fee conformance remains
+explicitly unresolved. A supporting Lego marked `not-a-fee-enforcement-component` never creates an exemption.
 
 ## Owner-defined capabilities
 
-Use a lowercase hyphenated id and a visible NFC label:
+Known catalog capabilities use `--capability <known-id>`. This selects one exact Lego without adding sibling
+capabilities or pack dependencies. Its hash-bound definition receipts and any atomic capability requirements are stored
+under `directCapabilityLegos`; when the catalog does not yet have an atomic requirement definition, the capability is
+still preserved but visibly routes to capability-specific architecture review.
+
+Unlisted behavior uses `--custom-capability` with a lowercase hyphenated id and a visible NFC label:
 
 ```text
 --custom-capability capability-id='Plain visible label'
@@ -229,7 +301,7 @@ A composition conflict means only that the selected templates cannot describe on
 
 ## Materialized files
 
-The target contains exactly:
+The target contains the fixed planning files plus zero or more exact-trigger implementation sources:
 
 - `programmable-template.json` — catalog and selection digests, selected definitions, separated machine capabilities,
   custom capabilities and owner-provided local tags;
@@ -239,7 +311,10 @@ The target contains exactly:
 - `TEST_PLAN.md` — required scenarios, adversarial checks and reproducibility section;
 - `EVIDENCE.md` — required artifacts and separate evidence states;
 - `TAGS.md` — only owner-provided local slug suggestions plus a separate provider-evidence table;
-- `METADATA_AND_DISCLOSURES.md` — public identity, fees, controls, tags and per-provider evidence.
+- `METADATA_AND_DISCLOSURES.md` — public identity, fees, controls, tags and per-provider evidence;
+- `IMPLEMENTATION_LEGOS.md` — selected source receipts, maturity boundary, integration boundary and fee applicability;
+- `programmable-code-legos.json` — machine-readable pinned Lego selection and fee-policy receipt;
+- `implementation/<lego-id>/...` — byte-identical packaged source selected by exact starter, pack or capability triggers.
 
 Replace prompts with project-specific facts. Leaving template text unchanged is not implementation or evidence.
 
@@ -257,9 +332,13 @@ Keep additions data-only and reviewable:
 
 Do not add executable downloads, remote URLs, credentials, wallet actions or provider assertions to the catalog.
 
+Add or change an implementation Lego only as a separate reviewed source change: update its source hash, descriptor hash,
+sorted Lego manifest, top-level Lego-manifest hash, catalog digest expectation, exact-trigger tests, tamper tests and
+materialization receipts. Keep the blank/custom escape hatch and `missingLegoOutcome: preserve-project-capability`.
+
 ## Evidence boundary
 
-A valid catalog and deterministic materialization prove only that packaged template bytes and selection rules are
-self-consistent. They do not prove source behavior, fee correctness, security review, clean builds, deployment, source
-verification, lifecycle operation, provider indexing, routing or public availability. Track those states independently
-through the main Programmable workflow.
+A valid catalog and deterministic materialization prove only that packaged template/source bytes, selection rules and
+receipts are self-consistent. They do not prove integrated source behavior, fee correctness, security review, clean
+builds, deployment, source verification, lifecycle operation, provider indexing, routing or public availability. Track
+those states independently through the main Programmable workflow.

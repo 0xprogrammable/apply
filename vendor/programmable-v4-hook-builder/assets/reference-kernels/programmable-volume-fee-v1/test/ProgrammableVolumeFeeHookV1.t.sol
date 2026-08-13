@@ -104,6 +104,12 @@ contract ProgrammableVolumeFeeHookV1Test is Deployers {
         assertEq(project, 0);
     }
 
+    function testFeePolicyGettersExact() public view {
+        assertEq(hook.PROGRAMMABLE_FEE_OWNER(), 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c);
+        assertEq(hook.PROGRAMMABLE_HUNDREDTHS_OF_BIP(), 1000);
+        assertEq(hook.PROGRAMMABLE_FEE_POLICY_HASH(), keccak256("programmable-volume-fee-v1"));
+    }
+
     function testRateSelectedBelowFloor() public view {
         (uint256 total, uint256 project, uint256 programmable) = hook.quoteGrossFees(1 ether, 500);
         assertEq(total, 0.001 ether);

@@ -17,7 +17,7 @@ assets/reference-kernels/programmable-volume-fee-v1/
 
 - [Fixed economic contract](#fixed-economic-contract)
 - [Four swap paths](#four-swap-paths)
-- [Rounding and dust](#rounding-and-dust)
+- [Cumulative rounding and dust](#cumulative-rounding-and-dust)
 - [Pool scope, custody and settlement](#pool-scope-custody-and-settlement)
 - [Address permissions](#address-permissions)
 - [Conformance checker](#conformance-checker)

@@ -1,4 +1,7 @@
-# Output specification
+# V1 output specification
+
+This is the released six-file `prepare-pr` output contract. New public review drafts use
+`0xprogrammable/submit-launch:main`; Application V3 remains a separate candidate contract.
 
 Produce only the artifacts required at the current stage. Use explicit unknowns instead of placeholder claims.
 
@@ -105,6 +108,28 @@ submissions/<model-id>/evidence/
 ├── review-target.json
 └── <capability-triggered analysis and runtime evidence>
 ```
+
+Routing is a first-class typed output, not an inferred property of every market-shaped component. `ProjectSpec` contains
+exactly one `facets.routing` entry of kind `trade-capability`; its applicability maps to RepositoryPlan
+`tradable`, `no-market`, or `unresolved`. Product-graph market nodes are tradable only when their `facetEntryRefs`
+contain that exact entry id.
+
+For every selected tradable market, the source revision must contain one closed
+`trade-capability-manifest-v1` artifact. It binds the complete PoolKey and PoolId, chain and reference block, route kind,
+router, executable quoter, Permit2 or native-funding requirements, hookData contract, supported direction/exactness
+matrix, slippage and deadline limits, fee behavior, exact quote/execution command ids, and source-test hashes. The route
+is either `standard-uniswap-v4` or `canonical-programmable-adapter`; the latter must conform to the separately
+hash-bound `programmable-trade-execution-v1` interface. Every manifest says `NOT_APPROVED` and remains a declaration,
+not an execution receipt.
+
+Each supported mode requires a real executable quote test and execution test. Unsupported modes require an explicit
+pre-effects rejection test. The bounded executor parses one closed typed result from each trade command and writes the
+result plus its generic command receipt only in the evidence-only descendant. Completion reopens those artifacts and
+checks their source, command, manifest, market, mode, PoolKey, hookData, route, limits, funding and fee bindings. A
+manifest command copies exact RepositoryPlan argv/cwd and the sanitized executor-profile digest returned by
+`projectCommandEnvironmentSha256(command)`; a hand-authored environment identity fails completion. A
+`no-market` project must contain zero route manifests, trade commands and trade evidence. `unresolved` cannot become
+`COMPLETE`. None of these local results is routing approval, deployment, broadcast, audit or public availability.
 
 `analyzeSubmission` can report a clean prototype only as `IN_PROGRESS`. Repository closure and portable package checks
 may advance it to `STRUCTURALLY_COMPLETE`, which means static closure against builder-declared evidence only. They do
@@ -377,6 +402,35 @@ availability. Each is evidence only for its exact request, response, or transact
 
 The handoff can recommend changes on the product release branch. It does not edit product files, create a product PR,
 merge, deploy, submit provider forms, change a registry, or activate the model.
+
+### Launch-authorization candidate
+
+Only an exact accepted prototype may enter this output. The Builder reads a clean accepted source checkout, a clean
+canonical Registry checkout, and an explicit evidence root. It binds committed submission, review-target and acceptance
+bytes; exact build, source, artifact and evidence file SHA-256 values; and artifact JSON creation/runtime bytecode.
+The complete machine shape is closed by `launch-bundle-output-v1.schema.json` and is validated before emission.
+
+Configuration evidence must carry a bounded reviewer-owned live-state plan. Use exact ABI calldata plus expected return
+bytes and/or exact raw storage slots plus expected values; target only immutable runtime-verified deployment artifacts,
+and cover the hook and every required launch target. This plan is still a candidate input. The production Admin issuer
+independently replays every read through two RPC providers at one finalized canonical block and fails closed on missing
+coverage, provider disagreement, or a byte mismatch.
+
+The deterministic result contains:
+
+- one exact-shape current-private Admin `DeploymentSpecV1` candidate, including build, configuration and
+  fee-conformance evidence digests plus their derived evidence-bundle hash;
+- one exact-shape `LaunchExecutorCallV1` and decoded 192-byte `PoolConfigurationV1`;
+- the Uniswap v4 PoolId, pool-configuration payload/hash, calldata payload/hash and hook-configuration payload/hash;
+- target and hook expected runtime-code hashes derived from artifact bytes, not free declarations;
+- exact source-binding, artifact-set and deployment-spec hashes; and
+- a sorted local provenance ledger with root, path, bytes, SHA-256 and committed-at-bound-revision state.
+
+The result must also say `authorizationState: NOT_AUTHORIZED`, `runtimeEvidence.state: NOT_RUN`,
+`deploymentEvidence.state: NOT_PROVIDED`, `networkAccessed: false`, `signingPerformed: false`,
+`deploymentPerformed: false`, and `externalActionsPerformed: []`. Expected addresses and artifact-derived code hashes are
+authorization-candidate inputs, not observations that contracts exist at those addresses. No signature, permit, RPC
+observation, transaction, receipt, source verification, runtime match or public launch may be invented or inferred.
 
 ## Handoff response
 
