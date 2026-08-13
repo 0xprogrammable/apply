@@ -1009,6 +1009,8 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "SECURITY.md",
     "SUPPORT.md",
     "acceptance/schemas/launch-entitlement-envelope-v1.schema.json",
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary-submissions/README.md",
     "docs/builder/PUBLIC_GITHUB_PR_BETA.md",
     "docs/builder/intake-status.json",
     "docs/DISCOVERY_CONTRACT.md",
@@ -1022,6 +1024,8 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "scripts/generate-registry.mjs",
     "scripts/registry-core.mjs",
     "scripts/verify-public-hook-application-core.mjs",
+    "scripts/workflow-canary-core.mjs",
+    "scripts/verify-workflow-canary.mjs",
     "test/registry.test.mjs",
     "vendor/programmable-v4-hook-builder/SKILL.md",
     "vendor/receipt.json"

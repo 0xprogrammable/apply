@@ -7,6 +7,8 @@ Hookbuilder.
 
 - Applicant projects remain in applicant-owned public GitHub repositories.
 - `submissions/` contains bounded, untrusted application records. A submission never edits `registry/`.
+- `canary-submissions/` contains one-file hidden workflow tests only. A canary never grants audit, launch, discovery,
+  routing, production, or funds authority.
 - `registry/projects/` contains maintainer-authored records only. A record describes evidence; it is not an audit or
   safety guarantee.
 - `registry/index.json`, `registry/search-index.json`, and `registry/history/` are generated from closed project records.
@@ -17,9 +19,10 @@ Hookbuilder.
 
 ## Change discipline
 
-Application pull requests change exactly one six-file `submissions/<application-id>/` directory. Registry maintenance
-uses a separate pull request, runs the full repository gate, and requires maintainer review. Never combine intake data
-with policy, workflow, registry, vendor, or documentation changes.
+V2 application pull requests change exactly one six-file `submissions/<application-id>/` directory. Workflow canaries
+change exactly one `canary-submissions/<application-id>/application.json` file. Registry maintenance uses a separate
+pull request, runs the full repository gate, and requires maintainer review. Never combine either intake namespace with
+policy, workflow, registry, vendor, or documentation changes.
 
 Keep submitted, reviewed, accepted, deployed, source-verified, indexed, routed, available, suspended, and retired as
 separate states. Novelty is not a defect. Similarity search may inform a builder but may not reject an idea.

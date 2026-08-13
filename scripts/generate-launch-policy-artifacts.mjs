@@ -19,8 +19,15 @@ const ACTIVE_CONTRACT_PATH = ".programmable/active-contract.json";
 const MAXIMUM_ARTIFACT_BYTES = 2 * 1024 * 1024;
 const ROLE_PATHS = Object.freeze({
   workflow: Object.freeze([".github/workflows/verify-hook-builder.yml"]),
-  validator: Object.freeze(["scripts/verify-public-hook-application.mjs"]),
-  package: Object.freeze(["vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"]),
+  validator: Object.freeze([
+    "scripts/verify-public-hook-application.mjs",
+    "scripts/verify-workflow-canary.mjs"
+  ]),
+  package: Object.freeze([
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary/schemas/workflow-canary-result-v1.schema.json",
+    "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
+  ]),
   policy: Object.freeze([POLICY_PATH])
 });
 const GENERATED_PATHS = Object.freeze([RENDERED_POLICY_PATH, ACTIVE_CONTRACT_PATH]);

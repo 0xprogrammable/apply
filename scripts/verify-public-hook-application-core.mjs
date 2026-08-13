@@ -25,9 +25,12 @@ import {
 import { normalizeBuilderTemplate } from "../vendor/programmable-v4-hook-builder/scripts/builder-template-contract.mjs";
 import { hasForbiddenInvisibleOrBidi } from "../vendor/programmable-v4-hook-builder/scripts/metadata-core.mjs";
 import {
+  buildLaunchPolicyBinding,
+  compareLaunchPolicyBindings,
   parseLaunchPolicyBytes,
   readTrustedLaunchPolicyFromGit
 } from "./launch-policy-core.mjs";
+import { parseWorkflowCanaryApplicationBytes } from "./workflow-canary-core.mjs";
 
 export const VALIDATOR_VERSION = "2.0.0";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v2.json";
@@ -125,6 +128,9 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "scripts/verify-repository.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-public-hook-application.mjs",
+  "scripts/verify-workflow-canary.mjs",
+  "scripts/workflow-canary-core.mjs",
+  "canary-submissions/README.md",
   "submissions/README.md",
   "vendor/receipt.json"
 ]);
@@ -140,6 +146,7 @@ const RESERVED_MAINTENANCE_PREFIXES = Object.freeze([
 const SHARED_REGISTRY_DOCUMENTATION_FILES = new Set([]);
 const APPLICATION_PATH_PATTERN = /^submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([^/]+)$/;
 const CANARY_APPLICATION_PREFIX = "canary-submissions/";
+const CANARY_APPLICATION_PATH_PATTERN = /^canary-submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/application\.json$/;
 const SHA1_PATTERN = /^[a-f0-9]{40}$/;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const OPAQUE_ID_PATTERN = /^[1-9][0-9]{0,63}$/;
@@ -411,13 +418,24 @@ export function classifyPublicIntakePullRequest({
 
   const submissionChanges = changes.filter((change) => change.path.startsWith("submissions/"));
   const applicationDirectoryChanges = submissionChanges.filter((change) => change.path !== "submissions/README.md");
-  const canaryApplicationChanges = changes.filter((change) => change.path.startsWith(CANARY_APPLICATION_PREFIX));
+  const canaryApplicationChanges = changes.filter((change) => (
+    change.path.startsWith(CANARY_APPLICATION_PREFIX)
+    && change.path !== "canary-submissions/README.md"
+  ));
   if (canaryApplicationChanges.length > 0) {
     rejectUnsafeChangedEntries(changes);
-    reject(
-      "APPLICATION_PATH_INVALID",
-      "Canary application data cannot be mixed with V2 application or trusted policy maintenance paths."
-    );
+    if (
+      changes.length !== 1
+      || canaryApplicationChanges.length !== 1
+      || canaryApplicationChanges[0].status === "deleted"
+      || !CANARY_APPLICATION_PATH_PATTERN.test(canaryApplicationChanges[0].path)
+    ) {
+      reject(
+        "APPLICATION_PATH_INVALID",
+        "A workflow-canary pull request must add or modify exactly one canary-submissions/<application-id>/application.json blob and no other path."
+      );
+    }
+    return { mode: "workflow-canary", ...comparison };
   }
   if (applicationDirectoryChanges.length > 0) {
     rejectUnsafeChangedEntries(changes);
@@ -748,9 +766,9 @@ export async function fetchPublicApplicationCandidate({
 }
 
 /**
- * Hydrate only the already-classified six-file application package. GitHub's
- * exact tree metadata is checked before any candidate blob is requested, and
- * the bounded Git process is prevented from lazily fetching anything else.
+ * Hydrate only the already-classified V2 package or one-file workflow canary.
+ * GitHub's exact tree metadata is checked before any candidate blob is
+ * requested, and the bounded Git process cannot lazily fetch anything else.
  */
 export async function hydratePublicApplicationCandidate({
   baseRoot,
@@ -779,17 +797,27 @@ export async function hydratePublicApplicationCandidate({
     expectedMergeCommit,
     limits
   });
-  const legacyPolicyAdapter = readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit });
-  requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted: true });
-  const plan = planApplicationHydration(classified, limits);
-  const intakeStatus = readTrustedIntakeStatus(classified.base);
-  const isUpdate = classifyTrustedBaseApplication(classified.base, plan.applicationId);
-  const continuation = enforceTrustedIntakeStatus({
-    intakeStatus,
-    isUpdate,
-    pullRequestNumber,
-    applicationId: plan.applicationId
-  });
+  const isLegacyV2 = classified.mode === "application";
+  const legacyPolicyAdapter = isLegacyV2
+    ? readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit })
+    : null;
+  if (isLegacyV2) requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted: true });
+  const workflowCanaryPolicy = !isLegacyV2
+    ? readTrustedWorkflowCanaryPolicy({ baseRoot, expectedBaseCommit })
+    : null;
+  const plan = isLegacyV2
+    ? planApplicationHydration(classified, limits)
+    : planWorkflowCanaryHydration(classified, limits);
+  const intakeStatus = isLegacyV2 ? readTrustedIntakeStatus(classified.base) : null;
+  const isUpdate = isLegacyV2 ? classifyTrustedBaseApplication(classified.base, plan.applicationId) : false;
+  const continuation = isLegacyV2
+    ? enforceTrustedIntakeStatus({
+      intakeStatus,
+      isUpdate,
+      pullRequestNumber,
+      applicationId: plan.applicationId
+    })
+    : null;
   const gitDirectory = path.resolve(candidateRoot ?? "");
   requireHydrationRemote(
     gitDirectory,
@@ -869,20 +897,63 @@ export async function hydratePublicApplicationCandidate({
     applicationEntry,
     limits.maximumFileBytes[APPLICATION_FILE]
   );
-  const application = parseCanonicalJson(applicationBytes, APPLICATION_FILE, limits);
-  validateApplicationManifest(application, plan.applicationId, limits, legacyPolicyAdapter);
-  enforceTrustedContinuationIdentity({ continuation, application });
+  if (isLegacyV2) {
+    const application = parseCanonicalJson(applicationBytes, APPLICATION_FILE, limits);
+    validateApplicationManifest(application, plan.applicationId, limits, legacyPolicyAdapter);
+    enforceTrustedContinuationIdentity({ continuation, application });
+  } else {
+    let application;
+    try {
+      application = parseWorkflowCanaryApplicationBytes(applicationBytes, {
+        expectedApplicationId: plan.applicationId
+      });
+    } catch (error) {
+      if (error?.kind === "candidate") reject(error.code, error.message);
+      systemBlocked(error?.code ?? "CANARY_APPLICATION_INVALID", "The bounded canary application could not be validated.");
+    }
+    if (!compareLaunchPolicyBindings(application.expectedPolicyBinding, workflowCanaryPolicy.binding)) {
+      reject("POLICY_DRIFT", "The canary application expected a different protected-base launch policy.");
+    }
+  }
 
-  return {
-    schemaVersion: 1,
-    result: "bounded-application-blobs-hydrated",
-    intakeState: intakeStatus.state,
-    applicationId: plan.applicationId,
-    pullRequestNumber,
-    continuationAuthorized: continuation !== null,
-    fileCount: plan.entries.length,
-    totalBytes: boundedMetadata.totalBytes
-  };
+  return isLegacyV2
+    ? {
+      schemaVersion: 1,
+      result: "bounded-application-blobs-hydrated",
+      intakeState: intakeStatus.state,
+      applicationId: plan.applicationId,
+      pullRequestNumber,
+      continuationAuthorized: continuation !== null,
+      fileCount: plan.entries.length,
+      totalBytes: boundedMetadata.totalBytes
+    }
+    : {
+      schemaVersion: 1,
+      result: "bounded-workflow-canary-blob-hydrated",
+      applicationId: plan.applicationId,
+      pullRequestNumber,
+      policyBinding: workflowCanaryPolicy.binding,
+      fileCount: 1,
+      totalBytes: boundedMetadata.totalBytes
+    };
+}
+
+function readTrustedWorkflowCanaryPolicy({ baseRoot, expectedBaseCommit }) {
+  try {
+    const record = readTrustedLaunchPolicyFromGit({
+      repositoryRoot: path.resolve(baseRoot ?? ""),
+      expectedBaseCommit
+    });
+    return Object.freeze({
+      binding: buildLaunchPolicyBinding(record, "workflow-canary"),
+      record
+    });
+  } catch {
+    systemBlocked(
+      "TRUSTED_LAUNCH_POLICY_INVALID",
+      "The exact protected-base workflow-canary launch policy is missing, malformed, disabled, or unavailable."
+    );
+  }
 }
 
 function validateHydrationAuthority({ repository, readToken }) {
@@ -1183,6 +1254,31 @@ function planApplicationHydration(classified, limits) {
     if (!Number.isInteger(maximumBytes)) {
       systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for an allowlisted package file.");
     }
+  }
+  return { applicationId, packageDirectory, entries };
+}
+
+function planWorkflowCanaryHydration(classified, limits) {
+  if (classified.mode !== "workflow-canary" || classified.changes.length !== 1) {
+    reject("APPLICATION_CHANGE_REQUIRED", "Only one closed workflow-canary application may hydrate candidate bytes.");
+  }
+  const [change] = classified.changes;
+  if (change.status === "deleted") {
+    reject("APPLICATION_FILE_DELETED", "Workflow-canary application data cannot be deleted through protected intake.");
+  }
+  const match = CANARY_APPLICATION_PATH_PATTERN.exec(change.path);
+  if (!match) reject("APPLICATION_PATH_INVALID", "The workflow-canary path is outside its closed one-file layout.");
+  const applicationId = match[1];
+  const packageDirectory = `canary-submissions/${applicationId}`;
+  const entries = [...classified.candidate.entries.values()]
+    .filter((entry) => entry.path.startsWith(`${packageDirectory}/`))
+    .sort((left, right) => compareUtf8(left.path, right.path));
+  if (entries.length !== 1 || entries[0].path !== `${packageDirectory}/${APPLICATION_FILE}`) {
+    reject("APPLICATION_PACKAGE_NOT_CLOSED", "The workflow-canary directory must contain exactly one application.json blob.");
+  }
+  assertRegularBlob(entries[0]);
+  if (!Number.isInteger(limits.maximumFileBytes[APPLICATION_FILE])) {
+    systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for workflow-canary application.json.");
   }
   return { applicationId, packageDirectory, entries };
 }
@@ -2565,6 +2661,7 @@ function assertNewApplicationChangedFileSet({ changedFiles, applicationId }) {
 function isRegistryMaintenancePath(entryPath) {
   return REGISTRY_MAINTENANCE_FILES.has(entryPath)
     || REGISTRY_MAINTENANCE_PREFIXES.some((prefix) => entryPath.startsWith(prefix))
+    || entryPath.startsWith("canary/")
     || /^scripts\/test\/verify-public-hook-application(?:-[a-z0-9-]+)?\.test\.mjs$/u.test(entryPath);
 }
 

@@ -9,6 +9,8 @@ const postMerge = fs.readFileSync(path.resolve(".github/workflows/verify-post-me
 const codeql = fs.readFileSync(path.resolve(".github/workflows/codeql.yml"), "utf8");
 const validator = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
 const validatorCli = fs.readFileSync(path.resolve("scripts/verify-public-hook-application.mjs"), "utf8");
+const canaryValidator = fs.readFileSync(path.resolve("scripts/workflow-canary-core.mjs"), "utf8");
+const canaryValidatorCli = fs.readFileSync(path.resolve("scripts/verify-workflow-canary.mjs"), "utf8");
 const packageManifest = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
 const packageLock = JSON.parse(fs.readFileSync(path.resolve("package-lock.json"), "utf8"));
 const readme = fs.readFileSync(path.resolve("README.md"), "utf8");
@@ -66,6 +68,31 @@ test("only a closed six-file application is hydrated and public source lookup ha
   assert.doesNotMatch(verificationStep, /github\.token|secrets\./u);
 });
 
+test("one-file workflow canary stays policy-bound, inert, authenticated, and non-authoritative", () => {
+  assert.match(publicJob, /application\|workflow-canary\|registry-maintenance\|no-op/u);
+  assert.match(publicJob, /mode == 'application' \|\| steps\.classify\.outputs\.mode == 'workflow-canary'/u);
+  assert.match(publicJob, /- name: Verify policy-bound hidden workflow canary/u);
+  assert.match(publicJob, /if: steps\.classify\.outputs\.mode == 'workflow-canary'/u);
+  assert.match(publicJob, /scripts\/verify-workflow-canary\.mjs/u);
+  for (const option of [
+    "--expected-base-repository",
+    "--expected-base-repository-id",
+    "--expected-base-commit",
+    "--expected-builder-login",
+    "--expected-builder-user-id",
+    "--expected-head-repository",
+    "--expected-head-repository-id",
+    "--expected-candidate-commit",
+    "--expected-merge-commit"
+  ]) assert.match(publicJob, new RegExp(option, "u"));
+  assert.match(canaryValidator, /readTrustedLaunchPolicyFromGit/u);
+  assert.match(canaryValidator, /evaluateTrustedLaunchPolicyReview/u);
+  assert.match(canaryValidator, /resolveGitHubPublicSourceV1/u);
+  assert.match(canaryValidator, /GIT_NO_LAZY_FETCH/u);
+  assert.doesNotMatch(canaryValidatorCli, /--policy(?:\s|=)|--profile(?:\s|=)|POLICY_(?:PATH|URL|BYTES)/u);
+  assert.doesNotMatch(canaryValidator, /npm\s+(?:ci|install|test)|import\(.*candidate|LAUNCH_APPROVED/u);
+});
+
 test("protected V2 intake resolves policy only from the exact trusted base", () => {
   assert.match(validator, /readTrustedLaunchPolicyFromGit/u);
   assert.match(validator, /repositoryRoot: path\.resolve\(baseRoot \?\? ""\)/u);
@@ -79,7 +106,7 @@ test("protected V2 intake resolves policy only from the exact trusted base", () 
 test("credentials are removed and maintenance is deferred to ordinary CI", () => {
   assert.match(publicJob, /- name: Remove candidate fetch credential\n\s+if: always\(\)/u);
   assert.match(publicJob, /--unset-all http\.https:\/\/github\.com\/\.extraheader/u);
-  assert.match(publicJob, /application\|registry-maintenance\|no-op/u);
+  assert.match(publicJob, /application\|workflow-canary\|registry-maintenance\|no-op/u);
   assert.match(publicJob, /mode == 'registry-maintenance'/u);
   assert.match(publicJob, /No maintenance blob is hydrated, parsed, or executed under pull_request_target/u);
 });

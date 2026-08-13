@@ -8,5 +8,8 @@
 /.github/ @0xprogrammable
 /vendor/ @0xprogrammable
 /review/ @0xprogrammable
+/canary/ @0xprogrammable
+/canary-submissions/ @0xprogrammable
 /docs/LAUNCH_POLICY.md @0xprogrammable
 /docs/OPEN_REVIEW_STANDARD.md @0xprogrammable
+/docs/WORKFLOW_CANARY.md @0xprogrammable

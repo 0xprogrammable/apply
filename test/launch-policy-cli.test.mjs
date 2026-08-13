@@ -84,7 +84,10 @@ test("generated-artifact verifier fails closed on stale bytes", (t) => {
     "docs/LAUNCH_POLICY.md",
     ".programmable/active-contract.json",
     ".github/workflows/verify-hook-builder.yml",
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary/schemas/workflow-canary-result-v1.schema.json",
     "scripts/verify-public-hook-application.mjs",
+    "scripts/verify-workflow-canary.mjs",
     "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
   ]) {
     const target = path.join(fixtureRoot, relativePath);
@@ -109,18 +112,34 @@ test("active contract contains the four fixed nonempty roles with exact path dig
   assert.equal(manifest.defaultBranch, "main");
   assert.deepEqual(Object.keys(manifest.artifacts), ["package", "policy", "validator", "workflow"]);
   assert.deepEqual(manifest.artifacts, {
-    package: [{
-      path: "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json",
-      sha256: digest("vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json")
-    }],
+    package: [
+      {
+        path: "canary/schemas/workflow-canary-application-v1.schema.json",
+        sha256: digest("canary/schemas/workflow-canary-application-v1.schema.json")
+      },
+      {
+        path: "canary/schemas/workflow-canary-result-v1.schema.json",
+        sha256: digest("canary/schemas/workflow-canary-result-v1.schema.json")
+      },
+      {
+        path: "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json",
+        sha256: digest("vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json")
+      }
+    ],
     policy: [{
       path: "policy/launch-policy.v1.json",
       sha256: digest("policy/launch-policy.v1.json")
     }],
-    validator: [{
-      path: "scripts/verify-public-hook-application.mjs",
-      sha256: digest("scripts/verify-public-hook-application.mjs")
-    }],
+    validator: [
+      {
+        path: "scripts/verify-public-hook-application.mjs",
+        sha256: digest("scripts/verify-public-hook-application.mjs")
+      },
+      {
+        path: "scripts/verify-workflow-canary.mjs",
+        sha256: digest("scripts/verify-workflow-canary.mjs")
+      }
+    ],
     workflow: [{
       path: ".github/workflows/verify-hook-builder.yml",
       sha256: digest(".github/workflows/verify-hook-builder.yml")

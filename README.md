@@ -31,6 +31,9 @@ public repository.
 > [Hookbuilder](https://github.com/0xprogrammable/hookbuilder/releases/latest) to build, validate, and submit one exact
 > six-file application. Existing applications keep their original GitHub review threads.
 
+The separate [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
+creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
+
 A local checker result, passing pull request, merged application, registry match, deployment, or indexer observation is
 never presented as a safety guarantee or launch right.
 
@@ -56,8 +59,9 @@ Every command reads the fixed repository-owned policy path, emits canonical JSON
 applicant code.
 
 The generated [active-contract manifest](.programmable/active-contract.json) provides digest-bound discovery for the
-current workflow, validator, [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json),
-and policy. It is a same-tree discovery record, not approval or proof that the tree is protected or live.
+current workflow, validators, the [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json),
+the [workflow-canary schemas](canary/schemas/), and policy. It is a same-tree discovery record, not approval or proof
+that the tree is protected or live.
 
 ## Open Review Standard
 

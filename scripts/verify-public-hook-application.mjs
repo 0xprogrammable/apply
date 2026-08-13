@@ -29,7 +29,7 @@ V2 verification derives its historical adapter only from the exact protected-bas
 Options:
   --classify                    Print application, registry-maintenance, or no-op without network access
   --fetch-candidate             Fetch and identify the exact base-repository PR merge in bounded blobless storage
-  --hydrate-candidate           Preflight sizes and hydrate only the closed six-file candidate package
+  --hydrate-candidate           Preflight sizes and hydrate only the closed V2 package or one canary JSON blob
   --verify-bounded-application-paths Prove from trusted metadata that only bounded application data changed
   --repository <owner/name>     Authenticated central GitHub repository for candidate tree metadata
   --pull-request-number <n>     Exact central pull-request number for fetch, hydration, and final application verification

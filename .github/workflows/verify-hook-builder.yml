@@ -81,7 +81,7 @@ jobs:
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
             --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}")"
           case "$mode" in
-            application|registry-maintenance|no-op) ;;
+            application|workflow-canary|registry-maintenance|no-op) ;;
             *)
               echo "::error::The trusted classifier returned an unsupported mode."
               exit 1
@@ -89,8 +89,8 @@ jobs:
           esac
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
-      - name: Preflight and hydrate only bounded application blobs
-        if: steps.classify.outputs.mode == 'application'
+      - name: Preflight and hydrate only bounded intake blobs
+        if: steps.classify.outputs.mode == 'application' || steps.classify.outputs.mode == 'workflow-canary'
         shell: bash
         env:
           CANDIDATE_READ_TOKEN: ${{ github.token }}
@@ -137,6 +137,30 @@ jobs:
             --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
             --expected-builder-login "${{ github.event.pull_request.user.login }}" \
             --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
+
+      - name: Verify policy-bound hidden workflow canary
+        if: steps.classify.outputs.mode == 'workflow-canary'
+        shell: bash
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          GIT_NO_LAZY_FETCH: "1"
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 120s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-workflow-canary.mjs" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/trusted" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-repository "${{ github.repository }}" \
+            --expected-base-repository-id "${{ github.event.repository.id }}" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-builder-login "${{ github.event.pull_request.user.login }}" \
+            --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
+            --expected-head-repository "${{ github.event.pull_request.head.repo.full_name }}" \
+            --expected-head-repository-id "${{ github.event.pull_request.head.repo.id }}" \
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
             --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
 

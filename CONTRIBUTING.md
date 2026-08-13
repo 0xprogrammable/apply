@@ -1,6 +1,6 @@
 # Contributing
 
-There are three intentionally separate contribution paths. Keep each pull request to one path.
+There are four intentionally separate contribution paths. Keep each pull request to one path.
 
 ## Application pull requests
 
@@ -14,6 +14,13 @@ tree, and evidence digests.
 
 An intake pass proves only that the public record is structurally valid and bound to reachable source. It is not
 acceptance, an audit, deployment approval, provider support, availability, or Uniswap endorsement.
+
+## Hidden workflow-canary pull requests
+
+Use [`docs/WORKFLOW_CANARY.md`](docs/WORKFLOW_CANARY.md) when the goal is only to test the application handoff. A canary
+pull request changes exactly `canary-submissions/<application-id>/application.json`. It must never include V2
+`submissions/` data, policy, generated contracts, source code, workflows, or maintenance files. A canary pass is hidden,
+checker-only, non-production, unrouted, unaudited, and permits no real-user funds.
 
 ## Submit a Launch repository maintenance
 
@@ -36,8 +43,8 @@ npm run policy:check
 npm test
 ```
 
-Do not hand-edit `docs/LAUNCH_POLICY.md` or `.programmable/active-contract.json`. Application pull requests must never
-mix `submissions/` changes with policy or generated-contract maintenance.
+Do not hand-edit `docs/LAUNCH_POLICY.md` or `.programmable/active-contract.json`. V2 and canary application pull
+requests must never mix applicant data with policy or generated-contract maintenance.
 
 ## Review standard maintenance
 

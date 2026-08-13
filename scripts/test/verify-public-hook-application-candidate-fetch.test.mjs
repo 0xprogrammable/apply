@@ -22,6 +22,10 @@ import {
   verifyBoundedApplicationPullRequestPaths,
   verifyPublicHookApplication
 } from "../verify-public-hook-application-core.mjs";
+import {
+  buildLaunchPolicyBinding,
+  readTrustedLaunchPolicyFromGit
+} from "../launch-policy-core.mjs";
 
 const PULL_REQUEST_NUMBER = "7";
 const BUILDER_USER_ID = "9007199254740993";
@@ -149,6 +153,62 @@ test("trusted application validation hydrates only the six closed package blobs"
   assert.ok(packageObjectIds.every((objectId) => hasObjectWithoutLazyFetch(candidateData, objectId)));
   assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
   assert.equal(fs.existsSync(path.join(candidateData, "submissions")), false);
+});
+
+test("workflow canary hydration materializes exactly one policy-bound JSON blob", async (t) => {
+  const fixture = createRevisionPair(t);
+  const policyRecord = readTrustedLaunchPolicyFromGit({
+    repositoryRoot: fixture.base,
+    expectedBaseCommit: fixture.baseCommit
+  });
+  const applicationBytes = jsonBytes({
+    schemaVersion: "programmable.workflow-canary-application.v1",
+    applicationId: "example-hook",
+    applicationRevision: 1,
+    builder: { githubLogin: "alice", githubUserId: BUILDER_USER_ID },
+    source: {
+      repository: "alice/example-hook",
+      numericRepositoryId: PRIMARY.numericRepositoryId,
+      commit: PRIMARY.revisionObjectId,
+      tree: PRIMARY.treeObjectId
+    },
+    expectedPolicyBinding: buildLaunchPolicyBinding(policyRecord, "workflow-canary"),
+    title: "Example Hook",
+    summary: "One hidden workflow canary.",
+    declarations: {
+      hiddenFromPublicRoutingAndDiscovery: true,
+      independentAudit: false,
+      productionRouting: false,
+      realUserFunds: false
+    }
+  });
+  const applicationPath = "canary-submissions/example-hook/application.json";
+  writeFile(fixture.candidate, applicationPath, applicationBytes);
+  const candidateCommit = commitAll(fixture.candidate, "one workflow canary blob");
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  const applicationObjectId = blobObjectIdAtPath(fixture.candidate, applicationPath);
+  const unrelatedBaseObjectId = blobObjectIdAtPath(fixture.base, "README.md");
+  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, applicationObjectId), false);
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
+  const hydration = await hydratePublicApplicationCandidate({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    repository: "central/repository",
+    readToken: "test-read-token"
+  }, localHydrationDependencies(fixture, "canary-submissions/example-hook"));
+
+  assert.equal(hydration.result, "bounded-workflow-canary-blob-hydrated");
+  assert.equal(hydration.applicationId, "example-hook");
+  assert.equal(hydration.fileCount, 1);
+  assert.deepEqual(hydration.policyBinding, buildLaunchPolicyBinding(policyRecord, "workflow-canary"));
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, applicationObjectId), true);
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
 });
 
 test("candidate package cannot remove the mandatory companion closure receipt index", () => {
@@ -1215,17 +1275,17 @@ function trustedGitEnvironment() {
   };
 }
 
-function localHydrationDependencies(fixture) {
+function localHydrationDependencies(fixture, packageDirectory = "submissions/example-hook") {
   return {
     allowFileProtocolForTests: true,
     remoteUrlForTests: pathToFileURL(fixture.candidate).href,
-    fetchImplementation: createTreeMetadataFetch(fixture.candidate)
+    fetchImplementation: createTreeMetadataFetch(fixture.candidate, packageDirectory)
   };
 }
 
-function createTreeMetadataFetch(repository) {
-  const packageTreeObjectId = git(repository, ["rev-parse", "HEAD:submissions/example-hook"]);
-  const records = git(repository, ["ls-tree", "-l", "HEAD:submissions/example-hook"])
+function createTreeMetadataFetch(repository, packageDirectory = "submissions/example-hook") {
+  const packageTreeObjectId = git(repository, ["rev-parse", `HEAD:${packageDirectory}`]);
+  const records = git(repository, ["ls-tree", "-l", `HEAD:${packageDirectory}`])
     .split("\n")
     .filter(Boolean)
     .map((line) => {
