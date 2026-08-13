@@ -365,6 +365,12 @@ function validateDecisionAgainstTrustedPolicy(decision, policyRecord) {
 
   validatePolicyBinding(decision.expectedPolicyBinding);
   validatePolicyBinding(decision.currentPolicyBinding);
+  if (
+    decision.expectedPolicyBinding.profileId !== decision.profileId
+    || decision.currentPolicyBinding.profileId !== decision.profileId
+  ) {
+    fail("REVIEW_DECISION_PROFILE_INVALID", "Expected and current policy bindings must match the decision profile for every status.");
+  }
   const exactCurrentBinding = buildLaunchPolicyBinding(policyRecord, decision.profileId);
   if (!compareLaunchPolicyBindings(decision.currentPolicyBinding, exactCurrentBinding)) {
     fail("REVIEW_DECISION_POLICY_PROJECTION_INVALID", "Current decision binding does not match the exact trusted policy record.");

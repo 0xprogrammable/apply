@@ -327,6 +327,41 @@ test("canonical validation reconstructs analyzer and every finding field from tr
   }
 });
 
+test("policy drift never accepts a binding from another profile", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const original = evaluate(fixture, validInput(fixture.policyRecord));
+
+  const crossExpected = asPolicyDrift(original);
+  crossExpected.expectedPolicyBinding.profileId = "build";
+  crossExpected.digest = unsafeDecisionDigest(crossExpected);
+  assert.throws(
+    () => digestLaunchPolicyDecision(crossExpected, fixture.policyRecord),
+    hasCode("REVIEW_DECISION_PROFILE_INVALID")
+  );
+  assert.throws(
+    () => canonicalLaunchPolicyDecision(crossExpected, fixture.policyRecord),
+    hasCode("REVIEW_DECISION_PROFILE_INVALID")
+  );
+
+  const crossCurrent = asPolicyDrift(original);
+  crossCurrent.currentPolicyBinding.profileId = "build";
+  crossCurrent.digest = unsafeDecisionDigest(crossCurrent);
+  assert.throws(
+    () => digestLaunchPolicyDecision(crossCurrent, fixture.policyRecord),
+    hasCode("REVIEW_DECISION_PROFILE_INVALID")
+  );
+  assert.throws(
+    () => canonicalLaunchPolicyDecision(crossCurrent, fixture.policyRecord),
+    hasCode("REVIEW_DECISION_PROFILE_INVALID")
+  );
+
+  const realDrift = asPolicyDrift(original);
+  realDrift.expectedPolicyBinding.sha256 = `sha256:${"0".repeat(64)}`;
+  realDrift.digest = unsafeDecisionDigest(realDrift);
+  assert.equal(digestLaunchPolicyDecision(realDrift, fixture.policyRecord), realDrift.digest);
+  assert.equal(canonicalLaunchPolicyDecision(realDrift, fixture.policyRecord), canonicalJson(realDrift));
+});
+
 test("new schemas compile strictly and validate examples and decisions", (t) => {
   const fixture = trustedReviewFixture(t);
   const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -387,4 +422,15 @@ function canonicalSort(values) {
 function unsafeDecisionDigest(decision) {
   const withoutDigest = Object.fromEntries(Object.entries(decision).filter(([key]) => key !== "digest"));
   return `sha256:${crypto.createHash("sha256").update(canonicalJson(withoutDigest), "utf8").digest("hex")}`;
+}
+
+function asPolicyDrift(decision) {
+  const output = structuredClone(decision);
+  output.status = "policy_drift";
+  output.outcome = null;
+  output.evaluations = [];
+  output.pendingRuleIds = [];
+  output.notApplicableRuleIds = [];
+  output.findings = [];
+  return output;
 }
