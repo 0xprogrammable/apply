@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="#launch-policy">Read the launch policy</a> ·
   <a href="#open-review-standard">Read the standard</a> ·
   <a href="#run-the-checker">Run the checker</a> ·
   <a href="#report-a-finding">Report a finding</a>
@@ -32,6 +33,31 @@ public repository.
 
 A local checker result, passing pull request, merged application, registry match, deployment, or indexer observation is
 never presented as a safety guarantee or launch right.
+
+## Launch policy
+
+The canonical source for Programmable launch requirements is
+[`policy/launch-policy.v1.json`](policy/launch-policy.v1.json). Its
+[`JSON Schema`](policy/schemas/launch-policy.v1.schema.json) closes the authored format, and
+[`docs/LAUNCH_POLICY.md`](docs/LAUNCH_POLICY.md) is a generated, digest-bound human projection. Edit the JSON only;
+the generated Markdown is never independent authority.
+
+Third-party developers and agents can inspect the requirements without installing or using Hookbuilder:
+
+```bash
+npm run policy -- requirements --profile workflow-canary
+npm run policy -- validate-policy
+npm run policy -- render
+```
+
+`requirements` also describes `build` and the disabled `production-launch` profile. `binding` is available for an
+enabled profile and binds the policy at the exact committed repository `HEAD`; it refuses a dirty policy projection.
+Every command reads the fixed repository-owned policy path, emits canonical JSON, and never imports or executes
+applicant code.
+
+The generated [active-contract manifest](.programmable/active-contract.json) provides digest-bound discovery for the
+current workflow, validator, [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json),
+and policy. It is a same-tree discovery record, not approval or proof that the tree is protected or live.
 
 ## Open Review Standard
 
@@ -51,8 +77,8 @@ After review, maintainers can compile a signed, exact-revision acceptance into t
 [six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md). The bridge does not treat a GitHub
 label, green check, merge, or editable review state as launch authority, and it never issues the wallet-bound permit.
 
-Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and the machine-readable
-[policy](review/policy.v1.json).
+Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and its current legacy checker
+[policy](review/policy.v1.json). That checker policy is not a substitute for a central launch-policy binding.
 
 ## Run the checker
 
@@ -129,6 +155,7 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 
 ## Documentation
 
+- [Generated launch policy](docs/LAUNCH_POLICY.md)
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
 - [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)

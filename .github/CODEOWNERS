@@ -2,8 +2,11 @@
 
 /registry/ @0xprogrammable
 /acceptance/ @0xprogrammable
+/policy/ @0xprogrammable
+/.programmable/ @0xprogrammable
 /scripts/ @0xprogrammable
 /.github/ @0xprogrammable
 /vendor/ @0xprogrammable
 /review/ @0xprogrammable
+/docs/LAUNCH_POLICY.md @0xprogrammable
 /docs/OPEN_REVIEW_STANDARD.md @0xprogrammable

@@ -6,11 +6,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { LaunchPolicyArtifactError, verifyLaunchPolicyArtifacts } from "./generate-launch-policy-artifacts.mjs";
 import { canonicalJson, RegistryError, verifyGeneratedArtifacts } from "./registry-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 try {
+  const launchPolicy = verifyLaunchPolicyArtifacts({ repositoryRoot: root });
   const generated = verifyGeneratedArtifacts({ repositoryRoot: root });
   verifyVendorReceipt();
   if (!fs.existsSync(path.join(root, "scripts/test/schema-validator/node_modules/ajv"))) {
@@ -18,10 +20,11 @@ try {
   }
   runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   runNodeTests("scripts/test", (name) => name.startsWith("verify-public-hook-application") && name.endsWith(".test.mjs"), ["--test-concurrency=1"]);
-  process.stdout.write(`${canonicalJson({ ...generated, checks: ["generated-registry", "vendor-receipt", "registry-tests", "trusted-intake-tests"], ok: true })}\n`);
+  process.stdout.write(`${canonicalJson({ ...generated, checks: ["generated-launch-policy", "generated-registry", "vendor-receipt", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true })}\n`);
 } catch (error) {
-  const code = error instanceof RegistryError ? error.code : "REPOSITORY_CHECK_FAILED";
-  const message = error instanceof RegistryError ? error.message : String(error?.message ?? "repository verification failed").slice(0, 1000);
+  const known = error instanceof RegistryError || error instanceof LaunchPolicyArtifactError;
+  const code = known ? error.code : "REPOSITORY_CHECK_FAILED";
+  const message = known ? error.message : String(error?.message ?? "repository verification failed").slice(0, 1000);
   process.stdout.write(`${canonicalJson({ error: { code, message }, ok: false })}\n`);
   process.exitCode = 1;
 }

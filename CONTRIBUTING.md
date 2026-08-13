@@ -24,6 +24,21 @@ or deployment claim.
 Never hand-edit generated indexes. Change a source project record, then run `npm run generate`. Existing history files
 are append-only and must never be rewritten.
 
+### Launch policy maintenance
+
+`policy/launch-policy.v1.json` is the authored source for Programmable launch requirements. Do not copy a requirement
+into generated Markdown, the active-contract manifest, a workflow, validator prose, or an applicant package. Keep
+stable Rule IDs, update the version when semantics change, add negative regressions, then run:
+
+```bash
+npm run policy:generate
+npm run policy:check
+npm test
+```
+
+Do not hand-edit `docs/LAUNCH_POLICY.md` or `.programmable/active-contract.json`. Application pull requests must never
+mix `submissions/` changes with policy or generated-contract maintenance.
+
 ## Review standard maintenance
 
 Changes to `review/`, its schemas or its decision semantics require a separate maintainer pull request, public regression
