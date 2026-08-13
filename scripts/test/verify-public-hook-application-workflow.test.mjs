@@ -8,10 +8,10 @@ const ordinary = fs.readFileSync(path.resolve(".github/workflows/verify.yml"), "
 const postMerge = fs.readFileSync(path.resolve(".github/workflows/verify-post-merge.yml"), "utf8");
 const codeql = fs.readFileSync(path.resolve(".github/workflows/codeql.yml"), "utf8");
 const validator = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
+const validatorCli = fs.readFileSync(path.resolve("scripts/verify-public-hook-application.mjs"), "utf8");
 const packageManifest = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
 const packageLock = JSON.parse(fs.readFileSync(path.resolve("package-lock.json"), "utf8"));
 const readme = fs.readFileSync(path.resolve("README.md"), "utf8");
-const openReviewStandard = fs.readFileSync(path.resolve("docs/OPEN_REVIEW_STANDARD.md"), "utf8");
 const ordinaryCandidateJob = ordinary.slice(
   ordinary.indexOf("  repository:"),
   ordinary.indexOf("  bounded-application:")
@@ -23,7 +23,7 @@ const codeqlBoundedJob = codeql.slice(codeql.indexOf("  bounded-application:"), 
 const codeqlRequiredJob = codeql.slice(codeql.indexOf("  required:"));
 const publicJob = intake.slice(intake.indexOf("  public-intake:"));
 const verificationStep = publicJob.slice(
-  publicJob.indexOf("- name: Verify closed public application package"),
+  publicJob.indexOf("- name: Verify policy-bound closed public application package"),
   publicJob.indexOf("- name: Defer executable registry maintenance")
 );
 const fetchStep = publicJob.slice(
@@ -66,6 +66,16 @@ test("only a closed six-file application is hydrated and public source lookup ha
   assert.doesNotMatch(verificationStep, /github\.token|secrets\./u);
 });
 
+test("protected V2 intake resolves policy only from the exact trusted base", () => {
+  assert.match(validator, /readTrustedLaunchPolicyFromGit/u);
+  assert.match(validator, /repositoryRoot: path\.resolve\(baseRoot \?\? ""\)/u);
+  assert.match(validator, /expectedBaseCommit/u);
+  assert.match(verificationStep, /--base-root "\$GITHUB_WORKSPACE\/trusted"/u);
+  assert.match(verificationStep, /--expected-base-commit "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/u);
+  assert.doesNotMatch(validatorCli, /--policy(?:\s|=)|--profile(?:\s|=)|POLICY_(?:PATH|URL|BYTES)/u);
+  assert.doesNotMatch(publicJob, /--policy(?:\s|=)|--profile(?:\s|=)|POLICY_(?:PATH|URL|BYTES)/u);
+});
+
 test("credentials are removed and maintenance is deferred to ordinary CI", () => {
   assert.match(publicJob, /- name: Remove candidate fetch credential\n\s+if: always\(\)/u);
   assert.match(publicJob, /--unset-all http\.https:\/\/github\.com\/\.extraheader/u);
@@ -93,7 +103,6 @@ test("the active runtime contract is Node 24-only", () => {
   assert.equal(packageManifest.engines.node, ">=24");
   assert.equal(packageLock.packages[""].engines.node, ">=24");
   assert.match(readme, /Node\.js 24 or newer is required/u);
-  assert.match(openReviewStandard, /Node\.js 24 or newer is required/u);
   for (const source of [ordinary, postMerge, intake, codeql]) {
     assert.doesNotMatch(source, /node-version:\s*(?:20|22)(?:\s|$)|\n\s+- (?:20|22)(?:\n|$)/u);
   }

@@ -24,6 +24,7 @@ const usage = `Usage:
   verify-public-hook-application.mjs --verify-maintained --repository-root <path>
 
 Inspect one pull request with trusted base code. Candidate Git objects are treated only as data.
+V2 verification derives its historical adapter only from the exact protected-base launch policy; no policy override exists.
 
 Options:
   --classify                    Print application, registry-maintenance, or no-op without network access

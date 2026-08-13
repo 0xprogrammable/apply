@@ -11,6 +11,7 @@ import {
   canonicalJson,
   classifyBoundedApplicationPathChanges,
   classifyPublicIntakePullRequest,
+  createHistoricalLegacyV2PolicyAdapterForLocalInspection,
   fetchPublicApplicationCandidate,
   hydratePublicApplicationCandidate,
   measureHydrationDirectory,
@@ -24,6 +25,10 @@ import {
 
 const PULL_REQUEST_NUMBER = "7";
 const BUILDER_USER_ID = "9007199254740993";
+const TRUSTED_POLICY_BYTES = fs.readFileSync(path.resolve("policy/launch-policy.v1.json"));
+const LOCAL_LEGACY_POLICY_ADAPTER = createHistoricalLegacyV2PolicyAdapterForLocalInspection({
+  policyBytes: TRUSTED_POLICY_BYTES
+});
 const PRIMARY = Object.freeze({
   repositoryUri: "https://github.com/alice/example-hook",
   numericRepositoryId: "123456789",
@@ -152,7 +157,7 @@ test("candidate package cannot remove the mandatory companion closure receipt in
   delete application.companionClosure;
   packageFiles.set("application.json", jsonBytes(application));
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles }),
     (error) => error?.code === "OBJECT_NOT_CLOSED" && error?.kind === "candidate"
   );
 });
@@ -1018,6 +1023,13 @@ function continuationRecord(overrides = {}) {
   };
 }
 
+function validatePackageFiles(options) {
+  return validatePublicApplicationPackageFiles({
+    ...options,
+    legacyPolicyAdapter: LOCAL_LEGACY_POLICY_ADAPTER
+  });
+}
+
 function createRevisionPair(t, {
   intakeState = "open",
   existingApplication = false,
@@ -1030,7 +1042,9 @@ function createRevisionPair(t, {
   fs.mkdirSync(base);
   git(base, ["init", "-b", "main"]);
   configureIdentity(base, "Trusted Test", "trusted@example.invalid");
+  git(base, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
   writeFile(base, "README.md", "trusted base\n");
+  writeFile(base, "policy/launch-policy.v1.json", TRUSTED_POLICY_BYTES);
   writeFile(
     base,
     "docs/builder/intake-status.json",

@@ -120,7 +120,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify closed public application package
+      - name: Verify policy-bound closed public application package
         if: steps.classify.outputs.mode == 'application'
         shell: bash
         env:
