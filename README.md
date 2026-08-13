@@ -61,24 +61,22 @@ and policy. It is a same-tree discovery record, not approval or proof that the t
 
 ## Open Review Standard
 
-The standard defines evidence requirements across five decision-critical areas: artifact identity, functionality,
-disclosure, integrity, and launch compatibility. It does not rank ideas or reject a project because its mechanics, fees,
-losses, architecture, or tokenomics are unusual.
+The policy-bound reviewer consumes the same canonical
+[`policy/launch-policy.v1.json`](policy/launch-policy.v1.json) as every other launch-policy consumer. Analyzer input can
+name only a Rule ID, state, evidence references and analyzer identity. Requirement text, severity, enforcement and
+outcome come from the exact trusted policy. Missing rules remain `analysis_pending`; unknown Rule IDs and LLM
+observations are advisory only.
 
-Unknown platform-owned evidence remains `platform_analysis_pending`. A hard block requires a complete, revision-bound,
-independently replayed witness supported by the current policy. A model opinion, scanner score, label, or incomplete
-witness cannot hard-block a project.
-
-The public checker validates a closed review input and applies the published policy deterministically. It does not fetch
-project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, or issue a
-launch permit.
+The protected evaluator compares the complete recorded policy binding and exact subject identity before semantic
+findings. The public compatibility checker does not fetch
+project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, route traffic,
+handle real funds or issue launch permission. Every result remains `checkerOnly: true` and `launchAuthorized: false`.
 
 After review, maintainers can compile a signed, exact-revision acceptance into the versioned
 [six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md). The bridge does not treat a GitHub
 label, green check, merge, or editable review state as launch authority, and it never issues the wallet-bound permit.
 
-Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and its current legacy checker
-[policy](review/policy.v1.json). That checker policy is not a substitute for a central launch-policy binding.
+Read the complete [Policy-Bound Review Standard](docs/OPEN_REVIEW_STANDARD.md). There is no separate reviewer policy.
 
 ## Run the checker
 
@@ -90,10 +88,11 @@ cd submit-launch
 npm run review -- review/examples/disclosed-high-fee.json
 ```
 
-The bundled example returns `launch_ready` together with `checkerOnly: true`, `launchAuthorized: false`, and
-`independentAudit: false`. Inspect the [examples](review/examples),
-[input schema](review/schemas/open-review-input.v1.schema.json), and
-[decision schema](review/schemas/open-review-decision.v1.schema.json).
+The bundled legacy example returns `profile_disabled` because production launch is currently disabled. Old obligations
+and witnesses survive only as bounded advisories. Inspect the [current examples](review/examples),
+[policy-bound input schema](review/schemas/launch-policy-review-input.v1.schema.json), and
+[policy-bound decision schema](review/schemas/launch-policy-review-decision.v1.schema.json). The old
+[`open-review-input.v1`](review/schemas/open-review-input.v1.schema.json) grammar remains only as a compatibility input.
 
 Run the complete repository gate with:
 
