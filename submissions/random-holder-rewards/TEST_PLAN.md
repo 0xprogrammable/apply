@@ -6,7 +6,7 @@ LUCK Buyer Rewards
 
 - Pin Solidity 0.8.26, Cancun, optimizer settings, v4-core, v4-periphery, OpenZeppelin Contracts, and forge-std.
 - Compile complete import closure with no unexplained warning; record runtime and initcode sizes.
-- Reproduce the complete pinned CREATE2 preimage in `fork-evidence.json`: deployer, salt, full constructor arguments, initcode hash, runtime hash, expected address, and low-14-bit permission mask `0x00cc`.
+- Reproduce the complete production CREATE2 graph: universal deployer runtime, one-shot factory salt/initcode/address, token salt/initcode/address, hook mined salt/initcode/address/runtime, and exact low-14-bit permission mask `0x20cc`.
 - Test only-PoolManager callbacks, wrong PoolManager, wrong PoolKey, selector and return lengths, empty hookData policy, and self-swap absence.
 
 ## Fee unit and lifecycle cases
@@ -24,7 +24,7 @@ LUCK Buyer Rewards
 - Test `LUCK` name, symbol, fixed supply, first-time holder indexing, no duplicate index, same-block checkpoint replacement, historical lookup, transfers before and after snapshot, and excluded addresses.
 - Prove peer transfers, liquidity settlement, and unauthorized callers cannot create buyer credit. Prove the bound hook can open only transaction-scoped credit, actual PoolManager transfers consume no more than that credit once, and real exact-input and exact-output buys credit the output recipient.
 - Test the `0.005 ETH` floor, gross cost credit on both buy exactness modes, 30-minute maturity, pending-batch reset behavior, cumulative buys, proportional basis reduction on outgoing transfers and sells, integer rounding, and historical mature cost basis at the snapshot.
-- Test the fixed three-winner count, fewer than three eligible buyers, one unresolved round, non-cancellable pending requests and seeds, duplicate/unknown callbacks, wrong wrapper, zero random word, and successful unique allocation.
+- Test the fixed three-winner count, fewer than three eligible buyers, one unresolved round, non-cancellable pending requests and seeds, duplicate/unknown callbacks, wrong wrapper, zero random word, and successful unique allocation. Test that recovery is unavailable before seven days, either boundary transaction starts the same recovery, late callbacks cannot reroll, pro-rata credits conserve the snapshotted pot, and a later round can start.
 - Prove selection weights are `0`, `1`, `4`, `21`, and `100` at the declared boundaries and reach the arithmetic cap only at `5,000,000 ETH`. Prove the complete first pass sums exact weights, each subsequent draw is proportional to remaining weight without replacement, rejection sampling avoids modulo bias, and exactly three unique wallets receive equal payouts.
 - Prove buyer-count prefix, snapshot block, and snapshot timestamp cannot change after request. Prove 0 and batches above 256 revert, the default call advances 32 entries, phase/cursor/weight state persists across calls, and a sparse 70-buyer prefix completes one full sum pass plus up to three full selection passes.
 - Fill the buyer index to exactly 1,024 wallets, prove a new wallet's threshold-crossing settlement reverts at capacity, and prove existing indexed wallets remain tradable. At maximum batch size, total round work is bounded to 16 calls.
@@ -54,7 +54,7 @@ LUCK Buyer Rewards
 - Run `npm run test:fork:sepolia:current` as a separate current-head compatibility smoke. Preserve the exact observed block and distinguish both Sepolia fork suites from signed public-testnet evidence.
 - Before regenerating the corrected launch package, run `npm run verify:vrf-direct-funding` with `VRF_EVIDENCE_BLOCK`. Require the exact wrapper runtime and a nonzero quote for one native-paid 150,000-gas callback at the script's declared 1 gwei simulation gas price; production requests use their real transaction gas price.
 - Continue to mock unavailable, reverting, duplicate, delayed, and unauthorized VRF responses in deterministic unit tests.
-- Gas bounds: beforeSwap, afterSwap, requestRound including Direct Funding payment, the 150,000-gas seed-only callback, 32-entry default and 256-entry maximum finalization calls in both phases, platform claim, and winner claim. Total completion cost is at most four passes over 1,024 entries, or 16 maximum-size calls.
+- Gas bounds: beforeSwap, afterSwap, requestRound including Direct Funding payment, the 150,000-gas seed-only callback, 32-entry default and 256-entry maximum finalization calls in every phase, platform claim, and winner claim. Normal completion is at most four passes over 1,024 entries (16 maximum-size calls); timed-out recovery is at most two passes (eight calls).
 - Run Slither and record every finding disposition. If unavailable, report the gate blocked rather than passed.
 
 ## Product and release boundaries

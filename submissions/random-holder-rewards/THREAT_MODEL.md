@@ -38,7 +38,7 @@ There is no mutable recipient, rescue, sweep, arbitrary call, proxy, or upgrade.
 
 ### Timing manipulation and liveness
 
-Timestamp controls only earliest request eligibility; modest proposer skew cannot choose randomness. Requests are bounded to one pending id and one per 1,800 seconds. Neither an accepted request nor a stored seed can be cancelled, replaced, or timed out. This prevents snapshot-specific rerolls, but a permanently lost VRF response stalls all later rounds in this immutable hook instance. Insufficient reserve or an unavailable wrapper prevents a new request but cannot affect swaps or existing claims. Monitoring alerts on old pending requests, unfinalized seeds, reserve accrual, wrapper price, and Direct Funding runway.
+Timestamp controls earliest request eligibility, cost-basis maturity, and the seven-day terminal deadline; modest proposer skew cannot choose randomness. Requests are bounded to one pending id and one per 1,800 seconds. Neither an accepted request nor a stored seed can be cancelled, replaced, or retried. At the deadline, both a wrapper callback and a permissionless recovery call converge on the same terminal state: the request id is permanently expired and the original snapshotted pot is paid pro rata by the original mature weights. This removes a permanent liveness lock without granting anyone a reroll option. A block producer can briefly affect which transaction starts recovery but cannot change its outcome. Insufficient reserve or an unavailable wrapper prevents a new request but cannot affect swaps or existing claims. Monitoring alerts on old pending requests, recovery progress, unfinalized seeds, reserve accrual, wrapper price, and Direct Funding runway.
 
 ### Buyer-index growth and finalization liveness
 

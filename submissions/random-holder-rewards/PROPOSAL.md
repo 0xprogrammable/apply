@@ -12,7 +12,7 @@ Ordinary ERC-20 transfers carry no tax. Alternative pools do not inherit this be
 
 - Ethereum mainnet; native ETH is `currency0` and the launched token is `currency1`.
 - Static 0.30% LP fee and tick spacing 60. The LP fee belongs to liquidity providers.
-- One hook instance for one canonical PoolKey; permission mask `0x00cc`.
+- One hook instance for one canonical PoolKey; permission mask `0x20cc` (`beforeInitialize`, both swap callbacks, and both swap-return-delta callbacks).
 - Token name and symbol: `LUCK`. Fixed one-billion-token supply with 18 decimals and no later mint, burn authority, pause, freeze, blacklist, confiscation, tax, rescue, proxy, or upgrade.
 - Mandatory fee: 10 bps on gross executed ETH quote volume for every swap.
 - Platform and project fees use independent cumulative numerator remainders for the canonical pool lifetime. Claims do not reset them, and positive gross quote amounts below 1,000 wei revert atomically.
@@ -87,7 +87,7 @@ For a 0.420000000000000002 ETH pot, each of the three winners receives `floor(po
 
 `pot before = winner liabilities added + pot remainder`.
 
-If the wrapper request reverts, the callback is unauthorized, or a completed full-prefix scan contains fewer than three eligible buyers, no winner liability is created and the complete pot remains available. An accepted request cannot be cancelled or re-requested, because rerolling after the snapshot would create an exploitable randomness option. Once a seed is stored it cannot be replaced; finalization must use that seed.
+If the wrapper request reverts, the callback is unauthorized, or a completed full-prefix scan contains fewer than three eligible buyers, no winner liability is created and the complete pot remains available. An accepted request cannot be cancelled or re-requested, because rerolling after the snapshot would create an exploitable randomness option. Once a seed is stored it cannot be replaced; finalization must use that seed. If the exact request has no callback for seven days, any account permanently marks that request expired. The terminal outcome is then deterministic rather than a reroll: one pass sums the original snapshot's mature weights and a second pass credits every eligible wallet `floor(roundPot × walletWeight / totalWeight)`. Rounding dust stays in the reward pot. A callback at or after the deadline starts the same recovery, and every later callback for that request is ignored.
 
 ## Game-theory rationale
 
@@ -117,7 +117,7 @@ Forced ETH is surplus and creates no entitlement. There is no sweep or rescue pa
 
 ## Failure and retirement
 
-Swap-accounting failures revert the complete swap. VRF failure delays only new allocation; swaps, LP exits, platform claims, and existing winner claims remain available. An accepted request is deliberately not cancellable or retryable, so a permanently lost response locks later rounds in this immutable hook instance. This liveness cost avoids exploitable rerolls and is monitored explicitly. Liquidity providers may exit through standard v4 paths because the hook enables no liquidity callback. The immutable hook has no administrative retirement action.
+Swap-accounting failures revert the complete swap. VRF failure delays only new allocation until the seven-day terminal recovery becomes available; swaps, LP exits, platform claims, and existing winner claims remain available throughout. An accepted request is never cancelled, retried, or replaced. Timed-out recovery uses the committed snapshot and a fixed pro-rata formula, clears the pending request after at most two bounded prefix passes, and permits later rounds. Liquidity providers may exit through standard v4 paths because the hook enables no liquidity callback. The immutable hook has no administrative retirement action.
 
 ## Product boundaries
 
