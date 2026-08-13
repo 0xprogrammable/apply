@@ -32,6 +32,17 @@ imports, or executes applicant code. A pass is canonical
 `programmable.workflow-canary-result.v1` JSON conforming to
 [`canary/schemas/workflow-canary-result-v1.schema.json`](../canary/schemas/workflow-canary-result-v1.schema.json).
 
+The canary reproduces only the exact canonical application record and its current policy binding. It does not claim that
+source code was built or that a reproducible build artifact exists. The retired
+`CANARY.REPRODUCIBLE_INERT_ARTIFACT` Rule ID remains in policy history; current canaries use
+`CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD`.
+
 The result binds the exact application bytes and Git blob, authenticated pull request, public source, protected policy,
-all evaluated Rule IDs, and the canonical policy-review decision. Its `CANARY_WORKFLOW_PASSED` outcome is checker-only
-and all audit, launch, discovery, routing, production, and funds authority remains false.
+all evaluated Rule IDs, and the canonical policy-review decision. The review subject's `configurationHash` is a
+domain-separated canonical commitment to the complete result application, pull-request, and source objects. It therefore
+closes over the PR number and author, exact base and head repository IDs/commits/trees, and merge commit as well as the
+application blob and source identity. The application-byte SHA-256 remains independently recorded under
+`application.blob.sha256`.
+
+`CANARY_WORKFLOW_PASSED` is checker-only and all audit, launch, discovery, routing, production, and funds authority
+remains false.

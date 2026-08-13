@@ -58,8 +58,8 @@
       "required": ["repository", "numericRepositoryId", "commit", "tree"],
       "type": "object"
     },
-    "summary": { "maxLength": 1000, "minLength": 1, "type": "string" },
-    "title": { "maxLength": 120, "minLength": 1, "type": "string" }
+    "summary": { "maxLength": 1000, "minLength": 1, "pattern": "^(?!\\s)(?![\\s\\S]*\\s$)(?![\\s\\S]*[\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069])[\\s\\S]+$", "type": "string" },
+    "title": { "maxLength": 120, "minLength": 1, "pattern": "^(?!\\s)(?![\\s\\S]*\\s$)(?![\\s\\S]*[\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069])[\\s\\S]+$", "type": "string" }
   },
   "required": ["schemaVersion", "applicationId", "applicationRevision", "builder", "source", "expectedPolicyBinding", "title", "summary", "declarations"],
   "title": "Programmable Workflow Canary Application V1",

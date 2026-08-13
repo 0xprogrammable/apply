@@ -13,7 +13,7 @@ function evidencePassed(value) {
   return value === true || value?.status === "passed";
 }
 
-export const RULE_HANDLERS = Object.freeze({
+const COMMON_RULE_HANDLERS = Object.freeze({
   "authenticated-application-v1": declaredEvidenceHandler,
   "declared-evidence-v1": declaredEvidenceHandler,
   "disclosure-v1": declaredEvidenceHandler,
@@ -22,6 +22,20 @@ export const RULE_HANDLERS = Object.freeze({
   "hidden-namespace-v1": declaredEvidenceHandler,
   "no-public-routing-v1": declaredEvidenceHandler,
   "no-real-user-funds-v1": declaredEvidenceHandler,
-  "reproducible-inert-artifact-v1": declaredEvidenceHandler,
   "v4-identity-permissions-v1": declaredEvidenceHandler
 });
+
+const RULE_HANDLERS_BY_POLICY_VERSION = Object.freeze({
+  "1.0.0": Object.freeze({
+    ...COMMON_RULE_HANDLERS,
+    "reproducible-inert-artifact-v1": declaredEvidenceHandler
+  }),
+  "1.1.0": Object.freeze({
+    ...COMMON_RULE_HANDLERS,
+    "reproducible-inert-application-record-v1": declaredEvidenceHandler
+  })
+});
+
+export function ruleHandlersForPolicyVersion(policyVersion) {
+  return RULE_HANDLERS_BY_POLICY_VERSION[policyVersion] ?? Object.freeze({});
+}

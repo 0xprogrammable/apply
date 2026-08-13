@@ -1,6 +1,6 @@
 # Programmable Launch Policy
 
-Generated from the canonical policy at `policy/launch-policy.v1.json`. Digest: `sha256:018dcaeca64d340ac38049c38777db0a07c8b5c41117260e244b41cff6aa17b6`.
+Generated from the canonical policy at `policy/launch-policy.v1.json`. Digest: `sha256:e157665625b2a8cf9e62ed33ba62b087d7a7b7c4027da83b74b9476a355d1fe4`.
 
 This document is a generated projection. The canonical JSON is authoritative.
 
@@ -27,4 +27,4 @@ Outcome: `CANARY_WORKFLOW_PASSED`.
 - `CANARY.HIDDEN_NAMESPACE`: Confine the canary to the designated hidden namespace.
 - `CANARY.NO_PUBLIC_ROUTING`: Keep the canary out of public routing and production discovery.
 - `CANARY.NO_REAL_USER_FUNDS`: Use no real-user funds or production value.
-- `CANARY.REPRODUCIBLE_INERT_ARTIFACT`: Produce a reproducible inert artifact from the exact public source.
+- `CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD`: Bind the exact canary application as canonical inert JSON with the current protected policy and reproducible parsing.

@@ -5,7 +5,7 @@ import path from "node:path";
 import { TextDecoder } from "node:util";
 
 import { parseBoundedLosslessJson } from "../vendor/programmable-v4-hook-builder/scripts/github-public-source-lossless-json.mjs";
-import { RULE_HANDLERS } from "./launch-policy-handlers.mjs";
+import { ruleHandlersForPolicyVersion } from "./launch-policy-handlers.mjs";
 
 const MAXIMUM_POLICY_BYTES = 512 * 1024;
 const POLICY_PATH = "policy/launch-policy.v1.json";
@@ -235,7 +235,7 @@ export function evaluateLaunchPolicyRules({ policyRecord, profileId, subject, ev
       results.push(Object.freeze({ ruleId: rule.id, status: "not-applicable", missingEvidence: Object.freeze([]) }));
       continue;
     }
-    const handler = RULE_HANDLERS[rule.enforcement.handlerId];
+    const handler = ruleHandlersForPolicyVersion(policyRecord.policy.policyVersion)[rule.enforcement.handlerId];
     const result = handler({ evidence, rule, subject });
     results.push(Object.freeze({
       ruleId: rule.id,
@@ -335,7 +335,16 @@ function validateRule(rule, profileIds) {
   validateEnforcement(rule);
   if (rule.status === "active" && rule.applicability.mode === "historical") fail("LAUNCH_POLICY_RULE_INVALID", `active rule ${rule.id} cannot use historical applicability.`);
   if (rule.status === "active" && rule.retiredIn !== null) fail("LAUNCH_POLICY_RULE_INVALID", `active rule ${rule.id} cannot be retired.`);
-  if (rule.status === "inactive" && (rule.applicability.mode !== "historical" || rule.retiredIn === null || canonicalJson(rule.profiles) !== canonicalJson(["production-launch"]))) fail("LAUNCH_POLICY_RULE_INVALID", `inactive rule ${rule.id} must remain retired production-only history.`);
+  if (rule.status === "inactive") {
+    const deterministicTombstone = rule.applicability.mode !== "historical"
+      && rule.enforcement.mode === "deterministic";
+    const legacyHistory = rule.applicability.mode === "historical"
+      && new Set(["human", "legacy-adapter"]).has(rule.enforcement.mode)
+      && canonicalJson(rule.profiles) === canonicalJson(["production-launch"]);
+    if (rule.retiredIn === null || (!deterministicTombstone && !legacyHistory)) {
+      fail("LAUNCH_POLICY_RULE_INVALID", `inactive rule ${rule.id} must preserve either a retired deterministic tombstone or production-only legacy history.`);
+    }
+  }
   if (Object.hasOwn(rule, "parameters")) validateJsonValue(rule.parameters, 0);
 }
 
@@ -360,7 +369,7 @@ function validateEnforcement(rule) {
   requirePlainObject(rule.enforcement, `rule ${rule.id}.enforcement`);
   exactKeys(rule.enforcement, ["handlerId", "mode", "owner"], `rule ${rule.id}.enforcement`);
   if (!new Set(["applicant", "maintainer", "platform"]).has(rule.enforcement.owner)) fail("LAUNCH_POLICY_RULE_INVALID", `rule ${rule.id} enforcement owner is invalid.`);
-  if (rule.status === "active") {
+  if (rule.status === "active" || rule.enforcement.mode === "deterministic") {
     if (rule.enforcement.mode !== "deterministic" || !HANDLER_ID.test(rule.enforcement.handlerId ?? "")) fail("LAUNCH_POLICY_RULE_INVALID", `active rule ${rule.id} must bind a deterministic handler.`);
   } else if (!new Set(["human", "legacy-adapter"]).has(rule.enforcement.mode) || rule.enforcement.handlerId !== null) {
     fail("LAUNCH_POLICY_RULE_INVALID", `inactive rule ${rule.id} enforcement history is invalid.`);
@@ -372,7 +381,7 @@ function assertDeterministicValidatorCoverage(policy) {
     .filter(({ enforcement, status }) => status === "active" && enforcement.mode === "deterministic")
     .map(({ enforcement }) => enforcement.handlerId)
     .sort(compareUtf8);
-  const implemented = Object.keys(RULE_HANDLERS).sort(compareUtf8);
+  const implemented = Object.keys(ruleHandlersForPolicyVersion(policy.policyVersion)).sort(compareUtf8);
   if (new Set(declared).size !== declared.length || canonicalJson(declared) !== canonicalJson(implemented)) {
     fail("LAUNCH_POLICY_HANDLER_COVERAGE_INVALID", "Active deterministic handler ids and implemented handlers must form an exact bijection.");
   }

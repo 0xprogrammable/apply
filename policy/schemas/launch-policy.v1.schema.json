@@ -69,7 +69,16 @@
               "applicability": {
                 "not": { "properties": { "mode": { "const": "historical" } }, "required": ["mode"], "type": "object" },
                 "type": "object"
-              }
+              },
+              "enforcement": {
+                "properties": {
+                  "handlerId": { "pattern": "^[a-z0-9][a-z0-9-]{1,79}$", "type": "string" },
+                  "mode": { "const": "deterministic" }
+                },
+                "required": ["handlerId", "mode"],
+                "type": "object"
+              },
+              "retiredIn": { "type": "null" }
             }
           }
         },
@@ -77,8 +86,46 @@
           "if": { "properties": { "status": { "const": "inactive" } }, "required": ["status"] },
           "then": {
             "properties": {
-              "applicability": { "properties": { "mode": { "const": "historical" } }, "required": ["mode"], "type": "object" }
-            }
+              "retiredIn": { "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", "type": "string" }
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "applicability": {
+                    "not": { "properties": { "mode": { "const": "historical" } }, "required": ["mode"], "type": "object" },
+                    "type": "object"
+                  },
+                  "enforcement": {
+                    "properties": {
+                      "handlerId": { "pattern": "^[a-z0-9][a-z0-9-]{1,79}$", "type": "string" },
+                      "mode": { "const": "deterministic" }
+                    },
+                    "required": ["handlerId", "mode"],
+                    "type": "object"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "applicability": { "properties": { "mode": { "const": "historical" } }, "required": ["mode"], "type": "object" },
+                  "enforcement": {
+                    "properties": {
+                      "handlerId": { "type": "null" },
+                      "mode": { "enum": ["human", "legacy-adapter"] }
+                    },
+                    "required": ["handlerId", "mode"],
+                    "type": "object"
+                  },
+                  "profiles": {
+                    "items": false,
+                    "maxItems": 1,
+                    "minItems": 1,
+                    "prefixItems": [{ "const": "production-launch" }],
+                    "type": "array"
+                  }
+                }
+              }
+            ]
           }
         }
       ],

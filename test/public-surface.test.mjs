@@ -37,8 +37,9 @@ test("the security policy separates private reports, testing limits, and rewards
 test("contribution paths and the pull request template stay in sync", () => {
   const contributing = read("CONTRIBUTING.md");
   const template = read(".github/PULL_REQUEST_TEMPLATE.md");
-  assert.match(contributing, /three intentionally separate contribution paths/u);
+  assert.match(contributing, /four intentionally separate contribution paths/u);
   assert.match(template, /Generated six-file application package/u);
+  assert.match(template, /Hidden workflow-canary application/u);
   assert.match(template, /Submit a Launch repository maintenance/u);
   assert.match(template, /Open Review Standard maintenance/u);
 });

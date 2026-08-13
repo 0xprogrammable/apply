@@ -165,7 +165,7 @@ test("third-party requirements CLI needs no Hookbuilder and projects declared ru
     "CANARY.HIDDEN_NAMESPACE",
     "CANARY.NO_PUBLIC_ROUTING",
     "CANARY.NO_REAL_USER_FUNDS",
-    "CANARY.REPRODUCIBLE_INERT_ARTIFACT"
+    "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"
   ]);
   assert.equal(output.policy.path, "policy/launch-policy.v1.json");
   assert.match(output.policy.sha256, /^sha256:[0-9a-f]{64}$/u);

@@ -65,6 +65,7 @@ function trustedPolicyFixture(t) {
 
 test("canonical policy exposes exactly build canary and disabled production profiles", () => {
   const record = canonicalPolicyRecord();
+  assert.equal(record.policy.policyVersion, "1.1.0");
   assert.deepEqual(record.policy.profiles.map(({ id }) => id), ["build", "production-launch", "workflow-canary"]);
   assert.equal(selectLaunchPolicyProfile(record.policy, "build").enabled, true);
   assert.equal(selectLaunchPolicyProfile(record.policy, "production-launch").enabled, false);
@@ -88,11 +89,41 @@ test("canonical policy keeps active build and canary rules separate from inactiv
     "CANARY.HIDDEN_NAMESPACE",
     "CANARY.NO_PUBLIC_ROUTING",
     "CANARY.NO_REAL_USER_FUNDS",
-    "CANARY.REPRODUCIBLE_INERT_ARTIFACT"
+    "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"
   ]);
+  const retiredArtifactRule = policy.rules.find(({ id }) => id === "CANARY.REPRODUCIBLE_INERT_ARTIFACT");
+  assert.deepEqual(retiredArtifactRule, {
+    applicability: { mode: "always" },
+    enforcement: { handlerId: "reproducible-inert-artifact-v1", mode: "deterministic", owner: "applicant" },
+    evidence: ["canary-inert-artifact", "canary-reproducibility"],
+    id: "CANARY.REPRODUCIBLE_INERT_ARTIFACT",
+    introducedIn: "1.0.0",
+    profiles: ["workflow-canary"],
+    requirement: "Produce a reproducible inert artifact from the exact public source.",
+    retiredIn: "1.1.0",
+    severity: "blocker",
+    status: "inactive"
+  });
+  assert.deepEqual(policy.rules.find(({ id }) => id === "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"), {
+    applicability: { mode: "always" },
+    enforcement: { handlerId: "reproducible-inert-application-record-v1", mode: "deterministic", owner: "platform" },
+    evidence: [
+      "canary-canonical-application-record",
+      "canary-current-policy-binding",
+      "canary-reproducible-application-parsing"
+    ],
+    id: "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD",
+    introducedIn: "1.1.0",
+    profiles: ["workflow-canary"],
+    requirement: "Bind the exact canary application as canonical inert JSON with the current protected policy and reproducible parsing.",
+    retiredIn: null,
+    severity: "blocker",
+    status: "active"
+  });
   assert.deepEqual(
     policy.rules.filter(({ status }) => status === "inactive").map(({ id, profiles }) => ({ id, profiles })),
     [
+      { id: "CANARY.REPRODUCIBLE_INERT_ARTIFACT", profiles: ["workflow-canary"] },
       { id: "LEGACY_V2.ADMISSION", profiles: ["production-launch"] },
       { id: "LEGACY_V2.FEE_PROJECTION", profiles: ["production-launch"] }
     ]

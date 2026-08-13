@@ -40,9 +40,9 @@ or provider evidence. Its outcome is `BUILT_NOT_REVIEWED`.
 ### Workflow canary
 
 This profile tests the complete GitHub application to website handoff without claiming production safety. It requires
-exact application identity, the closed package, a reproducible artifact, and confinement to a hidden canary namespace
-with no public routing, production discovery, or real-user funds. Its outcome is `CANARY_WORKFLOW_PASSED`, never launch
-approval.
+exact application identity, a reproducible canonical inert application record bound to the current protected policy,
+and confinement to a hidden canary namespace with no public routing, production discovery, or real-user funds. It does
+not claim a built or reproducible source artifact. Its outcome is `CANARY_WORKFLOW_PASSED`, never launch approval.
 
 ### Production launch
 

@@ -112,6 +112,39 @@ test("application and result schemas are strict and checked in", () => {
   assert.doesNotThrow(() => ajv.compile(resultSchema));
 });
 
+test("application schema and runtime share Unicode code-point and safe-text semantics", (t) => {
+  const fixture = createCanaryFixture(t);
+  const validate = new Ajv2020({ allErrors: true, strict: true }).compile(
+    readJson("canary/schemas/workflow-canary-application-v1.schema.json")
+  );
+  const canonical = JSON.parse(fixture.applicationBytes.toString("utf8"));
+  const cases = [
+    { field: "title", value: "Example Hook", expected: true },
+    { field: "title", value: " Leading", expected: false },
+    { field: "title", value: "Trailing ", expected: false },
+    { field: "title", value: "\u00a0Leading", expected: false },
+    { field: "title", value: "Control\u0001Character", expected: false },
+    { field: "title", value: "Bidi\u202eOverride", expected: false },
+    { field: "title", value: "😀".repeat(120), expected: true },
+    { field: "title", value: "😀".repeat(121), expected: false },
+    { field: "summary", value: "😀".repeat(1000), expected: true },
+    { field: "summary", value: "😀".repeat(1001), expected: false }
+  ];
+
+  for (const { field, value, expected } of cases) {
+    const application = { ...structuredClone(canonical), [field]: value };
+    const schemaAccepted = validate(application);
+    let runtimeAccepted = true;
+    try {
+      parseWorkflowCanaryApplicationBytes(jsonBytes(application), { expectedApplicationId: "example-hook" });
+    } catch {
+      runtimeAccepted = false;
+    }
+    assert.equal(schemaAccepted, expected, `${field} schema: ${JSON.stringify(value.slice(0, 24))}`);
+    assert.equal(runtimeAccepted, expected, `${field} runtime: ${JSON.stringify(value.slice(0, 24))}`);
+  }
+});
+
 test("result parser distinguishes raw bytes from self digest and revalidates embedded review semantics", async (t) => {
   const fixture = createCanaryFixture(t);
   const result = await verifyFixture(fixture);
@@ -130,6 +163,26 @@ test("result parser distinguishes raw bytes from self digest and revalidates emb
     () => parseWorkflowCanaryResultBytes(Buffer.concat([canonicalBytes, Buffer.from(" ")]), fixture.policyRecord),
     hasCode("CANARY_RESULT_JSON_NONCANONICAL")
   );
+});
+
+test("result parser binds authenticated head and merge identities into the embedded review subject", async (t) => {
+  const fixture = createCanaryFixture(t);
+  const result = await verifyFixture(fixture);
+
+  for (const [label, mutate] of [
+    ["head commit", (value) => { value.pullRequest.head.commit = "c".repeat(40); }],
+    ["head tree", (value) => { value.pullRequest.head.tree = "d".repeat(40); }],
+    ["merge commit", (value) => { value.pullRequest.mergeCommit = "e".repeat(40); }]
+  ]) {
+    const tampered = structuredClone(result);
+    mutate(tampered);
+    tampered.digest = unsafeResultDigest(tampered);
+    assert.throws(
+      () => parseWorkflowCanaryResultBytes(jsonBytes(tampered), fixture.policyRecord),
+      hasCode("CANARY_RESULT_SUBJECT_INVALID"),
+      label
+    );
+  }
 });
 
 test("V2, fee, audit artifact, approval, Registry, and production fields are forbidden", (t) => {
@@ -370,6 +423,11 @@ function jsonBytes(value) {
 
 function sha256(bytes) {
   return `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function unsafeResultDigest(result) {
+  const withoutDigest = Object.fromEntries(Object.entries(result).filter(([key]) => key !== "digest"));
+  return sha256(Buffer.from(canonicalJson(withoutDigest), "utf8"));
 }
 
 function readJson(relativePath) {

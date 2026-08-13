@@ -150,7 +150,43 @@ export async function verifyWorkflowCanary(options, dependencies = {}) {
   }
   validateExactPublicSourceObservation(sourceRequest, sourceObservation);
 
-  const evidence = buildCanaryEvidence(application, gitState);
+  const applicationSha256 = digestBytes(gitState.applicationBytes);
+  const resultApplication = {
+    applicationId: application.applicationId,
+    applicationRevision: application.applicationRevision,
+    builder: structuredClone(application.builder),
+    blob: {
+      path: gitState.applicationPath,
+      byteLength: gitState.applicationBytes.length,
+      gitBlobOid: gitState.applicationBlobOid,
+      sha256: applicationSha256
+    }
+  };
+  const resultPullRequest = {
+    number: options.pullRequestNumber,
+    authorGitHubLogin: options.expectedBuilderLogin,
+    authorGitHubUserId: options.expectedBuilderUserId,
+    base: {
+      repository: options.expectedBaseRepository,
+      numericRepositoryId: options.expectedBaseRepositoryId,
+      commit: options.expectedBaseCommit,
+      tree: gitState.baseTree
+    },
+    head: {
+      repository: options.expectedHeadRepository,
+      numericRepositoryId: options.expectedHeadRepositoryId,
+      commit: options.expectedCandidateCommit,
+      tree: gitState.candidateTree
+    },
+    mergeCommit: options.expectedMergeCommit
+  };
+  const resultSource = structuredClone(application.source);
+  const subjectCommitment = workflowCanarySubjectCommitment({
+    application: resultApplication,
+    pullRequest: resultPullRequest,
+    source: resultSource
+  });
+  const evidence = buildCanaryEvidence(application, gitState, currentPolicyBinding);
   const ruleEvaluation = evaluateLaunchPolicyRules({
     policyRecord,
     profileId: PROFILE_ID,
@@ -161,13 +197,12 @@ export async function verifyWorkflowCanary(options, dependencies = {}) {
     reject("CANARY_POLICY_RULES_FAILED", "The workflow canary did not satisfy every active central policy rule.");
   }
 
-  const applicationSha256 = digestBytes(gitState.applicationBytes);
   const subject = {
     numericRepositoryId: application.source.numericRepositoryId,
     repository: application.source.repository,
     commit: application.source.commit,
     tree: application.source.tree,
-    configurationHash: applicationSha256,
+    configurationHash: subjectCommitment,
     usesUniswapV4: true
   };
   const rules = rulesForProfile(policyRecord.policy, PROFILE_ID);
@@ -175,11 +210,9 @@ export async function verifyWorkflowCanary(options, dependencies = {}) {
     ruleId: rule.id,
     state: "passed",
     evidenceRefs: [digestCanonical({
-      applicationSha256,
-      evidenceIds: rule.evidence,
-      pullRequestHead: options.expectedCandidateCommit,
+      evidence: Object.fromEntries(rule.evidence.map((evidenceId) => [evidenceId, evidence[evidenceId]])),
       ruleId: rule.id,
-      source: application.source
+      subjectCommitment
     })],
     analyzer: {
       kind: rule.enforcement.mode,
@@ -210,36 +243,9 @@ export async function verifyWorkflowCanary(options, dependencies = {}) {
     profileId: PROFILE_ID,
     result: OUTCOME,
     outcome: OUTCOME,
-    application: {
-      applicationId: application.applicationId,
-      applicationRevision: application.applicationRevision,
-      builder: structuredClone(application.builder),
-      blob: {
-        path: gitState.applicationPath,
-        byteLength: gitState.applicationBytes.length,
-        gitBlobOid: gitState.applicationBlobOid,
-        sha256: applicationSha256
-      }
-    },
-    pullRequest: {
-      number: options.pullRequestNumber,
-      authorGitHubLogin: options.expectedBuilderLogin,
-      authorGitHubUserId: options.expectedBuilderUserId,
-      base: {
-        repository: options.expectedBaseRepository,
-        numericRepositoryId: options.expectedBaseRepositoryId,
-        commit: options.expectedBaseCommit,
-        tree: gitState.baseTree
-      },
-      head: {
-        repository: options.expectedHeadRepository,
-        numericRepositoryId: options.expectedHeadRepositoryId,
-        commit: options.expectedCandidateCommit,
-        tree: gitState.candidateTree
-      },
-      mergeCommit: options.expectedMergeCommit
-    },
-    source: structuredClone(application.source),
+    application: resultApplication,
+    pullRequest: resultPullRequest,
+    source: resultSource,
     policyBinding: structuredClone(currentPolicyBinding),
     evaluatedRuleIds: rules.map(({ id }) => id),
     reviewDecision: structuredClone(reviewDecision),
@@ -388,16 +394,21 @@ function validateWorkflowCanaryResult(result, trustedPolicyRecord, { verifyDiges
     systemBlocked("CANARY_RESULT_REVIEW_INVALID", "Embedded review decision does not match the workflow-canary result.");
   }
   const subject = result.reviewDecision.currentSubject;
+  const expectedSubjectCommitment = workflowCanarySubjectCommitment({
+    application: result.application,
+    pullRequest: result.pullRequest,
+    source: result.source
+  });
   if (
     canonicalJson(result.reviewDecision.expectedSubject) !== canonicalJson(subject)
     || subject.repository !== result.source.repository
     || subject.numericRepositoryId !== result.source.numericRepositoryId
     || subject.commit !== result.source.commit
     || subject.tree !== result.source.tree
-    || subject.configurationHash !== result.application.blob.sha256
+    || subject.configurationHash !== expectedSubjectCommitment
     || subject.usesUniswapV4 !== true
   ) {
-    systemBlocked("CANARY_RESULT_SUBJECT_INVALID", "Embedded review subject does not close over exact application and source identity.");
+    systemBlocked("CANARY_RESULT_SUBJECT_INVALID", "Embedded review subject does not close over exact application, pull-request, and source identity.");
   }
   if (verifyDigest && (!SHA256.test(result.digest ?? "") || result.digest !== digestCanonical(withoutResultDigest(result)))) {
     systemBlocked("CANARY_RESULT_DIGEST_INVALID", "Workflow canary result digest does not bind its exact canonical fields.");
@@ -497,7 +508,8 @@ function inspectCanaryPullRequest(options) {
   };
 }
 
-function buildCanaryEvidence(application, gitState) {
+function buildCanaryEvidence(application, gitState, currentPolicyBinding) {
+  const applicationSha256 = digestBytes(gitState.applicationBytes);
   return {
     "canary-application-authentication": true,
     "canary-public-source": true,
@@ -505,8 +517,28 @@ function buildCanaryEvidence(application, gitState) {
     "canary-no-production-discovery": application.declarations.hiddenFromPublicRoutingAndDiscovery === true,
     "canary-no-public-routing": application.declarations.hiddenFromPublicRoutingAndDiscovery === true && application.declarations.productionRouting === false,
     "canary-no-real-user-funds": application.declarations.realUserFunds === false,
-    "canary-inert-artifact": true,
-    "canary-reproducibility": true
+    "canary-canonical-application-record": {
+      status: "passed",
+      schemaVersion: APPLICATION_SCHEMA_VERSION,
+      path: gitState.applicationPath,
+      byteLength: gitState.applicationBytes.length,
+      gitBlobOid: gitState.applicationBlobOid,
+      sha256: applicationSha256
+    },
+    "canary-current-policy-binding": {
+      status: "passed",
+      applicationSha256,
+      policyBinding: structuredClone(currentPolicyBinding)
+    },
+    "canary-reproducible-application-parsing": {
+      status: "passed",
+      schemaVersion: APPLICATION_SCHEMA_VERSION,
+      applicationSha256,
+      canonicalJson: true,
+      duplicateKeysRejected: true,
+      encoding: "utf-8",
+      trailingBytes: "one-lf"
+    }
   };
 }
 
@@ -749,13 +781,22 @@ function splitNul(bytes) {
 function safeText(value, maximum, code, label) {
   if (
     typeof value !== "string"
-    || value.length < 1
-    || value.length > maximum
+    || [...value].length < 1
+    || [...value].length > maximum
     || value.trim() !== value
     || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value)
   ) {
     reject(code, `${label} is malformed or unsafe.`);
   }
+}
+
+function workflowCanarySubjectCommitment({ application, pullRequest, source }) {
+  return digestCanonical({
+    schemaVersion: "programmable.workflow-canary-subject-commitment.v1",
+    application,
+    pullRequest,
+    source
+  });
 }
 
 function digestCanonical(value) {
