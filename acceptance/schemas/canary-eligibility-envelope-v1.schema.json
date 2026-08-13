@@ -1,0 +1,31 @@
+{
+  "$id": "https://programmable.money/schemas/canary-eligibility-envelope-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "applicationDocument": { "$ref": "https://programmable.money/schemas/workflow-canary-application-v1.schema.json" },
+    "authorization": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "keyId": { "pattern": "^ed25519:sha256:[0-9a-f]{64}$", "type": "string" },
+        "signature": { "pattern": "^[A-Za-z0-9_-]{86}$", "type": "string" },
+        "signedCommandDigest": { "$ref": "#/$defs/digest" }
+      },
+      "required": ["algorithm", "keyId", "signature", "signedCommandDigest"],
+      "type": "object"
+    },
+    "canaryCommand": { "$ref": "https://programmable.money/schemas/protected-canary-eligibility-command-v1.schema.json#/$defs/command" },
+    "eligibility": { "$ref": "https://programmable.money/schemas/protected-canary-eligibility-command-v1.schema.json#/$defs/eligibility" },
+    "eligibilityId": { "$ref": "#/$defs/digest" },
+    "schemaVersion": { "const": "programmable.canary-eligibility-envelope.v1" },
+    "state": { "const": "eligible" },
+    "workflowCanaryResult": { "$ref": "https://programmable.money/schemas/workflow-canary-result-v1.schema.json" }
+  },
+  "required": ["schemaVersion", "state", "canaryCommand", "authorization", "applicationDocument", "workflowCanaryResult", "eligibility", "eligibilityId"],
+  "title": "Programmable Hidden Canary Eligibility Envelope V1",
+  "type": "object",
+  "$defs": {
+    "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" }
+  }
+}

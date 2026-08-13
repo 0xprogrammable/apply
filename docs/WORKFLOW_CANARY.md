@@ -46,3 +46,7 @@ application blob and source identity. The application-byte SHA-256 remains indep
 
 `CANARY_WORKFLOW_PASSED` is checker-only and all audit, launch, discovery, routing, production, and funds authority
 remains false.
+
+The separate [Hidden Canary eligibility v1](CANARY_ELIGIBILITY_V1.md) contract can sign this exact result for a
+short-lived Website test surface. It revalidates the original application and complete result against the same trusted
+policy and does not add production authority.

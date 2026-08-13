@@ -1,0 +1,157 @@
+{
+  "$id": "https://programmable.money/schemas/protected-canary-eligibility-command-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "application": {
+      "additionalProperties": false,
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/applicationId" },
+        "applicationRevision": { "maximum": 1000000000, "minimum": 1, "type": "integer" },
+        "blob": {
+          "additionalProperties": false,
+          "properties": {
+            "byteLength": { "maximum": 65536, "minimum": 2, "type": "integer" },
+            "gitBlobOid": { "$ref": "#/$defs/objectId" },
+            "path": { "maxLength": 300, "pattern": "^canary-submissions/[a-z0-9]+(?:-[a-z0-9]+)*/application\\.json$", "type": "string" },
+            "sha256": { "$ref": "#/$defs/digest" }
+          },
+          "required": ["path", "byteLength", "gitBlobOid", "sha256"],
+          "type": "object"
+        },
+        "builder": {
+          "additionalProperties": false,
+          "properties": {
+            "githubLogin": { "$ref": "#/$defs/githubLogin" },
+            "githubUserId": { "$ref": "#/$defs/opaqueId" }
+          },
+          "required": ["githubLogin", "githubUserId"],
+          "type": "object"
+        }
+      },
+      "required": ["applicationId", "applicationRevision", "builder", "blob"],
+      "type": "object"
+    },
+    "applicationId": { "maxLength": 128, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string" },
+    "authorization": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "keyId": { "pattern": "^ed25519:sha256:[0-9a-f]{64}$", "type": "string" },
+        "signature": { "pattern": "^[A-Za-z0-9_-]{86}$", "type": "string" }
+      },
+      "required": ["algorithm", "keyId", "signature"],
+      "type": "object"
+    },
+    "binding": {
+      "additionalProperties": false,
+      "properties": {
+        "baseCommit": { "$ref": "#/$defs/objectId" },
+        "baseTree": { "$ref": "#/$defs/objectId" },
+        "gitBlobOid": { "$ref": "#/$defs/objectId" },
+        "numericRepositoryId": { "const": "1320171831" },
+        "path": { "const": "policy/launch-policy.v1.json" },
+        "policyId": { "pattern": "^[a-z0-9][a-z0-9.-]{2,79}$", "type": "string" },
+        "policyVersion": { "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$", "type": "string" },
+        "profileId": { "const": "workflow-canary" },
+        "repository": { "const": "0xprogrammable/submit-launch" },
+        "schemaVersion": { "const": "programmable.launch-policy-binding.v1" },
+        "sha256": { "$ref": "#/$defs/digest" }
+      },
+      "required": ["schemaVersion", "repository", "numericRepositoryId", "baseCommit", "baseTree", "path", "gitBlobOid", "policyId", "policyVersion", "profileId", "sha256"],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": false,
+      "properties": {
+        "action": { "const": "issue-hidden-canary-eligibility" },
+        "application": { "$ref": "#/$defs/application" },
+        "eligibility": { "$ref": "#/$defs/eligibility" },
+        "issuedAt": { "format": "date-time", "type": "string" },
+        "issuedBy": {
+          "additionalProperties": false,
+          "properties": {
+            "githubLogin": { "$ref": "#/$defs/githubLogin" },
+            "githubUserId": { "$ref": "#/$defs/opaqueId" },
+            "mode": { "enum": ["automation-review", "human-review"] }
+          },
+          "required": ["githubLogin", "githubUserId", "mode"],
+          "type": "object"
+        },
+        "policyBinding": { "$ref": "#/$defs/binding" },
+        "pullRequest": { "$ref": "#/$defs/pullRequest" },
+        "schemaVersion": { "const": "programmable.protected-canary-eligibility-command.v1" },
+        "source": { "$ref": "#/$defs/gitIdentity" },
+        "supersedes": { "type": "null" },
+        "validUntil": { "format": "date-time", "type": "string" },
+        "workflowCanaryResult": { "$ref": "#/$defs/resultBinding" }
+      },
+      "required": ["schemaVersion", "action", "issuedAt", "issuedBy", "validUntil", "application", "pullRequest", "source", "policyBinding", "workflowCanaryResult", "eligibility", "supersedes"],
+      "type": "object"
+    },
+    "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "eligibility": {
+      "additionalProperties": false,
+      "properties": {
+        "launchAuthorized": { "const": false },
+        "productionRouting": { "const": false },
+        "publicDiscovery": { "const": false },
+        "realFunds": { "const": false },
+        "surface": { "const": "hidden-canary" }
+      },
+      "required": ["surface", "publicDiscovery", "productionRouting", "realFunds", "launchAuthorized"],
+      "type": "object"
+    },
+    "gitIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": { "$ref": "#/$defs/objectId" },
+        "numericRepositoryId": { "$ref": "#/$defs/opaqueId" },
+        "repository": { "maxLength": 202, "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string" },
+        "tree": { "$ref": "#/$defs/objectId" }
+      },
+      "required": ["repository", "numericRepositoryId", "commit", "tree"],
+      "type": "object"
+    },
+    "githubLogin": { "maxLength": 39, "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$", "type": "string" },
+    "objectId": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "opaqueId": { "pattern": "^[1-9][0-9]{0,63}$", "type": "string" },
+    "pullRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "authorGitHubLogin": { "$ref": "#/$defs/githubLogin" },
+        "authorGitHubUserId": { "$ref": "#/$defs/opaqueId" },
+        "base": { "$ref": "#/$defs/gitIdentity" },
+        "head": { "$ref": "#/$defs/gitIdentity" },
+        "mergeCommit": { "$ref": "#/$defs/objectId" },
+        "number": { "pattern": "^[1-9][0-9]{0,19}$", "type": "string" }
+      },
+      "required": ["number", "authorGitHubLogin", "authorGitHubUserId", "base", "head", "mergeCommit"],
+      "type": "object"
+    },
+    "resultBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "byteLength": { "maximum": 524288, "minimum": 2, "type": "integer" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "outcome": { "const": "CANARY_WORKFLOW_PASSED" },
+        "profileId": { "const": "workflow-canary" },
+        "result": { "const": "CANARY_WORKFLOW_PASSED" },
+        "reviewDecisionDigest": { "$ref": "#/$defs/digest" },
+        "schemaVersion": { "const": "programmable.workflow-canary-result.v1" },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "status": { "const": "passed" }
+      },
+      "required": ["schemaVersion", "profileId", "status", "result", "outcome", "digest", "reviewDecisionDigest", "byteLength", "sha256"],
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "authorization": { "$ref": "#/$defs/authorization" },
+    "command": { "$ref": "#/$defs/command" },
+    "schemaVersion": { "const": "programmable.signed-protected-canary-eligibility-command.v1" }
+  },
+  "required": ["schemaVersion", "authorization", "command"],
+  "title": "Programmable Signed Protected Canary Eligibility Command V1",
+  "type": "object"
+}

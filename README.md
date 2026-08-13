@@ -33,6 +33,9 @@ public repository.
 
 The separate [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
 creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
+An exact passing result can be compiled into a short-lived
+[Hidden Canary eligibility envelope](docs/CANARY_ELIGIBILITY_V1.md) for a Website test surface. Every public,
+production, funds, audit, and launch authority flag remains false.
 
 A local checker result, passing pull request, merged application, registry match, deployment, or indexer observation is
 never presented as a safety guarantee or launch right.
@@ -76,9 +79,9 @@ findings. The public compatibility checker does not fetch
 project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, route traffic,
 handle real funds or issue launch permission. Every result remains `checkerOnly: true` and `launchAuthorized: false`.
 
-After review, maintainers can compile a signed, exact-revision acceptance into the versioned
-[six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md). The bridge does not treat a GitHub
-label, green check, merge, or editable review state as launch authority, and it never issues the wallet-bound permit.
+The historical [six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md) is fail-closed while the
+central `production-launch` profile is disabled. Its old opaque policy digest cannot enable production. A new
+policy-bound command version is required before that path can issue any entitlement.
 
 Read the complete [Policy-Bound Review Standard](docs/OPEN_REVIEW_STANDARD.md). There is no separate reviewer policy.
 
@@ -162,6 +165,7 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
 - [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)
+- [Hidden Canary eligibility v1](docs/CANARY_ELIGIBILITY_V1.md)
 - [Acceptance entitlement bridge v1](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md)
 - [Discovery contract](docs/DISCOVERY_CONTRACT.md)
 - [Code maturity assessment](docs/CODE_MATURITY.md)

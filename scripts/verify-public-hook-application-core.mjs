@@ -123,6 +123,8 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "package.json",
   "scripts/generate-registry.mjs",
   "scripts/acceptance-entitlement-core.mjs",
+  "scripts/canary-eligibility-core.mjs",
+  "scripts/compile-canary-eligibility.mjs",
   "scripts/compile-launch-entitlement.mjs",
   "scripts/registry-core.mjs",
   "scripts/verify-repository.mjs",
