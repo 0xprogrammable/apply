@@ -3,7 +3,7 @@
   "kind": "starter",
   "id": "ordinary-launch",
   "label": "Ordinary token launch",
-  "summary": "Start a simple fixed-supply token and canonical v4 pool with the smallest reviewed behavior surface.",
+  "summary": "Start a fixed-supply token and canonical v4 pool with the mandatory standard fee-hook profile and no additional project-defined hook behavior.",
   "acceleratorOnly": true,
   "eligibilityEffect": "none",
   "unknownCapabilityPolicy": "preserve-and-route",
@@ -21,7 +21,8 @@
   "capabilities": [
     "canonical-v4-pool",
     "fixed-supply-token",
-    "ordinary-price-discovery"
+    "ordinary-price-discovery",
+    "standard-programmable-fee-hook"
   ],
   "projectSurfaces": [
     "contract",
@@ -30,7 +31,7 @@
   "requiredFacts": [
     "Token name, symbol, fixed supply and immutable control model",
     "Canonical PoolKey, launch price-discovery path and initial liquidity",
-    "Selected total swap fee and exact non-additive Programmable split",
+    "Selected total swap fee, exact non-additive Programmable split and standard fee-hook profile",
     "Claim, exit, metadata and retirement behavior"
   ],
   "requiredFiles": [

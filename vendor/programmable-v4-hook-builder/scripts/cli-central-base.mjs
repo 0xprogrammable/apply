@@ -14,12 +14,13 @@ import {
 import { CliFailure } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
 import { hasForbiddenInvisibleOrBidi } from "./metadata-core.mjs";
+import { parseBoundedStrictJson } from "./strict-json-core.mjs";
+import { SUBMIT_LAUNCH_INTAKE_CONTRACT as INTAKE } from "./registry-intake-contract.mjs";
 
+const launchRepository = INTAKE.repository;
 export const CENTRAL_GITHUB_TARGET = Object.freeze({
-  owner: "0xprogrammable",
-  repository: "submit-launch",
-  repositorySlug: "0xprogrammable/submit-launch",
-  repositoryUrl: "https://github.com/0xprogrammable/submit-launch"
+  owner: launchRepository.owner, repository: launchRepository.name,
+  repositorySlug: launchRepository.slug, repositoryUrl: launchRepository.url
 });
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/u;
@@ -27,13 +28,18 @@ const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const APPLICATION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const OPAQUE_DECIMAL_PATTERN = /^[1-9][0-9]{0,63}$/u;
-const SAFE_BRANCH_PATTERN = /^(?!\/)(?!.*(?:\.\.|\/\/|@\{|\\|[\u0000-\u0020\u007f~^:?*\[]))[A-Za-z0-9._/-]{1,255}(?<![\/.])$/u;
 const DEFAULT_ATTEMPTS = 3;
 const MAX_REQUESTS = 24;
 const MAX_COMMIT_RESPONSE_BYTES = 256 * 1024;
 const MAX_TREE_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_BLOB_RESPONSE_BYTES = 384 * 1024;
 const MAX_APPLICATION_REVISION = 1_000_000;
+const COMPATIBILITY_RESULTS = new Set([
+  "prototype-ready",
+  "changes-required",
+  "architecture-review-required",
+  "tooling-blocked"
+]);
 const MAX_PACKAGE_BYTES = 512 * 1024;
 const MAX_FILE_BYTES = Object.freeze({
   "application.json": 64 * 1024,
@@ -198,6 +204,10 @@ function validateObservedPriorPackage({ applicationId, files }) {
   }
   const applicationBytes = files.get("application.json");
   const application = parseCanonicalApplication(applicationBytes, applicationId);
+  const compatibilityResult = parseCanonicalCompatibilityResult(
+    files.get("compatibility-report.json"),
+    application
+  );
   const reviewNames = CENTRAL_APPLICATION_FILES.slice(1);
   if (!Array.isArray(application.reviewPackage) || application.reviewPackage.length !== reviewNames.length) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application review index is incomplete", { exitCode: 1 });
@@ -233,6 +243,7 @@ function validateObservedPriorPackage({ applicationId, files }) {
       targetDirectory: `submissions/${applicationId}`,
       stage: application.stage,
       applicationRevision: application.applicationRevision,
+      compatibilityResult,
       fileCount: records.length,
       fileOrder: [...CENTRAL_APPLICATION_FILES],
       encoding: "utf8",
@@ -243,17 +254,52 @@ function validateObservedPriorPackage({ applicationId, files }) {
   };
 }
 
+function parseCanonicalCompatibilityResult(bytes, application) {
+  const source = decodeUtf8(bytes, "compatibility-report.json");
+  let compatibility;
+  try {
+    compatibility = parseBoundedStrictJson(source, { maxSourceBytes: MAX_FILE_BYTES["compatibility-report.json"] });
+  } catch {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report is not valid duplicate-free JSON", { exitCode: 1 });
+  }
+  if (hasForbiddenInvisibleOrBidi(source.replaceAll("\n", "")) || source.includes("\r")) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report contains unsafe text", { exitCode: 1 });
+  }
+  if (source !== `${canonicalJson(compatibility)}\n`) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report is not exact canonical JSON", { exitCode: 1 });
+  }
+  const primary = application.source.primary;
+  if (
+    !isExactObject(compatibility, ["applicationId", "disclaimer", "findings", "result", "schemaVersion", "source"])
+    || compatibility.schemaVersion !== 1
+    || compatibility.applicationId !== application.applicationId
+    || !COMPATIBILITY_RESULTS.has(compatibility.result)
+    || !Array.isArray(compatibility.findings)
+    || compatibility.findings.length > 128
+    || typeof compatibility.disclaimer !== "string"
+    || compatibility.disclaimer.length < 1
+    || compatibility.disclaimer.length > 5_000
+    || !isExactObject(compatibility.source, ["numericRepositoryId", "revisionObjectId", "treeObjectId"])
+    || compatibility.source.numericRepositoryId !== primary.numericRepositoryId
+    || compatibility.source.revisionObjectId !== primary.revisionObjectId
+    || compatibility.source.treeObjectId !== primary.treeObjectId
+  ) {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior compatibility report does not match the application source", { exitCode: 1 });
+  }
+  return compatibility.result;
+}
+
 function parseCanonicalApplication(bytes, applicationId) {
   const source = decodeUtf8(bytes, "application.json");
+  let application;
+  try {
+    application = parseBoundedStrictJson(source, { maxSourceBytes: MAX_FILE_BYTES["application.json"] });
+  } catch {
+    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest is not valid duplicate-free JSON", { exitCode: 1 });
+  }
   const body = source.endsWith("\n") ? source.slice(0, -1) : source;
   if (hasForbiddenInvisibleOrBidi(body) || source.includes("\r")) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest contains unsafe text", { exitCode: 1 });
-  }
-  let application;
-  try {
-    application = JSON.parse(source);
-  } catch {
-    throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest is not valid JSON", { exitCode: 1 });
   }
   if (source !== `${canonicalJson(application)}\n`) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest is not exact canonical JSON", { exitCode: 1 });
@@ -591,10 +637,7 @@ function createRequestState({ fetchImplementation, sleepImplementation, attempts
 
 function validateInputs({ baseBranch, applicationId, fetchImplementation, sleepImplementation, attempts, timeoutMs }) {
   if (
-    typeof baseBranch !== "string"
-    || !SAFE_BRANCH_PATTERN.test(baseBranch)
-    || baseBranch.endsWith(".lock")
-    || baseBranch.startsWith("refs/")
+    baseBranch !== launchRepository.defaultBranch
     || typeof fetchImplementation !== "function"
     || typeof sleepImplementation !== "function"
     || !Number.isInteger(attempts)

@@ -44,7 +44,7 @@ replay semantics exist. A model opinion, scanner score, label or incomplete witn
 
 ## Run the public checker
 
-Node.js 20 or newer is sufficient. The checker has no runtime dependencies and never executes a candidate repository.
+Node.js 24 or newer is required. The checker has no runtime dependencies and never executes a candidate repository.
 
 ```bash
 npm run review -- review/examples/disclosed-high-fee.json

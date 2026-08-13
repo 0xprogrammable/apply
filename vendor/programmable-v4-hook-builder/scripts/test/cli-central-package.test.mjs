@@ -22,6 +22,9 @@ const skillRoot = path.resolve(testDirectory, "..", "..");
 const submissionSchema = JSON.parse(
   fs.readFileSync(path.join(skillRoot, "references", "submission.schema.json"), "utf8")
 );
+const publicApplicationSchema = JSON.parse(
+  fs.readFileSync(path.join(skillRoot, "references", "public-pr-application.schema.json"), "utf8")
+);
 const templateCatalog = loadTemplateCatalog({ skillRoot });
 
 function trustedHostTest(name, implementation) {
@@ -92,10 +95,20 @@ trustedHostTest("a manual candidate gate survives central projection as architec
   assert.equal(validated.compatibility.result, "architecture-review-required");
   assert.deepEqual(
     validated.compatibility.findings.map(({ code, path }) => ({ code, path })),
-    [{
-      code: "REQUIRED_REVIEW_GATE",
-      path: "$.requiredGates.candidate.human-economic-and-security-review"
-    }]
+    [
+      {
+        code: "PROGRAMMABLE_FEE_CONFORMANCE_EVIDENCE_MISSING",
+        path: "$.implementation.feeConformanceManifestPath"
+      },
+      {
+        code: "REQUIRED_REVIEW_GATE",
+        path: "$.requiredGates.candidate.custom-programmable-fee-review"
+      },
+      {
+        code: "REQUIRED_REVIEW_GATE",
+        path: "$.requiredGates.candidate.human-economic-and-security-review"
+      }
+    ]
   );
   assert.equal(validated.evidenceIndex.evidence[0].status, "blocked");
 });
@@ -177,6 +190,84 @@ trustedHostTest("a non-Mainnet application projects to architecture review rathe
   assert.equal(validated.evidenceIndex.evidence[0].status, "blocked");
 });
 
+test("prototype central projection fails closed when exact source workflow evidence is absent", () => {
+  const central = buildFixture({
+    decision: "PROTOTYPE_READY",
+    findings: [],
+    requiredGates: []
+  }, {
+    githubActionsRunIds: []
+  });
+  const compatibility = centralJson(central, "compatibility-report.json");
+
+  assert.equal(central.compatibilityResult, "tooling-blocked");
+  assert.ok(compatibility.findings.some(({ code }) => code === "SOURCE_WORKFLOW_EVIDENCE_MISSING"));
+  assert.ok(compatibility.findings.some(({ path }) => path.includes("source-workflow-evidence")));
+});
+
+test("custom fee implementation without the standard receipt stays eligible for human review", () => {
+  const central = buildFixture({
+    decision: "PROTOTYPE_READY",
+    findings: [],
+    requiredGates: []
+  });
+  const compatibility = centralJson(central, "compatibility-report.json");
+
+  assert.equal(central.compatibilityResult, "architecture-review-required");
+  assert.notEqual(central.compatibilityResult, "tooling-blocked");
+  assert.ok(compatibility.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_CONFORMANCE_EVIDENCE_MISSING"));
+  assert.ok(compatibility.findings.some(({ path }) => path.includes("custom-programmable-fee-review")));
+});
+
+test("central projection rejects decoded duplicate keys in every committed JSON input before semantics", () => {
+  const secret = "central-package-private-key-must-not-echo";
+  const cases = [
+    {
+      relativePath: "submission.json",
+      variants: [
+        `"standardVersion":"1.6.0","privateKey":"${secret}"`,
+        `"standardVersion":"9.9.9","privateKey":"${secret}"`,
+        `"standardVersi\\u006fn":"9.9.9","privateKey":"${secret}"`
+      ]
+    },
+    {
+      relativePath: "compatibility-report.json",
+      variants: [
+        `"decision":"PROTOTYPE_READY","privateKey":"${secret}"`,
+        `"decision":"REDESIGN_REQUIRED","privateKey":"${secret}"`,
+        `"decisi\\u006fn":"REDESIGN_REQUIRED","privateKey":"${secret}"`
+      ]
+    },
+    {
+      relativePath: "evidence/gate-status.json",
+      variants: [
+        `"gates":[],"privateKey":"${secret}"`,
+        `"gates":[{"id":"shadow"}],"privateKey":"${secret}"`,
+        `"gat\\u0065s":[{"id":"shadow"}],"privateKey":"${secret}"`
+      ]
+    }
+  ];
+
+  for (const { relativePath, variants } of cases) {
+    for (const duplicate of variants) {
+      assert.throws(
+        () => buildFixture({ decision: "PROTOTYPE_READY", findings: [], requiredGates: [] }, {
+          mutateHeadFiles(headFiles, packagePath) {
+            const target = `${packagePath}/${relativePath}`;
+            const source = headFiles.get(target).toString("utf8").trimEnd();
+            headFiles.set(target, Buffer.from(`${source.slice(0, -1)},${duplicate}}\n`));
+          }
+        }),
+        (error) => {
+          assert.equal(error?.code, "CENTRAL_PACKAGE_INVALID");
+          assert.equal(String(error?.message).includes(secret), false);
+          return true;
+        }
+      );
+    }
+  }
+});
+
 trustedHostTest("central projection rejects default-ignorable Unicode but preserves legitimate non-Latin text", () => {
   const localReport = {
     decision: "PROTOTYPE_READY",
@@ -220,12 +311,66 @@ trustedHostTest("central projection preserves the exact catalog selection, packs
   assert.deepEqual(validateCentral(central).application.builderTemplate, builderTemplate);
 });
 
+trustedHostTest("central projection accepts custom programmable fee rates above the reference accelerator", () => {
+  const localReport = {
+    decision: "PROTOTYPE_READY",
+    findings: [],
+    requiredGates: [{
+      id: "custom-programmable-fee-review",
+      stage: "candidate",
+      reason: "The selected fee exceeds the reference accelerator and requires custom review."
+    }]
+  };
+  const central = buildFixture(localReport, {
+    mutateSubmission(submission) {
+      Object.assign(submission.programmableFee.rates, {
+        selectedBuyHundredthsOfBip: 200_000,
+        selectedSellHundredthsOfBip: 200_000,
+        effectiveBuyHundredthsOfBip: 200_000,
+        effectiveSellHundredthsOfBip: 200_000,
+        projectBuyHundredthsOfBip: 199_000,
+        projectSellHundredthsOfBip: 199_000
+      });
+    }
+  });
+
+  assert.deepEqual(validateCentral(central).application.programmableFee.rates, {
+    ...implementedProgrammableFee({
+      feeSourcePath: "src/ProgrammableFeeHook.sol",
+      feeTestPath: "test/ProgrammableFeeHook.t.sol"
+    }).rates,
+    selectedBuyHundredthsOfBip: 200_000,
+    selectedSellHundredthsOfBip: 200_000,
+    effectiveBuyHundredthsOfBip: 200_000,
+    effectiveSellHundredthsOfBip: 200_000,
+    projectBuyHundredthsOfBip: 199_000,
+    projectSellHundredthsOfBip: 199_000
+  });
+});
+
+test("public application programmable fee bounds match the submission contract", () => {
+  const submissionRates = submissionSchema.properties.programmableFee.properties.rates.properties;
+  const publicRates = publicApplicationSchema.$defs.programmableFeeRates.properties;
+  for (const field of [
+    "selectedBuyHundredthsOfBip",
+    "selectedSellHundredthsOfBip",
+    "effectiveBuyHundredthsOfBip",
+    "effectiveSellHundredthsOfBip",
+    "projectBuyHundredthsOfBip",
+    "projectSellHundredthsOfBip"
+  ]) {
+    assert.equal(publicRates[field].maximum, submissionRates[field].maximum, field);
+  }
+});
+
 function buildFixture(localReport, {
   builderTemplate = manualBuilderTemplate(),
   completedGateIds = [],
+  githubActionsRunIds = ["7001"],
   reviewTarget = null,
   stage = "prototype",
-  mutateSubmission = null
+  mutateSubmission = null,
+  mutateHeadFiles = null
 } = {}) {
   const applicationId = "central-model";
   const packagePath = `submissions/${applicationId}`;
@@ -245,14 +390,14 @@ function buildFixture(localReport, {
       treeObjectId,
       sourcePaths: [compatibilityPath, feeSourcePath, feeTestPath, gateStatusPath, submissionPath].sort(),
       contractPaths: [],
-      githubActionsRunIds: []
+      githubActionsRunIds
     },
     companions: []
   };
   const programmableFee = implementedProgrammableFee({ feeSourcePath, feeTestPath });
   const submission = {
     schemaVersion: 1,
-    standardVersion: "1.5.0",
+    standardVersion: "1.6.0",
     stage,
     model: {
       id: applicationId,
@@ -276,6 +421,7 @@ function buildFixture(localReport, {
       gates: completedGateIds.map((id) => ({ id, status: "completed", evidence: [] }))
     })]
   ]);
+  mutateHeadFiles?.(headFiles, packagePath);
   return buildCentralApplicationPackage({
     packagePath,
     applicationRevision: 1,
@@ -292,6 +438,10 @@ function buildFixture(localReport, {
   });
 }
 
+function centralJson(central, name) {
+  return JSON.parse(central.files.find(({ path: filePath }) => filePath === name).content);
+}
+
 function implementedProgrammableFee({ feeSourcePath, feeTestPath }) {
   return {
     policyId: "programmable-volume-fee-v1",
@@ -299,12 +449,15 @@ function implementedProgrammableFee({ feeSourcePath, feeTestPath }) {
     poolScope: "canonical-launch-pool-key",
     rates: {
       unit: "hundredths-of-bip",
-      selectedHundredthsOfBip: 30000,
+      selectedBuyHundredthsOfBip: 30000,
+      selectedSellHundredthsOfBip: 20000,
       minimumEffectiveHundredthsOfBip: 1000,
-      effectiveHundredthsOfBip: 30000,
+      effectiveBuyHundredthsOfBip: 30000,
+      effectiveSellHundredthsOfBip: 20000,
       platformHundredthsOfBip: 1000,
-      projectHundredthsOfBip: 29000,
-      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      projectBuyHundredthsOfBip: 29000,
+      projectSellHundredthsOfBip: 19000,
+      formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
       lpFeeExcluded: true
     },
     basis: {

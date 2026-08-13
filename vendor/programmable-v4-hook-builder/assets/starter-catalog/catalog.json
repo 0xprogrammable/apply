@@ -1,6 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "kind": "programmable-starter-catalog",
+  "implementationLegos": {
+    "path": "implementation-legos/manifest.json",
+    "sha256": "5e046fcabe3d91408fe4a7f562a0a599d5ad352798aa8249cf357fd49f4fbea7"
+  },
   "policy": {
     "selectionSemantics": "accelerator-only",
     "unknownCapabilityOutcome": "architecture-review-required",
@@ -9,7 +13,6 @@
   },
   "mandatoryPacks": [
     "metadata-disclosures",
-    "programmable-volume-fee",
     "test-evidence-threat-model"
   ],
   "entries": [
@@ -35,13 +38,25 @@
       "id": "blank-custom",
       "kind": "starter",
       "path": "starters/blank-custom.json",
-      "sha256": "335fe3b174e48c3d4da5dc16e47ce1af412284ef487a49fb1d1cce975065323b"
+      "sha256": "b5b76a64787f5335e9a5c1cf3b415a90d97c53fb033119eaf8b77b70d8f24a16"
     },
     {
       "id": "continuous-clearing-auction",
       "kind": "pack",
       "path": "packs/continuous-clearing-auction.json",
       "sha256": "c0eef3103dbb6a21f68b94b5a13ee2b9c2fb3cf6a2e90a07afa774eb5f8541cb"
+    },
+    {
+      "id": "contract-priced-sell-and-burn",
+      "kind": "pack",
+      "path": "packs/contract-priced-sell-and-burn.json",
+      "sha256": "e84278a01670814751419afc1f175753ae783577e7deb631411bdf1da3df686f"
+    },
+    {
+      "id": "contract-priced-sell-and-burn-v4-custom-accounting",
+      "kind": "pack",
+      "path": "packs/contract-priced-sell-and-burn-v4-custom-accounting.json",
+      "sha256": "db2d6176631056cc7146e51551e9bfc5d808dda09d1cd2825be79fb08b9b7790"
     },
     {
       "id": "custom-curve",
@@ -59,7 +74,7 @@
       "id": "custom-hook-behavior",
       "kind": "pack",
       "path": "packs/custom-hook-behavior.json",
-      "sha256": "202848994958e3487badfa447199ad7de4691432b0ba750e243dbe2eaddb283c"
+      "sha256": "b66c400ad143f3ba59c215d4c23b130c0213b8cd29d760a13dbbac191a75dee7"
     },
     {
       "id": "custom-token-standard-fee-hook",
@@ -107,7 +122,7 @@
       "id": "maps-location-quest",
       "kind": "pack",
       "path": "packs/maps-location-quest.json",
-      "sha256": "6f544a4570d77c6f236316011c67fbf42466abdaf0fa767107774219fb899621"
+      "sha256": "8cf2b9789f38d5c8681decf37f5590c8e893ca13756999f5eeb05e7fee486d1e"
     },
     {
       "id": "metadata-disclosures",
@@ -143,7 +158,7 @@
       "id": "ordinary-launch",
       "kind": "starter",
       "path": "starters/ordinary-launch.json",
-      "sha256": "30b81700305287709823a062ee0c7ed27fdf3b45330dd87e95a364cffb3ee0eb"
+      "sha256": "5c11272da7cb634bffbf10a9a0812804b03289a83082b4ac6bc59c30088bbdc9"
     },
     {
       "id": "permissioned-external-asset",
@@ -161,13 +176,13 @@
       "id": "programmable-volume-fee",
       "kind": "pack",
       "path": "packs/programmable-volume-fee.json",
-      "sha256": "76eb4fbe05649bad1e168450fec1030dfca807c6810b697381f133fd16423e04"
+      "sha256": "0be20e1c1f43b24ce7ff9dabe80f790b5b0f44d839340ee006feccd97e9c4bd1"
     },
     {
       "id": "randomness-loot-rewards",
       "kind": "pack",
       "path": "packs/randomness-loot-rewards.json",
-      "sha256": "157fc05194c59f760cf4268f72714d15f04d0de71ad8b239a2ad7cce3784a3ec"
+      "sha256": "322f6ef600f8ae1168a2df633040c45041cb030c5b82845cfe1db7e764e7bc90"
     },
     {
       "id": "signed-outcome-service",
@@ -197,7 +212,7 @@
       "id": "threejs-pvp-rewards",
       "kind": "pack",
       "path": "packs/threejs-pvp-rewards.json",
-      "sha256": "fdacc9ed0103cf17066a67b4602da8643c00c0359c9aa6dc4e56784c42cec78c"
+      "sha256": "0f856b397e5bbee6d91f74160830f782222fce855c9da1f33bd0acdd6968201c"
     },
     {
       "id": "token-managed-automatic-liquidity",
@@ -212,6 +227,12 @@
       "sha256": "4ebe082179ab57e67a619ce3becb5c3445c94158c99672e1cc142a6ac33321bc"
     },
     {
+      "id": "v4-claim-client",
+      "kind": "pack",
+      "path": "packs/v4-claim-client.json",
+      "sha256": "d60e425b6f52517720f352051be7cfe19b39157ac3e6abb05a4feef7a7663d37"
+    },
+    {
       "id": "v4-liquidity-position-client",
       "kind": "pack",
       "path": "packs/v4-liquidity-position-client.json",
@@ -221,7 +242,13 @@
       "id": "v4-swap-client",
       "kind": "pack",
       "path": "packs/v4-swap-client.json",
-      "sha256": "aba0d60fc92658d0a80749b1ed452801b96b0331e67b55378d288365dc836f5f"
+      "sha256": "c79afa46bea035bf3af170e01c34e47e8c8acec08b6e7b79bc55b42efa3dc665"
+    },
+    {
+      "id": "verifiable-randomness",
+      "kind": "pack",
+      "path": "packs/verifiable-randomness.json",
+      "sha256": "404d5a8b98e4bbaf970301af6d62b862b223478b31927c124e6a8735e54b88b9"
     },
     {
       "id": "wallet-transaction-quest",

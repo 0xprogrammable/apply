@@ -81,6 +81,7 @@ async function main(argv = process.argv.slice(2)) {
         pullRequestNumber: status.pullRequestNumber,
         pullRequestUrl: status.pullRequestUrl,
         githubStatus: status.status,
+        applicationResult: status.applicationResult,
         headCommit: status.headCommit,
         packageMatchesPrepared: status.packageMatchesPrepared,
         preparedPackageDigest: prepared.package.digest,

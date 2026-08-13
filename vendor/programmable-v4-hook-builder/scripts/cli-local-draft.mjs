@@ -10,6 +10,7 @@ import { validateGitHubPublicSourceRequestV1 } from "./github-public-source-core
 import { CliFailure, sanitizeMessage } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
 import { hasForbiddenInvisibleOrBidi } from "./metadata-core.mjs";
+import { parseBoundedStrictJson } from "./strict-json-core.mjs";
 
 const APPLICATION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
@@ -63,7 +64,12 @@ export function snapshotLocalDraftPackage({ targetDirectory, applicationId, expe
   }
 
   const validated = validateClosedPackageFiles({ applicationId, files });
-  const centralPackage = centralPackageFromFiles({ applicationId, files, application: validated.application });
+  const centralPackage = centralPackageFromFiles({
+    applicationId,
+    files,
+    application: validated.application,
+    compatibility: validated.compatibility
+  });
   return Object.freeze({
     kind: "local-unmerged-application-draft-v1",
     applicationId,
@@ -195,6 +201,7 @@ function validateClosedCentralPackage(centralPackage, applicationId) {
   if (
     !isExactObject(centralPackage, [
       "applicationRevision",
+      "compatibilityResult",
       "encoding",
       "fileCount",
       "fileOrder",
@@ -243,6 +250,7 @@ function validateClosedCentralPackage(centralPackage, applicationId) {
   if (
     centralPackage.applicationRevision !== validated.application.applicationRevision
     || centralPackage.stage !== validated.application.stage
+    || centralPackage.compatibilityResult !== validated.compatibility.result
   ) {
     invalidDraft("the central-package summary does not match application.json");
   }
@@ -466,18 +474,18 @@ function validateMarkdown(bytes, name, heading) {
 
 function parseCanonicalJson(bytes, name) {
   const source = decodeUtf8(bytes, name);
-  if (source.includes("\r") || hasForbiddenInvisibleOrBidi(source.replaceAll("\n", ""))) invalidDraft(`${name} contains unsafe text`);
   let value;
   try {
-    value = JSON.parse(source);
+    value = parseBoundedStrictJson(source, { maxSourceBytes: MAX_FILE_BYTES[name] });
   } catch {
-    invalidDraft(`${name} is not valid JSON`);
+    invalidDraft(`${name} is not valid duplicate-free JSON`);
   }
+  if (source.includes("\r") || hasForbiddenInvisibleOrBidi(source.replaceAll("\n", ""))) invalidDraft(`${name} contains unsafe text`);
   if (source !== `${canonicalJson(value)}\n`) invalidDraft(`${name} is not exact canonical JSON`);
   return value;
 }
 
-function centralPackageFromFiles({ applicationId, files, application }) {
+function centralPackageFromFiles({ applicationId, files, application, compatibility }) {
   const records = CENTRAL_APPLICATION_FILES.map((fileName) => {
     const bytes = files.get(fileName);
     return Object.freeze({
@@ -491,6 +499,7 @@ function centralPackageFromFiles({ applicationId, files, application }) {
     targetDirectory: `submissions/${applicationId}`,
     stage: application.stage,
     applicationRevision: application.applicationRevision,
+    compatibilityResult: compatibility.result,
     fileCount: records.length,
     fileOrder: [...CENTRAL_APPLICATION_FILES],
     encoding: "utf8",

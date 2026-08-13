@@ -1,12 +1,14 @@
 # Programmable compatibility standard
 
-Version: `1.5.0`
+Version: `1.6.0`
 
 This standard defines the information and structural checks required before a Programmable prototype begins. It does
 not approve a model, certify security or predict support from Uniswap routing or third-party indexers.
 
-The launch scope is one launched token and one canonical v4 launch pool, with any application, game, service, indexer,
-or other project surfaces required by the idea. Every launch-ready canonical pool uses one fee-enforcing hook. Use the
+The project scope may contain multiple launched or existing assets, pools, markets, chains, applications, games,
+services, indexers, or other surfaces. Declare each launch unit and lifecycle. The released Programmable runtime may
+support one primary launched token and one canonical v4 fee pool per launch unit; wider technically complete designs
+remain reviewable and become platform capability decisions. Every runtime-supported canonical fee pool uses one fee-enforcing hook. Use the
 standard Programmable fee-hook profile through project-specific source when no other behavior must execute atomically with a pool action, and integrate
 the fee into the project's single hook when custom behavior is required. Both paths require exact tests and maintainer review. A reusable hook for arbitrary
 existing pools may be built and reviewed but cannot claim platform-launch compatibility until the creation,
@@ -15,6 +17,19 @@ initialization, liquidity, trading, claims, failure, and retirement lifecycle is
 The standard has no launch-type allowlist. Unknown mechanics route to architecture discussion. Only an objective
 reproducible conflict can create an adverse safety finding; a missing category, parser limitation, missing tool, or
 unavailable evidence cannot establish that an idea is unsafe.
+
+## Generic launch boundary
+
+Every prototype binds an open `launchPlan.targetStrategy` slug rather than selecting from a product allowlist. It names
+the immutable target component, exact call/configuration/liquidity source paths, executable tests, inclusive native-value
+range, refund policy, absent-pool prestate and required post-acceptance bundle. Novel targets remain architecture-review
+eligible; missing bindings fail prototype readiness.
+
+The canonical PoolKey launch also binds a positive uint128 `minimumInitialLiquidity`. Executor V1 starts from an absent
+pool, calls one exact target, then requires that exact PoolKey to exist with at least the declared active liquidity.
+Submission review proves only the plan and closed source paths. After real Registry acceptance, the offline
+`launch-bundle` command may derive an unsigned candidate from exact local Git/file/artifact bytes. It cannot establish
+runtime, deployment or authorization evidence.
 
 ## Chain application scope and launch scope
 
@@ -150,7 +165,8 @@ Lock the exact `PoolKey` inputs:
 - Native ETH represented by the zero address, when used
 - LP fee mode and explicit fee value or dynamic-fee flag
 - Tick spacing
-- Whether a custom hook exists; if it does, its address and all 14 permission bits
+- Whether any hook exists, including the standard Programmable fee profile; if it does, its profile, address, and all 14
+  permission bits
 - Canonical-pool registration and alternative-pool policy
 
 Every asset has a stable id, role, origin, exact address when pre-existing, transfer behavior, issuer controls, upgrade
@@ -219,8 +235,9 @@ project = effective - 1,000
 
 The split is non-additive: a selected total of `3%` remains `3%`, allocated `0.1%` to Programmable and `2.9%` to the
 project. LP fees are excluded. Router charges, transfer taxes, app payments, donations, or alternative-pool behavior
-are not substitutes. Bind the root `programmableFee` record to the canonical pool hook, all four swap modes, executed
-amount after partial fills, quote asset, value flow, collection and claim events, and liability keys
+are not substitutes. Bind the root `programmableFee` record to the canonical pool hook, every successful supported swap
+mode, deterministic pre-movement rejection for each unsupported quadrant, executed amount after partial fills, quote
+asset, value flow, collection and claim events, and liability keys
 `(poolId,currency,owner)` with no cross-pool netting.
 
 Policy version `1.1.0` also fixes rounding semantics: platform and project streams keep independent cumulative remainders
@@ -337,7 +354,8 @@ Resolve the following when the corresponding surface exists:
   bindings for the documented Uniswap SDK packages
 - Permit2 chain, verifying contract, token, spender, amount, nonce, expiration, and signature deadline
 - Quoter behavior, including that revert-based quoting is read-only simulation
-- Exact-input and exact-output support in both directions
+- Complete four-quadrant support/rejection matrix; successful modes have exact execution semantics and unsupported modes
+  reject before value, state, liability, quote, router, or UI movement
 - Slippage, deadline, hookData, partial fills, native value, and refund handling
 - StateView reads pinned to one block
 - Indexer discovery versus receipt and lifecycle proof
@@ -445,6 +463,9 @@ itself is ready.
 Schema-valid prose is not evidence that an equation is correct or a dependency claim is true.
 Review public UI and application strings as well as documents. Ignore comments and declared test fixtures, but reject
 unsupported approval, audit, safety, deployment and availability claims that would actually be shown to users.
+
+`PROTOTYPE_READY` is not a launch-admission verdict. Apply [approval-criteria.md](approval-criteria.md) to the immutable
+prototype before reporting `CHANGES REQUIRED`, `PLATFORM PENDING`, or `READY FOR FINAL VERIFICATION`.
 
 ## Platform profiles
 

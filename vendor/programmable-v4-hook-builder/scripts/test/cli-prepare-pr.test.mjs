@@ -35,6 +35,15 @@ const API_ORIGIN = "https://api.github.com";
 const centralBaseCommit = "c".repeat(40);
 const centralBaseTree = "d".repeat(40);
 
+test("GitHub blob URL parsing requires the exact HTTPS origin and repository path", () => {
+  const objectId = "a".repeat(40);
+  const repositoryUrl = `${API_ORIGIN}/repos/example-builder/programmable-proposal`;
+  assert.equal(exactGitHubBlobObjectId(`${repositoryUrl}/git/blobs/${objectId}`, repositoryUrl), objectId);
+  assert.equal(exactGitHubBlobObjectId(`https://api.github.com.evil.invalid/repos/example-builder/programmable-proposal/git/blobs/${objectId}`, repositoryUrl), null);
+  assert.equal(exactGitHubBlobObjectId(`${API_ORIGIN}/repos/example-builder/programmable-proposal-extra/git/blobs/${objectId}`, repositoryUrl), null);
+  assert.equal(exactGitHubBlobObjectId(`${repositoryUrl}/git/blobs/${objectId}?redirect=1`, repositoryUrl), null);
+});
+
 function trustedHostSubtest(context, name, implementation) {
   return context.test(name, { skip: trustedHostValidator ? false : trustedHostSkipReason }, implementation);
 }
@@ -71,6 +80,30 @@ test("doctor reports exact-object Git capability before prepare-pr", () => {
     version: "2.50.1",
     reason: "git backfill --sparse is required for exact public-source verification"
   });
+});
+
+test("prepare-pr rejects a non-main base before repository or network I/O", async () => {
+  let fetches = 0;
+  const missingRepository = path.join(os.tmpdir(), `programmable-missing-${process.pid}-${Date.now()}`);
+  await assert.rejects(
+    () => preparePullRequest({
+      repositoryRoot: missingRepository,
+      packageInput: "submission",
+      baseBranch: "release",
+      fetchImplementation: async () => {
+        fetches += 1;
+        return response(200);
+      }
+    }),
+    (error) => {
+      assert.ok(error instanceof CliFailure, error?.stack ?? String(error));
+      assert.equal(error.code, "USAGE_ERROR");
+      assert.equal(error.exitCode, 2);
+      assert.match(error.message, /0xprogrammable\/submit-launch:main/u);
+      return true;
+    }
+  );
+  assert.equal(fetches, 0);
 });
 
 function companionClosureWorkflow() {
@@ -391,10 +424,12 @@ test("prepare-pr deterministically binds the pushed public GitHub revision witho
     assert.equal(first.title, "[Builder Beta] ready-model");
     assert.match(first.body, new RegExp(head));
     assert.match(first.body, new RegExp(tree));
-    assert.match(first.body, new RegExp(first.submission.hash));
+    assert.doesNotMatch(first.body, /Submission hash/u);
     assert.match(first.body, /example-builder\/programmable-proposal/);
     assert.match(first.body, new RegExp(repositoryId));
     assert.match(first.body, new RegExp(builderUserId));
+    assert.match(first.body, /Application result: `changes-required`/u);
+    assert.doesNotMatch(first.body, /Local design preflight/u);
     assert.equal(first.applicationAdapter.targetPath, "submissions/ready-model/application.json");
     assert.deepEqual(first.applicationAdapter.builder, {
       githubUserId: builderUserId,
@@ -420,6 +455,7 @@ test("prepare-pr deterministically binds the pushed public GitHub revision witho
     assert.match(first.applicationAdapter.evidencePackage.sourceResolutionHashHex32, /^0x[0-9a-f]{64}$/);
     assert.match(first.applicationAdapter.evidencePackage.submissionHashHex32, /^0x[0-9a-f]{64}$/);
     assert.match(first.applicationAdapter.evidencePackage.reviewTargetHashHex32, /^0x[0-9a-f]{64}$/);
+    assert.equal(first.applicationAdapter.evidencePackage.compatibilityResult, "changes-required");
     assert.equal(first.applicationAdapter.publicGitHubApplicationReady, true);
     assert.equal("connectedSubmissionReady" in first.applicationAdapter, false);
     assert.equal(first.centralPackage.generated, true);
@@ -871,13 +907,71 @@ test("prepare-pr binds one canonical HEAD companion manifest and preserves a 64-
   }
 });
 
+test("prepare-pr rejects every decoded duplicate-key form in an exact-HEAD companion manifest without echoing values", async () => {
+  const companion = companionDefinition(1);
+  const manifestPath = ".programmable/companions/backend.json";
+  const secret = "companion-private-key-must-not-echo";
+  const duplicates = [
+    `"schemaVersion":"1.0.0","privateKey":"${secret}"`,
+    `"schemaVersion":"9.9.9","privateKey":"${secret}"`,
+    `"schemaVersi\\u006fn":"9.9.9","privateKey":"${secret}"`
+  ];
+
+  for (const duplicate of duplicates) {
+    const fixture = createReadyRepository({
+      companionManifests: [{ path: manifestPath, value: companionManifest(companion) }]
+    });
+    try {
+      const target = path.join(fixture.repository, manifestPath);
+      const source = fs.readFileSync(target, "utf8").trimEnd();
+      fs.writeFileSync(target, `${source.slice(0, -1)},${duplicate}}\n`);
+      runGit(fixture.repository, ["add", manifestPath]);
+      runGit(fixture.repository, ["commit", "--quiet", "-m", "duplicate companion manifest"]);
+      runGit(fixture.repository, ["remote", "set-url", "origin", fixture.bareRemote]);
+      runGit(fixture.repository, ["push", "--quiet", "origin", "main"]);
+      runGit(fixture.repository, ["remote", "set-url", "origin", fixture.publicRemote]);
+
+      await assert.rejects(
+        preparePullRequest({
+          repositoryRoot: fixture.repository,
+          packageInput: fixture.packageRoot,
+          companionManifestInputs: [manifestPath],
+          fetchImplementation: async () => {
+            throw new Error("duplicate companion JSON must fail before public fetch");
+          },
+          sleepImplementation: async () => {}
+        }),
+        (error) => {
+          assert.equal(error?.code, "COMPANION_MANIFEST_INVALID");
+          assert.equal(String(error?.message).includes(secret), false);
+          return true;
+        }
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
 test("prepare-pr blocks a prototype companion before public network access until companion closure is proven", async () => {
   const companion = companionDefinition(1);
   const manifestPath = ".programmable/companions/backend.json";
   const fixture = createReadyRepository({
     companionManifests: [{ path: manifestPath, value: companionManifest(companion) }],
-    mutateSubmission(submission) {
+    mutateSubmission(submission, repository) {
       submission.stage = "prototype";
+      fs.mkdirSync(path.join(repository, "src"), { recursive: true });
+      fs.mkdirSync(path.join(repository, "test"), { recursive: true });
+      fs.writeFileSync(
+        path.join(repository, "src", "LaunchTarget.sol"),
+        "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\ncontract LaunchTarget {}\n"
+      );
+      fs.writeFileSync(
+        path.join(repository, "test", "LaunchTarget.t.sol"),
+        "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\ncontract LaunchTargetTest {}\n"
+      );
+      submission.implementation.sourcePaths.push("src/LaunchTarget.sol");
+      submission.implementation.testPaths.push("test/LaunchTarget.t.sol");
     }
   });
   let fetches = 0;
@@ -1931,7 +2025,7 @@ function createReadyRepository({
       fs.writeFileSync(target, contents);
     }
   }
-  if (typeof mutateSubmission === "function") mutateSubmission(submission);
+  if (typeof mutateSubmission === "function") mutateSubmission(submission, repository);
   fs.writeFileSync(submissionPath, `${JSON.stringify(submission, null, 2)}\n`);
   const validation = childProcess.spawnSync(
     process.execPath,
@@ -2087,11 +2181,11 @@ function githubResponse(fixture, url, companions = []) {
       });
     return response(200, JSON.stringify({ sha: tree, truncated: false, tree: entries }));
   }
-  const blobMatch = new RegExp(`^${repositoryUrl}/git/blobs/([0-9a-f]{40})$`, "u").exec(url);
-  if (blobMatch) {
-    const bytes = runGitBinary(fixture.repository, ["cat-file", "blob", blobMatch[1]]);
+  const blobObjectId = exactGitHubBlobObjectId(url, repositoryUrl);
+  if (blobObjectId !== null) {
+    const bytes = runGitBinary(fixture.repository, ["cat-file", "blob", blobObjectId]);
     return response(200, JSON.stringify({
-      sha: blobMatch[1],
+      sha: blobObjectId,
       size: bytes.length,
       encoding: "base64",
       content: bytes.toString("base64")
@@ -2151,9 +2245,9 @@ function githubResponse(fixture, url, companions = []) {
         }))
       }));
     }
-    const companionBlobMatch = new RegExp(`^${companionRepositoryUrl}/git/blobs/([0-9a-f]{40})$`, "u").exec(url);
-    if (companionBlobMatch) {
-      const record = records.find((candidate) => candidate.sha === companionBlobMatch[1]);
+    const companionBlobObjectId = exactGitHubBlobObjectId(url, companionRepositoryUrl);
+    if (companionBlobObjectId !== null) {
+      const record = records.find((candidate) => candidate.sha === companionBlobObjectId);
       if (record === undefined) throw new Error(`unknown companion blob: ${url}`);
       return response(200, JSON.stringify({
         sha: record.sha,
@@ -2164,6 +2258,38 @@ function githubResponse(fixture, url, companions = []) {
     }
   }
   throw new Error(`unexpected public GitHub URL: ${url}`);
+}
+
+function exactGitHubBlobObjectId(candidateUrl, repositoryUrl) {
+  let candidate;
+  let repository;
+  try {
+    candidate = new URL(candidateUrl);
+    repository = new URL(repositoryUrl);
+  } catch {
+    return null;
+  }
+  if (
+    candidate.protocol !== "https:"
+    || repository.protocol !== "https:"
+    || candidate.origin !== repository.origin
+    || candidate.username !== ""
+    || candidate.password !== ""
+    || repository.username !== ""
+    || repository.password !== ""
+    || candidate.search !== ""
+    || candidate.hash !== ""
+    || repository.search !== ""
+    || repository.hash !== ""
+  ) return null;
+  const expectedSegments = [...repository.pathname.split("/"), "git", "blobs"];
+  const candidateSegments = candidate.pathname.split("/");
+  if (
+    candidateSegments.length !== expectedSegments.length + 1
+    || !expectedSegments.every((segment, index) => candidateSegments[index] === segment)
+  ) return null;
+  const objectId = candidateSegments.at(-1);
+  return /^[0-9a-f]{40}$/u.test(objectId) ? objectId : null;
 }
 
 function advanceReadyRepository(fixture) {

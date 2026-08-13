@@ -1,5 +1,9 @@
 # Builder workflow
 
+> For a current public Applicant, build and verify the exact public source, then follow
+> [agent-entry-and-application.md](agent-entry-and-application.md) and use the generated, draft-only application client
+> for `0xprogrammable/submit-launch:main`. Never open a new Applicant PR in Hookbuilder.
+
 This workflow moves one open-ended v4 launch project from private exploration to a local review package and then a
 bounded public GitHub application. After maintainers accept an exact prototype, it can also produce a scoped
 platform-integration handoff. It does not accept, deploy, publish, list, or activate the project.
@@ -120,7 +124,8 @@ Freeze:
 - all 14 permissions, callback authentication, return shapes, hookData, and nested-action policy
 - LP fee and hook-owned fee classification
 - root `programmableFee` policy: non-additive 10 bps platform allocation, executed gross quote-side basis, canonical
-  PoolKey, all four quadrant-dependent before/after paths, same-pool self-call policy, immutable owner-only claims,
+  PoolKey, all supported quadrant-dependent before/after paths plus pre-movement rejection of unsupported quadrants,
+  same-pool self-call policy, immutable owner-only claims,
   per-claim destination, liability keys, events, evidence, and v1.1 lifetime cumulative platform/project remainder
   accounting that claims cannot reset and split swaps cannot evade
 - dynamic-fee initialization, application mode, override rule, persistent actor and call sites, rate limit, bounds,

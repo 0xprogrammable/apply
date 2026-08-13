@@ -10,7 +10,6 @@
   "reviewRoute": "architecture-review-required",
   "defaultPacks": [
     "metadata-disclosures",
-    "programmable-volume-fee",
     "test-evidence-threat-model"
   ],
   "conflictsWith": [],
@@ -29,7 +28,7 @@
     "The complete user outcome and lifecycle",
     "Every actor, asset, value flow, authority, dependency and failure path",
     "Which behavior belongs onchain and which behavior belongs in an application or service",
-    "The canonical token and Uniswap v4 pool boundary"
+    "Whether any token or Uniswap v4 market boundary applies; when it does, bind the exact boundary, and when it does not, mark it inapplicable and bind the actual external or non-launchable integration boundary"
   ],
   "requiredFiles": [
     "Project-specific source and configuration",

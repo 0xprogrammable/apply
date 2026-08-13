@@ -25,6 +25,9 @@
     "Executable hooked quote source with identical PoolKey, hookData, sender assumptions and coherent block context",
     "Explicit Universal Router generation, V4_SWAP actions, settlement, native value, Permit2, deadline and final-delta bounds",
     "Per-hop hookData mode, minHopPriceX36 behavior and SDK 2.3 output-loss slippage semantics",
+    "Exact-output full-fill enforcement at every hop, including repeated-currency multihop routes whose intermediate delta can net away",
+    "Bounded decoding for every router static head, dynamic offset, array length, multiplication and short selector before any read or action",
+    "PoolManager callback-caller and Universal Router callback-sender authentication for every signedRouteContext consumer",
     "Pre-signature decoding and exact simulation of target, calldata, value, chain, account, recipient, Permit2 scope and deadline"
   ],
   "requiredFiles": [
@@ -38,13 +41,19 @@
     "Hooked quotes fail without V4Quoter or the reviewed executable simulation and never fall back to local Pool math",
     "Explicit router generation and exact action ABI for every supported direction and exact-input or exact-output mode",
     "Single-hop and multi-hop hookData byte parity, mixed hooked routes and one minHopPriceX36 value per pool",
-    "Final minimum output, maximum input, partial fills, hook deltas, deadlines, native value, Permit2 and refunds",
+    "Exact-output full fill or revert at every hop, repeated-currency intermediate underfill, final minimum output, maximum input, partial fills and hook deltas",
+    "Malformed, truncated, overlapping, out-of-range and length-overflow command bytes fail before load, copy, dispatch, approval or transfer",
+    "PoolManager and Universal Router signed-route identities each fail independently when mismatched",
+    "Deadlines, native value, Permit2 and refunds",
     "Stale state, reorg, changed hookData, unsupported route, quote revert and provider or deployment outage",
     "Wrong chain or account, untrusted spender or calldata, signature replay or expiry, transaction replacement, reverted receipt and final-balance mismatch"
   ],
   "risks": [
     "Local no-hook pool math can misquote any route whose hook has swap permissions",
     "An omitted router generation can silently fall back to V2_0 and lose the intended action ABI",
-    "Convenience multi-hop encoding can replace required per-hop hookData with empty bytes"
+    "Convenience multi-hop encoding can replace required per-hop hookData with empty bytes",
+    "Final PoolManager currency netting can hide an exact-output underfill when a currency repeats across hops",
+    "A router and a sibling periphery head in one registry are not proof that the router embeds that periphery fix",
+    "Single-identity signedRouteContext validation can confuse PoolManager callback authority with router route authority"
   ]
 }

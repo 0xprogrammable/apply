@@ -8,9 +8,7 @@
   "eligibilityEffect": "none",
   "unknownCapabilityPolicy": "preserve-and-route",
   "reviewRoute": "architecture-review-required",
-  "requires": [
-    "signed-outcome-service"
-  ],
+  "requires": [],
   "conflictsWith": [],
   "capabilities": [
     "browser-game",
@@ -20,12 +18,12 @@
   "projectSurfaces": [
     "application",
     "contract",
-    "game",
-    "service"
+    "game"
   ],
   "requiredFacts": [
     "Round identity, participants, win condition, payout formula and maximum loss",
-    "Authoritative outcome source and why the browser cannot self-award",
+    "Chosen authoritative outcome architecture and why the browser cannot self-award",
+    "Whether the outcome is proven onchain, with zero knowledge, by an attester, or by a signed service",
     "Replay, duplicate kill, draw, disconnect, timeout and dispute behavior",
     "Sybil, collusion, botting, signer compromise and rate-limit controls"
   ],

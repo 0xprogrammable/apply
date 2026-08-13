@@ -70,6 +70,10 @@ official profiles are `V2_0`, `V2_1_1`, and `V2_2_0`; permissioned-pool routing 
   later ABI's per-hop bound.
 - SDK `2.3.x` defines slippage against loss in final output, not merely an intermediate price movement. The application
   must additionally enforce maximum input for exact-output swaps and the final user delta after hook effects.
+- Exact-output success must deliver the full requested output at every relevant hop or revert. Compare requested and
+  actual hop output, including routes that repeat a currency: PoolManager's final currency netting can conceal an
+  intermediate underfill. Do not infer this protection from Universal Router head `d203e7f...`; that tree still pins
+  v4-periphery `363226d...`, while the observed full-fill fix is sibling periphery head `545a5d2...`.
 - Encode the exact `V4_SWAP` action plan and settlement actions. Test native value forwarding and refunds, ERC-20
   Permit2 allowance or signature scope, deadlines, zero outputs, partial fills, duplicate currencies, and final deltas.
 
@@ -97,6 +101,12 @@ provider response, indexer, or quote result must not acquire signing authority m
 - Before requesting a signature, decode or independently reconstruct the final target, function selector, action plan,
   PoolKeys, hookData, input, output bound, recipient, native value, deadline and refund path. Treat returned calldata as
   untrusted bytes and fail if it differs from the reviewed construction.
+- Decode untrusted router bytes only after checking every static head, dynamic offset, dynamic length, overflow-safe
+  length multiplication and short selector. Malformed, truncated, overlapping and out-of-range encodings must fail
+  before any load, copy, dispatch, approval or transfer.
+- If a hook consumes `signedRouteContext`, require the callback caller to equal the selected PoolManager and the callback
+  sender to equal the selected Universal Router. Bind both identities and the route context; test each mismatch rather
+  than accepting either identity alone.
 - Simulate the exact `from`, `to`, `data`, `value`, chain, block context and account type that will be submitted. A
   successful simulation is a preflight result, not an execution receipt, and must be refreshed after material state,
   nonce, allowance, code, quote or deadline changes.
@@ -130,6 +140,23 @@ Bind its exact deployed address and package release just like the router.
 Use `v4-liquidity-and-state.md` for subscribers, donation-inflated `feesAccrued`, and coherent state reads.
 
 ## Required evidence
+
+For every market the Builder classifies as tradable, the repository also carries one
+`trade-capability-manifest-v1`. Treat it as the authoritative machine-readable route contract: complete PoolKey/PoolId,
+chain and reference block, router, quoter, Permit2/native funding, hookData, supported modes, slippage/deadline and fee
+semantics must agree byte-for-byte with the quote and execution paths. A standard route names
+`standard-uniswap-v4`; a compatible custom path names `canonical-programmable-adapter` and binds the exact
+`programmable-trade-execution-v1` schema and ABI contract.
+
+The source manifest declares tests but cannot contain its own Git identity or future run receipts. The bounded executor
+must author separate typed result artifacts for the declared commands, and completion must bind those results back to
+the manifest and tested source. Every supported mode needs quote and execution evidence; every unsupported mode needs
+a rejection before approval, funds, PoolManager lock or application state changes. A project explicitly classified
+`no-market` must not receive a synthetic route.
+
+Trade test declarations copy exact RepositoryPlan argv/cwd and bind the sanitized execution profile with
+`projectCommandEnvironmentSha256(command)`. A content-shaped result from another command environment is not executor
+evidence.
 
 For every included client, bind repository-relative source and executable tests that prove:
 

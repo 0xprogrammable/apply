@@ -913,12 +913,15 @@ function makeProgrammableFee() {
     poolScope: "canonical-launch-pool-key",
     rates: {
       unit: "hundredths-of-bip",
-      selectedHundredthsOfBip: 30000,
+      selectedBuyHundredthsOfBip: 30000,
+      selectedSellHundredthsOfBip: 20000,
       minimumEffectiveHundredthsOfBip: 1000,
-      effectiveHundredthsOfBip: 30000,
+      effectiveBuyHundredthsOfBip: 30000,
+      effectiveSellHundredthsOfBip: 20000,
       platformHundredthsOfBip: 1000,
-      projectHundredthsOfBip: 29000,
-      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      projectBuyHundredthsOfBip: 29000,
+      projectSellHundredthsOfBip: 19000,
+      formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
       lpFeeExcluded: true
     },
     basis: { volume: "gross-quote-side-swap-volume", quoteAsset: "canonical-pool-quote-asset" },
@@ -978,7 +981,7 @@ function sourceSubmissionBytes(programmableFee) {
     model: { id: "example-hook" },
     programmableFee,
     schemaVersion: 1,
-    standardVersion: "1.5.0"
+    standardVersion: "1.6.0"
   })}\n`, "utf8");
 }
 

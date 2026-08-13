@@ -2,13 +2,30 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectPublicMetadataText } from "./metadata-core.mjs";
-import { composeTemplate, loadTemplateCatalog } from "./template-catalog-core.mjs";
+import {
+  buildDirectCapabilityLegos,
+  buildImplementationFeePolicy,
+  buildImplementationLegoSelection,
+  composeTemplate,
+  loadTemplateCatalog
+} from "./template-catalog-core.mjs";
 
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/u;
 const MAX_LIST_ITEMS = 256;
+const MAX_VISIBLE_LABEL_CODE_POINTS = 120;
+const MAX_VISIBLE_LABEL_BYTES = 480;
 const skillRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let bundledCatalog = null;
+
+export class BuilderTemplateContractError extends Error {
+  constructor(code, message, details = undefined) {
+    super(message);
+    this.name = "BuilderTemplateContractError";
+    this.code = code;
+    this.details = details;
+  }
+}
 
 export function manualBuilderTemplate() {
   return {
@@ -44,11 +61,32 @@ export function builderTemplateFromPlan(plan) {
   const planPackIds = packs.map((pack, index) => requireId(requireObject(pack, `template plan pack ${index}`).id, `template plan pack ${index} id`));
   assertSameList(planPackIds, selectedPackIds, "template plan packs disagree with selected pack ids");
 
-  const starterCapabilities = requireIdList(starter.capabilities, "template plan starter capabilities");
-  const selectedCapabilityIds = [...new Set([
+  const starterCapabilities = requireIdList(starter.capabilities, "template plan starter capabilities", { allowOversize: true });
+  const baseCapabilityIds = [...new Set([
     ...starterCapabilities,
-    ...packs.flatMap((pack, index) => requireIdList(pack.capabilities, `template plan pack ${index} capabilities`))
+    ...packs.flatMap((pack, index) => requireIdList(pack.capabilities, `template plan pack ${index} capabilities`, { allowOversize: true }))
   ])].sort(compareUtf8);
+  const requestedCapabilityIds = requireIdList(
+    selection.requestedCapabilityIds ?? [],
+    "requested capability ids",
+    { allowOversize: true }
+  );
+  if (requestedCapabilityIds.some((id) => baseCapabilityIds.includes(id))) {
+    invalid("template plan direct capabilities must not duplicate starter or pack capabilities");
+  }
+  validateDirectCapabilityLegos(plan.directCapabilityLegos, requestedCapabilityIds, plan.catalogDigest);
+  const selectedCapabilityIds = [...new Set([
+    ...baseCapabilityIds,
+    ...requestedCapabilityIds
+  ])].sort(compareUtf8);
+  validateImplementationLegoPlan({
+    implementationLegos: plan.implementationLegos,
+    feePolicy: plan.feePolicy,
+    catalogDigest: plan.catalogDigest,
+    starterId: selection.starterId,
+    selectedPackIds,
+    selectedCapabilityIds
+  });
   if (
     machineCapabilities.semantics !== "internal-planning-and-review-only"
     || machineCapabilities.publicDiscoveryTagInference !== "forbidden"
@@ -56,12 +94,12 @@ export function builderTemplateFromPlan(plan) {
     invalid("template plan machine capability semantics are unsupported");
   }
   assertSameList(
-    requireIdList(machineCapabilities.knownCapabilityIds, "known capability ids"),
+    requireIdList(machineCapabilities.knownCapabilityIds, "known capability ids", { allowOversize: true }),
     selectedCapabilityIds,
     "template plan known capabilities disagree with its starter and packs"
   );
 
-  const customCapabilities = requireArray(plan.customCapabilities, "template plan custom capabilities").map((capability, index) => {
+  const customCapabilities = requireArray(plan.customCapabilities, "template plan custom capabilities", { allowOversize: true }).map((capability, index) => {
     const value = requireObject(capability, `custom capability ${index}`);
     const projected = {
       id: requireId(value.id, `custom capability ${index} id`),
@@ -82,16 +120,16 @@ export function builderTemplateFromPlan(plan) {
   const customCapabilityIds = customCapabilities.map(({ id }) => id);
   assertSortedUnique(customCapabilityIds, "custom capability ids");
   assertSameList(
-    requireIdList(machineCapabilities.ownerDefinedCapabilityIds, "owner-defined capability ids"),
+    requireIdList(machineCapabilities.ownerDefinedCapabilityIds, "owner-defined capability ids", { allowOversize: true }),
     customCapabilityIds,
     "template plan owner-defined capabilities disagree with its custom capabilities"
   );
   assertSameList(
-    requireIdList(machineCapabilities.allCapabilityIds, "all capability ids"),
+    requireIdList(machineCapabilities.allCapabilityIds, "all capability ids", { allowOversize: true }),
     [...new Set([...selectedCapabilityIds, ...customCapabilityIds])].sort(compareUtf8),
     "template plan aggregate capabilities are incomplete"
   );
-  const ownerProvidedLocalTags = requireIdList(tagSuggestions.ownerProvidedLocalTags, "owner-provided local tags");
+  const ownerProvidedLocalTags = requireIdList(tagSuggestions.ownerProvidedLocalTags, "owner-provided local tags", { allowOversize: true });
   const localProjectTags = [...new Set([
     requireId(selection.starterId, "starter id"),
     ...selectedPackIds,
@@ -118,7 +156,6 @@ export function builderTemplateFromPlan(plan) {
     }
   };
   const normalized = normalizeBuilderTemplate(builderTemplate);
-  assertBundledCatalogSelection(normalized.templateSelection);
   return normalized;
 }
 
@@ -176,8 +213,8 @@ export function normalizeBuilderTemplate(value) {
     defaultPackIds: requireIdList(selection.defaultPackIds, "templateSelection defaultPackIds"),
     autoIncludedPackIds: requireIdList(selection.autoIncludedPackIds, "templateSelection autoIncludedPackIds"),
     selectedPackIds: requireIdList(selection.selectedPackIds, "templateSelection selectedPackIds"),
-    selectedCapabilityIds: requireIdList(selection.selectedCapabilityIds, "templateSelection selectedCapabilityIds"),
-    customCapabilities: requireArray(selection.customCapabilities, "templateSelection customCapabilities").map((capability, index) => {
+    selectedCapabilityIds: requireIdList(selection.selectedCapabilityIds, "templateSelection selectedCapabilityIds", { allowOversize: true }),
+    customCapabilities: requireArray(selection.customCapabilities, "templateSelection customCapabilities", { allowOversize: true }).map((capability, index) => {
       const entry = requireObject(capability, `templateSelection custom capability ${index}`);
       assertExactKeys(entry, ["automaticDecision", "catalogStatus", "eligibilityEffect", "id", "label", "reviewRoute"], `templateSelection custom capability ${index}`);
       const result = {
@@ -196,8 +233,8 @@ export function normalizeBuilderTemplate(value) {
       ) invalid(`templateSelection custom capability ${result.id} has an adverse or closed-catalog policy`);
       return result;
     }),
-    ownerProvidedLocalTags: requireIdList(selection.ownerProvidedLocalTags, "templateSelection ownerProvidedLocalTags"),
-    localProjectTags: requireIdList(selection.localProjectTags, "templateSelection localProjectTags")
+    ownerProvidedLocalTags: requireIdList(selection.ownerProvidedLocalTags, "templateSelection ownerProvidedLocalTags", { allowOversize: true }),
+    localProjectTags: requireIdList(selection.localProjectTags, "templateSelection localProjectTags", { allowOversize: true })
   };
   assertSortedUnique(normalized.customCapabilities.map(({ id }) => id), "templateSelection custom capability ids");
 
@@ -228,6 +265,7 @@ export function normalizeBuilderTemplate(value) {
       starterId: normalized.starterId,
       requestedPackIds: normalized.requestedPackIds,
       selectedPackIds: normalized.selectedPackIds,
+      ...directCapabilityDigestField(normalized),
       customCapabilities: normalized.customCapabilities.map(({ id, label }) => ({ id, label })),
       localTags: normalized.ownerProvidedLocalTags
     })
@@ -239,11 +277,79 @@ export function normalizeBuilderTemplate(value) {
     assertBundledCatalogSelection(normalized);
   }
 
+  if (
+    normalized.selectedCapabilityIds.length > MAX_LIST_ITEMS
+    || normalized.customCapabilities.length > MAX_LIST_ITEMS
+    || normalized.localProjectTags.length > MAX_LIST_ITEMS
+  ) {
+    throwBuilderTemplateSplitReview(normalized);
+  }
+
   return {
     schemaVersion: "1.0.0",
     source: "catalog",
     templateSelection: normalized
   };
+}
+
+function directCapabilityDigestField(selection) {
+  if (selection.catalogDigest !== getBundledCatalog().catalogDigest) return {};
+  const requestedCapabilityIds = inferDirectCapabilityIds(selection, getBundledCatalog());
+  return requestedCapabilityIds.length === 0 ? {} : { requestedCapabilityIds };
+}
+
+function inferDirectCapabilityIds(selection, catalog) {
+  const starter = catalog.byId.get(selection.starterId);
+  if (starter?.kind !== "starter") invalid("templateSelection starter is unavailable in the bundled catalog");
+  const baseCapabilityIds = new Set(starter.capabilities);
+  for (const packId of selection.selectedPackIds) {
+    const pack = catalog.byId.get(packId);
+    if (pack?.kind !== "pack") invalid(`templateSelection pack ${packId} is unavailable in the bundled catalog`);
+    for (const capabilityId of pack.capabilities) baseCapabilityIds.add(capabilityId);
+  }
+  return selection.selectedCapabilityIds.filter((capabilityId) => !baseCapabilityIds.has(capabilityId));
+}
+
+function validateDirectCapabilityLegos(value, requestedCapabilityIds, catalogDigest) {
+  if (requestedCapabilityIds.length === 0) {
+    if (value !== undefined) invalid("template plan has direct capability Lego data without a direct capability selection");
+    return;
+  }
+  if (catalogDigest !== getBundledCatalog().catalogDigest) {
+    invalid("historical direct capability Lego extensions require an explicit migration");
+  }
+  const expected = buildDirectCapabilityLegos(requestedCapabilityIds, getBundledCatalog());
+  if (canonicalJson(value) !== canonicalJson(expected)) {
+    invalid("template plan direct capability Legos are stale, incomplete or digest-invalid");
+  }
+}
+
+function validateImplementationLegoPlan({
+  implementationLegos,
+  feePolicy,
+  catalogDigest,
+  starterId,
+  selectedPackIds,
+  selectedCapabilityIds
+}) {
+  if (catalogDigest !== getBundledCatalog().catalogDigest) {
+    // Historical plans remain context-reviewable. Their implementation Lego
+    // bytes and fee receipt are not promoted to current-catalog provenance and
+    // are deliberately omitted from the persisted Builder template contract.
+    return;
+  }
+  const expected = buildImplementationLegoSelection({
+    catalog: getBundledCatalog(),
+    starterId,
+    selectedPackIds,
+    capabilityIds: selectedCapabilityIds
+  });
+  if (canonicalJson(implementationLegos) !== canonicalJson(expected)) {
+    invalid("template plan implementation Legos are stale, incomplete or digest-invalid");
+  }
+  if (canonicalJson(feePolicy) !== canonicalJson(buildImplementationFeePolicy())) {
+    invalid("template plan fee applicability is missing or has been weakened");
+  }
 }
 
 function assertBundledCatalogSelection(selection) {
@@ -258,6 +364,7 @@ function assertBundledCatalogSelection(selection) {
       catalog,
       starterId: selection.starterId,
       packIds: selection.requestedPackIds,
+      capabilityIds: inferDirectCapabilityIds(selection, catalog),
       customCapabilities: selection.customCapabilities.map(({ id, label }) => ({ id, label })),
       localTags: selection.ownerProvidedLocalTags
     });
@@ -305,8 +412,8 @@ function requireObject(value, label) {
   return value;
 }
 
-function requireArray(value, label) {
-  if (!Array.isArray(value) || value.length > MAX_LIST_ITEMS) invalid(`${label} must be a bounded array`);
+function requireArray(value, label, { allowOversize = false } = {}) {
+  if (!Array.isArray(value) || (!allowOversize && value.length > MAX_LIST_ITEMS)) invalid(`${label} must be a bounded array`);
   return value;
 }
 
@@ -315,14 +422,82 @@ function requireId(value, label) {
   return value;
 }
 
-function requireIdList(value, label) {
-  const result = requireArray(value, label).map((entry, index) => requireId(entry, `${label}[${index}]`));
+function requireIdList(value, label, { allowOversize = false } = {}) {
+  const result = requireArray(value, label, { allowOversize }).map((entry, index) => requireId(entry, `${label}[${index}]`));
   assertSortedUnique(result, label);
   return [...result];
 }
 
+function throwBuilderTemplateSplitReview(selection) {
+  const customCapabilityIds = selection.customCapabilities.map(({ id }) => id);
+  const requestedCapabilityIds = selection.catalogDigest === getBundledCatalog().catalogDigest
+    ? inferDirectCapabilityIds(selection, getBundledCatalog())
+    : [];
+  const directCapabilityLegos = requestedCapabilityIds.length === 0
+    ? null
+    : buildDirectCapabilityLegos(requestedCapabilityIds, getBundledCatalog());
+  const capabilityIds = [...new Set([
+    ...selection.selectedCapabilityIds,
+    ...customCapabilityIds
+  ])].sort(compareUtf8);
+  throw new BuilderTemplateContractError(
+    "BUILDER_TEMPLATE_SPLIT_REVIEW_REQUIRED",
+    "Builder template materialized provenance exceeds the direct review window and requires a split review plan.",
+    {
+      status: "HOLD_SPLIT_REVIEW",
+      ideaEligibility: "ELIGIBLE_FOR_REVIEW",
+      designEligible: true,
+      automaticAdverseDecision: false,
+      automaticMaterialization: false,
+      classification: "tooling-split-review",
+      maximumItemsPerChunk: MAX_LIST_ITEMS,
+      capabilityCount: capabilityIds.length,
+      capabilityChunks: chunkIds(capabilityIds),
+      requestedCapabilityCount: requestedCapabilityIds.length,
+      requestedCapabilityChunks: chunkIds(requestedCapabilityIds),
+      ...(directCapabilityLegos === null ? {} : { directCapabilityLegos }),
+      customCapabilityCount: selection.customCapabilities.length,
+      customCapabilityChunks: chunkIds(selection.customCapabilities),
+      localProjectTagCount: selection.localProjectTags.length,
+      localProjectTagChunks: chunkIds(selection.localProjectTags),
+      maximumOwnerProvidedLocalTagsPerChunk: MAX_LIST_ITEMS,
+      ownerProvidedLocalTagCount: selection.ownerProvidedLocalTags.length,
+      ownerProvidedLocalTagChunks: chunkIds(
+        selection.ownerProvidedLocalTags,
+        MAX_LIST_ITEMS
+      ),
+      routingCapabilityChunks: chunkIds(capabilityIds),
+      manualProvenanceFallback: manualBuilderTemplate(),
+      routingSelection: {
+        catalogDigest: selection.catalogDigest,
+        selectionDigest: selection.selectionDigest,
+        starterId: selection.starterId,
+        requestedPackIds: [...selection.requestedPackIds],
+        selectedPackIds: [...selection.selectedPackIds],
+        requestedCapabilityIds,
+        ...(directCapabilityLegos === null ? {} : { directCapabilityLegos })
+      }
+    }
+  );
+}
+
+function chunkIds(values, maximumItems = MAX_LIST_ITEMS) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += maximumItems) {
+    chunks.push(values.slice(index, index + maximumItems));
+  }
+  return chunks;
+}
+
 function requireVisibleLabel(value, label) {
-  if (typeof value !== "string" || value.length < 1 || Buffer.byteLength(value, "utf8") > 120 || value !== value.normalize("NFC") || value.trim() !== value) {
+  if (
+    typeof value !== "string"
+    || value.length < 1
+    || [...value].length > MAX_VISIBLE_LABEL_CODE_POINTS
+    || Buffer.byteLength(value, "utf8") > MAX_VISIBLE_LABEL_BYTES
+    || value !== value.normalize("NFC")
+    || value.trim() !== value
+  ) {
     invalid(`${label} must be bounded visible NFC text`);
   }
   if (inspectPublicMetadataText(value).hasInvisibleOrBidi) invalid(`${label} contains forbidden invisible, control or bidirectional code points`);
