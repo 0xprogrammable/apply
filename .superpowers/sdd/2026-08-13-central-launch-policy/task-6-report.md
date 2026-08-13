@@ -12,6 +12,8 @@
 - Non-destructive Task 5 integration merge: `fc579ffba2aee083fefb9b4d8ad5307ac27c7bbe`
 - Audience closure commit: `271552d20a1329e45e0ac08de6b084b3b2a7d258`
 - Audience closure tree: `5a85464253b0a3bb4730e8edc4530f1fedd7e95b`
+- Schema and stable-file remediation commit: `de7a3cc75ff765eb3d35b10dac663ced8fba387c`
+- Schema and stable-file remediation tree: `184bbbc3b982ddc080e77bc9ee1b64f3d78b7be1`
 
 No push, signing, deployment, launch, or other external mutation was performed.
 
@@ -23,10 +25,11 @@ No push, signing, deployment, launch, or other external mutation was performed.
 - Revalidates the exact canonical Task 5 application and result bytes through `parseWorkflowCanaryApplicationBytes` and `parseWorkflowCanaryResultBytes` against the exact WeakSet-bound trusted policy record.
 - Cross-binds the full application, pull request base/head/merge identity, source, workflow-canary policy binding, and exact result bytes.
 - Enforces a maximum 15-minute inclusive validity window and a hidden-only eligibility object with every launch, discovery, routing, production, and funds authority flag false.
+- Requires both command timestamps to satisfy the standard RFC 3339 `date-time` format and the stricter four-digit UTC `Date.toISOString()` spelling with exactly three millisecond digits. Runtime and schema reject otherwise-valid RFC 3339 timestamps that omit milliseconds, use an offset, vary fractional precision, or use lowercase separators.
 - Computes a stable domain-separated `eligibilityId` from immutable audience/application/PR/source/policy/result/eligibility identity while excluding issuer, timestamps, key, signature, and `supersedes`.
 - Website verification reconstructs canonical application/result bytes, reruns Task 5 semantic validation, rechecks signature/key/time/audience/policy/cross-object closure, and rejects legacy, build, CI, label, comment, merge, result-only, partial, or unsigned substitutes.
 - V1 requires `supersedes: null`; single use, revocation, latest-head selection, and supersession are explicitly left to protected atomic Website state.
-- Added a fixed-purpose compiler CLI with bounded non-executable, non-symlink, single-link regular-file reads and no private-key or caller-selected policy/profile input.
+- Added a fixed-purpose compiler CLI with bounded non-executable, non-symlink, single-link regular-file reads and no private-key or caller-selected policy/profile input. Each read now binds the initial `lstat` identity to the opened descriptor, rechecks every safety property before and after a hard-bounded descriptor read, and rejects path replacement or mutation.
 - Hard-disabled the legacy production entitlement compiler through the exact trusted central policy before package or launch-plan I/O. The opaque legacy `policyBundleDigest` cannot become authority and no positive bypass was added.
 - Added exactly `scripts/canary-eligibility-core.mjs` and `scripts/compile-canary-eligibility.mjs` to the maintenance allowlist; nearby scripts and mixed applicant/maintenance changes remain rejected.
 - Updated strict schemas, package scripts, README, Workflow Canary documentation, legacy entitlement documentation, and dedicated Canary eligibility documentation.
@@ -35,7 +38,13 @@ No push, signing, deployment, launch, or other external mutation was performed.
 
 The first focused Task 6 test failed because the Canary core did not exist. The audience regression test then failed before implementation because the signed command rejected the new field. Both were implemented only after observing the expected failures.
 
-The read-only crypto/identity review was bound to the recovered pre-audience snapshot. It found one Important issue: no signed Website environment/audience binding when physical keys might be shared. The fix signs a closed audience, embeds it in the envelope, includes it in `eligibilityId`, and requires the Website's independently configured `expectedAudience`. Staging-to-production and production-to-staging reuse now fail. No other Critical or Important finding was reported on that reviewed snapshot. The post-fix branch is ready for a fresh independent review; this report does not treat the earlier snapshot review as final approval of the changed tree.
+The read-only crypto/identity review was bound to the recovered pre-audience snapshot. It found one Important issue: no signed Website environment/audience binding when physical keys might be shared. The fix signs a closed audience, embeds it in the envelope, includes it in `eligibilityId`, and requires the Website's independently configured `expectedAudience`. Staging-to-production and production-to-staging reuse now fail. No other Critical or Important finding was reported on that reviewed snapshot.
+
+A later independent review bound to commit `996596d22d282b97ec673a08055f79686bed7e89`, tree `b0e274fefafd7edd58e972046dcb6878d2bdd841`, found two Important issues. First, the schema's generic `date-time` format accepted spellings that runtime correctly rejected, while the test replaced standard format semantics with the runtime predicate and hid the mismatch. Second, the stable-file reader did not compare initial path identity to the opened descriptor or repeat all bounds and file-property checks on that descriptor.
+
+Both remediation tests were observed failing before implementation: standard format validation accepted `2026-08-13T10:00:00Z`, and an oversized replacement between `lstat` and `open` was read successfully. The schema now combines standard `date-time` validation from pinned `ajv-formats` 3.0.1 with an explicit canonical UTC-millisecond pattern; test code no longer overrides the standard format. The reader now compares initial and opened identity, rechecks type, link count, executable bits and byte bounds before and after the read, and reads at most the configured maximum plus one detection byte. Deterministic regressions replace the inspected file with oversized, executable, and nonregular objects between `lstat` and `open`.
+
+The remediated tree is ready for a fresh independent review. This report does not treat either earlier review snapshot as approval of the changed tree.
 
 ## Recovery evidence
 
@@ -53,7 +62,7 @@ The two recovered schema hashes and recovered core hash match the independent re
 
 ## Verification
 
-- `node --test test/canary-eligibility.test.mjs test/acceptance-entitlement.test.mjs`: 18 passed, 0 failed.
+- `node --test test/canary-eligibility.test.mjs test/acceptance-entitlement.test.mjs`: 19 passed, 0 failed.
 - `node --test test/workflow-canary.test.mjs`: 13 passed, 0 failed.
 - `node --test test/launch-policy-review.test.mjs`: 15 passed, 0 failed.
 - `npm run test:intake`: 258 passed, 1 platform-specific skip, 0 failed.
@@ -65,4 +74,4 @@ The complete repository test command was intentionally not run; the Task 6 brief
 
 ## Status
 
-Implementation and focused local validation are complete. The branch is ready for independent Task 6 review. It is not pushed, merged to the integration branch, deployed, signed, or live.
+Implementation and focused local validation are complete. The two findings from the review of `996596d` are remediated and the branch is ready for a fresh independent Task 6 review. It is not pushed, merged to the integration branch, deployed, signed, or live.
