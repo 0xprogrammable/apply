@@ -134,7 +134,7 @@ test("legacy V2 fee grammar stays frozen outside the current one-rule policy", (
     owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     platformHundredthsOfBip: 1000,
     policyId: "programmable-volume-fee-v1",
-    policyVersion: "1.2.0",
+    policyVersion: "1.1.0",
     swapModes: [
       "zeroForOne-exactInput",
       "zeroForOne-exactOutput",
@@ -395,7 +395,7 @@ test("unchanged V2 bytes bind the exact trusted policy snapshot without canary o
     path: "policy/launch-policy.v1.json",
     gitBlobOid: git(fixture.base, ["rev-parse", `${fixture.baseCommit}:policy/launch-policy.v1.json`]),
     policyId: "programmable-central-launch-policy",
-    policyVersion: "1.1.0",
+    policyVersion: "1.2.0",
     sha256: `sha256:${crypto.createHash("sha256").update(TRUSTED_POLICY_BYTES).digest("hex")}`
   });
   assert.equal(Object.hasOwn(report.policyBinding, "profileId"), false);

@@ -85,7 +85,6 @@
     "evaluatedRuleIds": {
       "items": { "pattern": "^[A-Z][A-Z0-9_]*(\\.[A-Z][A-Z0-9_]*)+$", "type": "string" },
       "maxItems": 256,
-      "minItems": 1,
       "type": "array",
       "uniqueItems": true
     },
