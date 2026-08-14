@@ -90,11 +90,9 @@ const REVIEW_FILES = Object.freeze([
 ]);
 const EXECUTABLE_BUILDER_VENDOR_PREFIX = "vendor/programmable-v4-hook-builder/";
 const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
-  ".programmable/",
   "acceptance/",
   "assets/",
   "docs/",
-  "policy/",
   "registry/",
   "review/",
   "scripts/test/schema-validator/",
@@ -102,6 +100,7 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   EXECUTABLE_BUILDER_VENDOR_PREFIX
 ]);
 const REGISTRY_MAINTENANCE_FILES = new Set([
+  ".programmable/active-contract.json",
   ".github/CODEOWNERS",
   ".github/ISSUE_TEMPLATE/config.yml",
   ".github/ISSUE_TEMPLATE/documentation.yml",
@@ -121,12 +120,25 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "SUPPORT.md",
   "package-lock.json",
   "package.json",
-  "scripts/generate-registry.mjs",
+  "policy/launch-policy-authority-ownership.v1.json",
+  "policy/launch-policy.v1.json",
+  "policy/schemas/launch-policy-authority-ownership.v1.schema.json",
+  "policy/schemas/launch-policy-binding.v1.schema.json",
+  "policy/schemas/launch-policy.v1.schema.json",
+  "canary/schemas/workflow-canary-application-v1.schema.json",
+  "canary/schemas/workflow-canary-result-v1.schema.json",
   "scripts/acceptance-entitlement-core.mjs",
   "scripts/canary-eligibility-core.mjs",
   "scripts/compile-canary-eligibility.mjs",
   "scripts/compile-launch-entitlement.mjs",
+  "scripts/generate-launch-policy-artifacts.mjs",
+  "scripts/generate-registry.mjs",
+  "scripts/launch-policy-authority-ownership.mjs",
+  "scripts/launch-policy-core.mjs",
+  "scripts/launch-policy-handlers.mjs",
+  "scripts/launch-policy.mjs",
   "scripts/registry-core.mjs",
+  "scripts/release-version-core.mjs",
   "scripts/verify-repository.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-public-hook-application.mjs",
@@ -140,6 +152,7 @@ const RESERVED_MAINTENANCE_PREFIXES = Object.freeze([
   ".github/",
   ".programmable/",
   "canary-submissions/",
+  "canary/",
   "policy/",
   "scripts/",
   "submissions/",
@@ -482,7 +495,7 @@ export function classifyPublicIntakePullRequest({
 }
 
 function isPolicyMaintenancePath(entryPath) {
-  return entryPath.startsWith("policy/") || entryPath.startsWith(".programmable/");
+  return entryPath === ".programmable/active-contract.json" || entryPath.startsWith("policy/");
 }
 
 /**
@@ -2663,7 +2676,6 @@ function assertNewApplicationChangedFileSet({ changedFiles, applicationId }) {
 function isRegistryMaintenancePath(entryPath) {
   return REGISTRY_MAINTENANCE_FILES.has(entryPath)
     || REGISTRY_MAINTENANCE_PREFIXES.some((prefix) => entryPath.startsWith(prefix))
-    || entryPath.startsWith("canary/")
     || /^scripts\/test\/verify-public-hook-application(?:-[a-z0-9-]+)?\.test\.mjs$/u.test(entryPath);
 }
 

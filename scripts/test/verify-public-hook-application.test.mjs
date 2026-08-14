@@ -1037,6 +1037,51 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
   assert.equal(result.mode, "registry-maintenance");
 });
 
+test("all exact central policy Canary and release scripts are maintenance while adjacent paths stay closed", (t) => {
+  const exactPaths = [
+    ".programmable/active-contract.json",
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary/schemas/workflow-canary-result-v1.schema.json",
+    "scripts/canary-eligibility-core.mjs",
+    "scripts/compile-canary-eligibility.mjs",
+    "scripts/generate-launch-policy-artifacts.mjs",
+    "scripts/launch-policy-authority-ownership.mjs",
+    "scripts/launch-policy-core.mjs",
+    "scripts/launch-policy-handlers.mjs",
+    "scripts/launch-policy.mjs",
+    "scripts/release-version-core.mjs",
+    "scripts/verify-workflow-canary.mjs",
+    "scripts/workflow-canary-core.mjs"
+  ];
+  for (const relativePath of exactPaths) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, `maintenance fixture for ${relativePath}\n`);
+    const candidateCommit = commitAll(fixture.candidate, `maintain ${relativePath}`);
+    assert.equal(
+      classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)).mode,
+      "registry-maintenance",
+      relativePath
+    );
+  }
+
+  for (const relativePath of [
+    ".programmable/private-policy.json",
+    "canary/schemas/private-canary.schema.json",
+    "policy/private-admission.json",
+    "scripts/launch-policy-private-gate.mjs",
+    "scripts/release-version-helper.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, "unreviewed maintenance path\n");
+    const candidateCommit = commitAll(fixture.candidate, `reject ${relativePath}`);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED"),
+      relativePath
+    );
+  }
+});
+
 test("bounded Registry maintenance accepts 700 changed files and rejects 701", async (t) => {
   for (const [changedFileCount, expectedMode, expectedCode] of [
     [700, "registry-maintenance", null],

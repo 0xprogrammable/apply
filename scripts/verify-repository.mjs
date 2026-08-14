@@ -12,12 +12,14 @@ import {
   verifyLaunchPolicyAuthorityOwnership
 } from "./launch-policy-authority-ownership.mjs";
 import { canonicalJson, RegistryError, verifyGeneratedArtifacts } from "./registry-core.mjs";
+import { ReleaseVersionError, verifyReleaseVersion } from "./release-version-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 try {
   const launchPolicy = verifyLaunchPolicyArtifacts({ repositoryRoot: root });
   const authorityOwnership = verifyLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
+  const releaseVersion = verifyReleaseVersion({ repositoryRoot: root });
   const generated = verifyGeneratedArtifacts({ repositoryRoot: root });
   verifyVendorReceipt();
   verifySingleSourcePolicyGatePresent();
@@ -26,11 +28,12 @@ try {
   }
   runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   runNodeTests("scripts/test", (name) => name.startsWith("verify-public-hook-application") && name.endsWith(".test.mjs"), ["--test-concurrency=1"]);
-  process.stdout.write(`${canonicalJson({ ...generated, authorityOwnership, checks: ["authority-ownership", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true })}\n`);
+  process.stdout.write(`${canonicalJson({ ...generated, authorityOwnership, checks: ["authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion })}\n`);
 } catch (error) {
   const known = error instanceof RegistryError
     || error instanceof LaunchPolicyArtifactError
-    || error instanceof LaunchPolicyAuthorityOwnershipError;
+    || error instanceof LaunchPolicyAuthorityOwnershipError
+    || error instanceof ReleaseVersionError;
   const code = known ? error.code : "REPOSITORY_CHECK_FAILED";
   const message = known ? error.message : String(error?.message ?? "repository verification failed").slice(0, 1000);
   process.stdout.write(`${canonicalJson({ error: { code, message }, ok: false })}\n`);

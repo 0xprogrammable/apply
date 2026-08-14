@@ -84,6 +84,7 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/launch-policy-authority-ownership.mjs",
   "scripts/launch-policy.mjs",
   "scripts/registry-core.mjs",
+  "scripts/release-version-core.mjs",
   "scripts/verify-public-hook-application.mjs",
   "scripts/verify-repository.mjs",
   "scripts/verify-workflow-canary.mjs"

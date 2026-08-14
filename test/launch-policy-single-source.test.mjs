@@ -60,11 +60,12 @@ test("the closed ownership manifest proves one current authored admission author
 
 test("the ownership gate rejects an added YAML policy and an indirect imported admission gate", () => {
   withRepositoryCopy((repositoryRoot) => {
+    const expectedOwnedFiles = verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }).files;
     const boundedCanaryPath = "canary-submissions/ownership-probe/application.json";
     fs.mkdirSync(path.dirname(path.join(repositoryRoot, boundedCanaryPath)), { recursive: true });
     fs.writeFileSync(path.join(repositoryRoot, boundedCanaryPath), "{}\n", "utf8");
     gitAt(repositoryRoot, ["add", "--", boundedCanaryPath]);
-    assert.equal(verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }).files, 114);
+    assert.equal(verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }).files, expectedOwnedFiles + 1);
     gitAt(repositoryRoot, ["rm", "-f", "--", boundedCanaryPath]);
 
     const yamlPath = path.join(repositoryRoot, "config/private-admission-policy.yaml");
