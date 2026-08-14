@@ -7,6 +7,7 @@ Passing intake is not acceptance, an audit, deployment approval, or availability
 ## Contribution type
 
 - [ ] Generated six-file application package
+- [ ] Hidden workflow-canary application
 - [ ] Submit a Launch repository maintenance
 - [ ] Open Review Standard maintenance
 
