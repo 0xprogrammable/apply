@@ -65,7 +65,7 @@ function trustedPolicyFixture(t) {
 
 test("canonical policy exposes exactly build canary and disabled production profiles", () => {
   const record = canonicalPolicyRecord();
-  assert.equal(record.policy.policyVersion, "1.1.0");
+  assert.equal(record.policy.policyVersion, "1.2.0");
   assert.deepEqual(record.policy.profiles.map(({ id }) => id), ["build", "production-launch", "workflow-canary"]);
   assert.equal(selectLaunchPolicyProfile(record.policy, "build").enabled, true);
   assert.equal(selectLaunchPolicyProfile(record.policy, "production-launch").enabled, false);
@@ -75,59 +75,41 @@ test("canonical policy exposes exactly build canary and disabled production prof
   assert.doesNotMatch(JSON.stringify(record.policy), /LAUNCH_APPROVED/u);
 });
 
-test("canonical policy keeps active build and canary rules separate from inactive production history", () => {
+test("current admission policy is one sentence: Ethereum and the Programmable treasury 10 bps", (t) => {
   const { policy } = canonicalPolicyRecord();
-  assert.deepEqual(rulesForProfile(policy, "build").map(({ id }) => id), [
-    "BUILD.DECLARED_EVIDENCE",
-    "BUILD.EXACT_SOURCE",
-    "BUILD.PRIVILEGED_VALUE_FLOW",
-    "BUILD.V4_IDENTITY_PERMISSIONS"
-  ]);
-  assert.deepEqual(rulesForProfile(policy, "workflow-canary").map(({ id }) => id), [
-    "CANARY.APPLICATION_IDENTITY",
-    "CANARY.EXACT_PUBLIC_SOURCE",
-    "CANARY.HIDDEN_NAMESPACE",
-    "CANARY.NO_PUBLIC_ROUTING",
-    "CANARY.NO_REAL_USER_FUNDS",
-    "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"
-  ]);
-  const retiredArtifactRule = policy.rules.find(({ id }) => id === "CANARY.REPRODUCIBLE_INERT_ARTIFACT");
-  assert.deepEqual(retiredArtifactRule, {
-    applicability: { mode: "always" },
-    enforcement: { handlerId: "reproducible-inert-artifact-v1", mode: "deterministic", owner: "applicant" },
-    evidence: ["canary-inert-artifact", "canary-reproducibility"],
-    id: "CANARY.REPRODUCIBLE_INERT_ARTIFACT",
-    introducedIn: "1.0.0",
-    profiles: ["workflow-canary"],
-    requirement: "Produce a reproducible inert artifact from the exact public source.",
-    retiredIn: "1.1.0",
-    severity: "blocker",
-    status: "inactive"
-  });
-  assert.deepEqual(policy.rules.find(({ id }) => id === "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"), {
-    applicability: { mode: "always" },
-    enforcement: { handlerId: "reproducible-inert-application-record-v1", mode: "deterministic", owner: "platform" },
-    evidence: [
-      "canary-canonical-application-record",
-      "canary-current-policy-binding",
-      "canary-reproducible-application-parsing"
-    ],
-    id: "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD",
-    introducedIn: "1.1.0",
-    profiles: ["workflow-canary"],
-    requirement: "Bind the exact canary application as canonical inert JSON with the current protected policy and reproducible parsing.",
-    retiredIn: null,
-    severity: "blocker",
-    status: "active"
-  });
-  assert.deepEqual(
-    policy.rules.filter(({ status }) => status === "inactive").map(({ id, profiles }) => ({ id, profiles })),
-    [
-      { id: "CANARY.REPRODUCIBLE_INERT_ARTIFACT", profiles: ["workflow-canary"] },
-      { id: "LEGACY_V2.ADMISSION", profiles: ["production-launch"] },
-      { id: "LEGACY_V2.FEE_PROJECTION", profiles: ["production-launch"] }
-    ]
-  );
+  assert.equal(policy.policyVersion, "1.2.0");
+  assert.deepEqual(policy.rules.map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
+  assert.equal(policy.rules[0].requirement, "A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury.");
+  assert.deepEqual(rulesForProfile(policy, "build").map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
+  assert.deepEqual(rulesForProfile(policy, "production-launch").map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
+  assert.deepEqual(rulesForProfile(policy, "workflow-canary"), []);
+  assert.equal(policy.rules.some(({ status }) => status !== "active"), false);
+
+  const { record } = trustedPolicyFixture(t);
+  const validEvidence = {
+    "programmable-launch-requirement": {
+      basis: "gross-canonical-pool-volume",
+      chainId: 1,
+      hundredthsOfBip: 1000,
+      network: "ethereum-mainnet",
+      status: "passed",
+      treasury: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+    }
+  };
+  const passed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "build", subject: {}, evidence: validEvidence });
+  assert.equal(passed.passed, true);
+
+  for (const [label, mutate] of [
+    ["wrong chain", (evidence) => { evidence["programmable-launch-requirement"].chainId = 8453; }],
+    ["wrong treasury", (evidence) => { evidence["programmable-launch-requirement"].treasury = `0x${"0".repeat(40)}`; }],
+    ["wrong rate", (evidence) => { evidence["programmable-launch-requirement"].hundredthsOfBip = 999; }]
+  ]) {
+    const evidence = structuredClone(validEvidence);
+    mutate(evidence);
+    const failed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "build", subject: {}, evidence });
+    assert.equal(failed.passed, false, label);
+    assert.deepEqual(failed.findings.map(({ ruleId }) => ruleId), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"], label);
+  }
 });
 
 test("policy rejects duplicate keys noncanonical bytes duplicate rule ids and unbound handlers", () => {
@@ -161,8 +143,8 @@ test("policy rejects duplicate keys noncanonical bytes duplicate rule ids and un
   assert.throws(() => validateLaunchPolicy(unboundHandler), hasCode("LAUNCH_POLICY_HANDLER_COVERAGE_INVALID"));
 
   const orphanedHandler = structuredClone(canonicalPolicyRecord().policy);
-  orphanedHandler.rules = orphanedHandler.rules.filter(({ id }) => id !== "BUILD.DECLARED_EVIDENCE");
-  assert.throws(() => validateLaunchPolicy(orphanedHandler), hasCode("LAUNCH_POLICY_HANDLER_COVERAGE_INVALID"));
+  orphanedHandler.rules = [];
+  assert.throws(() => validateLaunchPolicy(orphanedHandler), hasCode("LAUNCH_POLICY_RULE_INVALID"));
 });
 
 test("policy semantic validation rejects field and UTF-8 ordering drift", () => {
@@ -175,8 +157,7 @@ test("policy semantic validation rejects field and UTF-8 ordering drift", () => 
   assert.throws(() => validateLaunchPolicy(profileOrder), hasCode("LAUNCH_POLICY_ORDER_INVALID"));
 
   const evidenceOrder = structuredClone(canonicalPolicyRecord().policy);
-  const disclosure = evidenceOrder.rules.find(({ id }) => id === "BUILD.PRIVILEGED_VALUE_FLOW");
-  disclosure.evidence.reverse();
+  evidenceOrder.rules[0].evidence = ["z-evidence", "a-evidence"];
   assert.throws(() => validateLaunchPolicy(evidenceOrder), hasCode("LAUNCH_POLICY_ORDER_INVALID"));
 });
 
@@ -209,18 +190,13 @@ test("build and canary authority cannot carry routing discovery or real-user fun
   }
 });
 
-test("active deterministic rules require their declared evidence before a profile can pass", (t) => {
+test("workflow canary carries no admission requirement while production remains disabled", (t) => {
   const { record } = trustedPolicyFixture(t);
-  const evidence = Object.fromEntries(
-    rulesForProfile(record.policy, "workflow-canary")
-      .flatMap(({ evidence: evidenceIds }) => evidenceIds)
-      .map((id) => [id, { status: "passed" }])
-  );
   const passed = evaluateLaunchPolicyRules({
     policyRecord: record,
     profileId: "workflow-canary",
     subject: {},
-    evidence
+    evidence: {}
   });
   assert.equal(passed.passed, true);
   assert.equal(passed.outcome, "CANARY_WORKFLOW_PASSED");
@@ -228,11 +204,6 @@ test("active deterministic rules require their declared evidence before a profil
   assert.equal(passed.authority.publicRoutingAllowed, false);
   assert.equal(passed.authority.realUserFundsAllowed, false);
 
-  delete evidence["canary-no-real-user-funds"];
-  const failed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "workflow-canary", subject: {}, evidence });
-  assert.equal(failed.passed, false);
-  assert.equal(failed.outcome, null);
-  assert.deepEqual(failed.findings.map(({ ruleId }) => ruleId), ["CANARY.NO_REAL_USER_FUNDS"]);
   assert.throws(
     () => evaluateLaunchPolicyRules({ policyRecord: record, profileId: "production-launch", subject: {}, evidence: {} }),
     hasCode("LAUNCH_POLICY_PROFILE_DISABLED")

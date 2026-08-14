@@ -16,7 +16,8 @@ free of real-user funds. Only its exact result can enter the separate signed, au
 
 The six generated files under `submissions/<application-id>/` are an open, frozen legacy V2 transport while the
 checked-in intake state is `open`. Their validation uses the exact receipt-bound
-`vendor/programmable-v4-hook-builder/` tree and inactive `LEGACY_V2.*` policy tombstones for compatibility. New V2
+`vendor/programmable-v4-hook-builder/` tree and frozen transport checks for compatibility. Those checks are not current
+central-policy requirements. New V2
 applications are accepted by that bounded validator, but a package, review, green check, label, comment, or merge
 cannot satisfy Workflow Canary or Website eligibility and cannot enable production launch authority.
 

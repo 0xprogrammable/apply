@@ -76,6 +76,7 @@ const MODULE_OWNERSHIP_ROLES = new Set([
 ]);
 const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "review/cli.mjs",
+  "review/open-review-engine.mjs",
   "scripts/acceptance-entitlement-core.mjs",
   "scripts/canary-eligibility-core.mjs",
   "scripts/compile-canary-eligibility.mjs",
@@ -86,8 +87,10 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/registry-core.mjs",
   "scripts/release-version-core.mjs",
   "scripts/verify-public-hook-application.mjs",
+  "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-repository.mjs",
-  "scripts/verify-workflow-canary.mjs"
+  "scripts/verify-workflow-canary.mjs",
+  "scripts/workflow-canary-core.mjs"
 ]);
 const PURE_SUPPORT_MODULES = new Set();
 const EXPECTED_VENDOR = Object.freeze({

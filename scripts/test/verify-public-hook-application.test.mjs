@@ -124,44 +124,40 @@ function validatePackageFiles(options) {
   });
 }
 
-test("legacy fee owner rate policy version modes and evidence derive from the central adapter", () => {
-  const cases = [
-    ["owner", (parameters) => { parameters.owner = "0x0000000000000000000000000000000000000001"; }],
-    ["rate", (parameters) => { parameters.platformHundredthsOfBip += 1; }],
-    ["policy id", (parameters) => { parameters.policyId = "programmable-volume-fee-v1-test"; }],
-    ["policy version", (parameters) => { parameters.policyVersion = "1.1.1"; }],
-    ["swap modes", (parameters) => { parameters.swapModes.reverse(); }]
-  ];
-  for (const [name, mutate] of cases) {
-    const adapter = mutatedLocalLegacyPolicyAdapter(mutate);
-    assert.throws(
-      () => validatePublicApplicationPackageFiles({
-        applicationId: "example-hook",
-        packageFiles: makePackage(),
-        legacyPolicyAdapter: adapter
-      }),
-      hasCode("PROGRAMMABLE_FEE_PROJECTION_INVALID"),
-      name
-    );
-  }
-
-  const evidenceAdapter = mutatedLocalLegacyPolicyAdapter((parameters, rule) => {
-    parameters.evidenceId = "legacy-v2-fee-projection-revised";
-    rule.evidence = [parameters.evidenceId];
+test("legacy V2 fee grammar stays frozen outside the current one-rule policy", () => {
+  const policy = JSON.parse(TRUSTED_POLICY_BYTES.toString("utf8"));
+  assert.equal(policy.rules.some(({ id }) => id === LOCAL_LEGACY_POLICY_ADAPTER.ruleId), false);
+  assert.equal(LOCAL_LEGACY_POLICY_ADAPTER.ruleId, "FROZEN_LEGACY_V2.FEE_PROJECTION");
+  assert.equal(LOCAL_LEGACY_POLICY_ADAPTER.evidenceId, "legacy-v2-fee-projection");
+  assert.equal(LOCAL_LEGACY_POLICY_ADAPTER.transportEvidenceId, "zz-programmable-fee-submission");
+  assert.deepEqual(LOCAL_LEGACY_POLICY_ADAPTER.fee, {
+    owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    platformHundredthsOfBip: 1000,
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.2.0",
+    swapModes: [
+      "zeroForOne-exactInput",
+      "zeroForOne-exactOutput",
+      "oneForZero-exactInput",
+      "oneForZero-exactOutput"
+    ]
   });
-  assert.equal(evidenceAdapter.evidenceId, "legacy-v2-fee-projection-revised");
-  assert.equal(evidenceAdapter.transportEvidenceId, "zz-programmable-fee-submission");
+
+  const mutatedPolicyAdapter = localLegacyPolicyAdapterWithPolicyMutation((rule) => {
+    rule.parameters.treasury = "0x0000000000000000000000000000000000000001";
+    rule.parameters.hundredthsOfBip = 999;
+  });
+  assert.deepEqual(mutatedPolicyAdapter.fee, LOCAL_LEGACY_POLICY_ADAPTER.fee);
   assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
     applicationId: "example-hook",
     packageFiles: makePackage(),
-    legacyPolicyAdapter: evidenceAdapter
+    legacyPolicyAdapter: mutatedPolicyAdapter
   }));
 });
 
-function mutatedLocalLegacyPolicyAdapter(mutate) {
+function localLegacyPolicyAdapterWithPolicyMutation(mutate) {
   const policy = JSON.parse(TRUSTED_POLICY_BYTES.toString("utf8"));
-  const rule = policy.rules.find(({ id }) => id === "LEGACY_V2.FEE_PROJECTION");
-  mutate(rule.parameters, rule);
+  mutate(policy.rules[0]);
   return createHistoricalLegacyV2PolicyAdapterForLocalInspection({
     policyBytes: Buffer.from(`${canonicalJson(policy)}\n`, "utf8")
   });
@@ -404,7 +400,7 @@ test("unchanged V2 bytes bind the exact trusted policy snapshot without canary o
   });
   assert.equal(Object.hasOwn(report.policyBinding, "profileId"), false);
   assert.equal(report.policyProfile, "legacy-v2-transport");
-  assert.deepEqual(report.evaluatedRuleIds, ["LEGACY_V2.FEE_PROJECTION"]);
+  assert.deepEqual(report.evaluatedRuleIds, ["FROZEN_LEGACY_V2.FEE_PROJECTION"]);
   assert.deepEqual(report.evaluatedEvidenceIds, ["legacy-v2-fee-projection"]);
   assert.deepEqual(report.authority, {
     checkerOnly: true,

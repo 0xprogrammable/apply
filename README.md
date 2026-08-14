@@ -49,6 +49,11 @@ The canonical source for Programmable launch requirements is
 [`docs/LAUNCH_POLICY.md`](docs/LAUNCH_POLICY.md) is a generated, digest-bound human projection. Edit the JSON only;
 the generated Markdown is never independent authority.
 
+> **A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury.**
+
+That is the complete current Programmable launch requirement. Workflow transport, canonical JSON, Git identity,
+signature, path, and size checks protect the process; they are not additional launch-policy requirements.
+
 [`policy/launch-policy-authority-ownership.v1.json`](policy/launch-policy-authority-ownership.v1.json) is the separate
 machine-readable ownership proof. It carries no requirement text or parameter values. It binds the closed repository
 file set and hashes, admission entrypoints and import closures, Rule-ID-to-handler mapping, public projections, and the
@@ -58,13 +63,16 @@ imported gates until maintainers explicitly review and refresh that ownership re
 Third-party developers and agents can inspect the requirements without installing or using Hookbuilder:
 
 ```bash
+npm run policy -- requirements --profile build
 npm run policy -- requirements --profile workflow-canary
 npm run policy -- validate-policy
 npm run policy -- render
 ```
 
-`requirements` also describes `build` and the disabled `production-launch` profile. `binding` is available for an
-enabled profile and binds the policy at the exact committed repository `HEAD`; it refuses a dirty policy projection.
+`build` returns the one launch requirement. `workflow-canary` intentionally returns no semantic launch requirements;
+it tests transport only. The disabled `production-launch` profile carries the same one requirement for future use but
+cannot authorize a launch. `binding` is available for an enabled profile and binds the policy at the exact committed
+repository `HEAD`; it refuses a dirty policy projection.
 Every command reads the fixed repository-owned policy path, emits canonical JSON, and never imports or executes
 applicant code.
 
@@ -119,7 +127,7 @@ npm test
 1. **Build.** Project source stays in its own public GitHub repository.
 2. **Bind.** The applicant records the exact current `workflow-canary` policy binding and public source identity.
 3. **Submit.** The one-file hidden Canary enters the bounded trusted workflow without executing applicant code.
-4. **Review.** The policy-bound reviewer covers every active Canary Rule ID for that exact revision.
+4. **Review.** The policy-bound reviewer binds the exact policy and subject; Canary transport adds no semantic rule.
 5. **Expose privately.** A separate signer may issue short-lived eligibility for one protected Website audience.
 6. **Promote later.** Registry, deployment, public availability, funds, and launch authorization remain separate facts.
 
@@ -138,9 +146,8 @@ or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the
 
 ## Fee terms
 
-Fee terms apply only to a verified, activated market path. Official Classic and verified Native Custom market policies allocate **10 bps (0.10%) to Programmable**. That share may be part of a wider configured trading fee, so the active market profile and onchain fee path remain the source of truth.
-
-Reusable public templates use a separate planned policy of 20 bps total, split 10 bps to the template creator and 10 bps to Programmable. That policy is not active through this repository. Read [Submit a Template](https://github.com/0xprogrammable/submit-template) for its current status and requirements.
+The current launch policy requires **10 bps (0.10%) of trading volume to the Programmable treasury** on Ethereum. A
+verified onchain fee path is still required before a real market can satisfy that rule.
 
 ## Discovery registry
 

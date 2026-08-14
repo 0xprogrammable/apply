@@ -49,13 +49,16 @@ test("the compatibility adapter cannot inject a policy or produce authority", ()
   assert.equal(decision.authority.launchAuthorized, false);
 });
 
-test("all compatibility rationales cite a Rule ID in the canonical policy", () => {
+test("legacy compatibility rationales remain explicitly outside the canonical policy", () => {
   const policy = JSON.parse(fs.readFileSync(path.join(root, "policy/launch-policy.v1.json"), "utf8"));
   const ids = new Set(policy.rules.map(({ id }) => id));
   for (const name of legacyExamples()) {
     const decision = evaluateOpenReview(fixture(name));
-    for (const advisory of decision.advisories) assert.equal(ids.has(advisory.ruleId), true, `${name}: ${advisory.ruleId}`);
-    for (const finding of decision.findings) assert.equal(ids.has(finding.ruleId), true, `${name}: ${finding.ruleId}`);
+    for (const advisory of decision.advisories) {
+      assert.equal(advisory.ruleId, "LEGACY_V2.ADMISSION", `${name}: ${advisory.ruleId}`);
+      assert.equal(ids.has(advisory.ruleId), false, `${name}: ${advisory.ruleId}`);
+    }
+    assert.deepEqual(decision.findings, [], name);
   }
 });
 

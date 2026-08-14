@@ -273,7 +273,7 @@ test("every semantic finding and handler maps bijectively to a central Rule ID",
     [...new Set(legacyDecision.advisories.map(({ ruleId }) => ruleId))],
     ["LEGACY_V2.ADMISSION"]
   );
-  for (const advisory of legacyDecision.advisories) assert.equal(policyIds.has(advisory.ruleId), true);
+  for (const advisory of legacyDecision.advisories) assert.equal(policyIds.has(advisory.ruleId), false);
 });
 
 test("the receipt-bound vendored Hookbuilder is frozen legacy data, never current policy authority", () => {
@@ -295,7 +295,7 @@ test("the receipt-bound vendored Hookbuilder is frozen legacy data, never curren
   assert.match(read("AGENTS.md"), /cannot author current central-policy requirements/u);
 });
 
-test("legacy V2 tombstones cannot satisfy workflow-canary or Website eligibility", () => {
+test("frozen legacy V2 compatibility cannot become a current policy or Website eligibility", () => {
   const policyRecord = trustedPolicyRecord();
   const intakeStatus = readJson("docs/builder/intake-status.json");
   const registryConfig = readJson("registry/config.json");
@@ -309,14 +309,8 @@ test("legacy V2 tombstones cannot satisfy workflow-canary or Website eligibility
   for (const relativePath of ["README.md", "CONTRIBUTING.md", "docs/builder/PUBLIC_GITHUB_PR_BETA.md"]) {
     assert.match(read(relativePath), /open legacy|legacy V2 intake|open, frozen legacy V2/iu, relativePath);
   }
-  const tombstones = policyRecord.policy.rules.filter(({ id }) => id.startsWith("LEGACY_V2."));
-  assert.deepEqual(
-    tombstones.map(({ id, profiles, status }) => ({ id, profiles, status })),
-    [
-      { id: "LEGACY_V2.ADMISSION", profiles: ["production-launch"], status: "inactive" },
-      { id: "LEGACY_V2.FEE_PROJECTION", profiles: ["production-launch"], status: "inactive" }
-    ]
-  );
+  assert.equal(policyRecord.policy.rules.some(({ id }) => id.startsWith("LEGACY_V2.")), false);
+  assert.equal(policyRecord.policy.rules.some(({ id }) => id.startsWith("FROZEN_LEGACY_V2.")), false);
   assert.equal(
     rulesForProfile(policyRecord.policy, "workflow-canary").some(({ id }) => id.startsWith("LEGACY_V2.")),
     false
@@ -349,6 +343,7 @@ test("public docs describe one policy chain through reviewer canary and audience
   assert.match(beta, /frozen legacy V2 transport/u);
   assert.match(beta, /cannot satisfy Workflow\s+Canary or Website eligibility/u);
   assert.match(agents, /only authored source of current Programmable-specific admission requirements/u);
+  assert.match(readme, /A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury/u);
   assert.match(readme, /Two intake transports are open/u);
   assert.match(readme, /six-file legacy V2 package while the checked-in/u);
   assert.match(readme, /V2 cannot substitute for Canary or Website eligibility/u);
