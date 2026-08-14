@@ -9,8 +9,11 @@ import {
   validatePublicApplicationPackageFiles
 } from "./verify-public-hook-application-core.mjs";
 import {
-  isCanonicalGitHubRepositoryPathV1,
-  parseBoundedLosslessJson
+  buildLaunchPolicyBinding,
+  selectLaunchPolicyProfile
+} from "./launch-policy-core.mjs";
+import {
+  isCanonicalGitHubRepositoryPathV1
 } from "../vendor/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
 
 export const SIGNED_ACCEPTANCE_COMMAND_VERSION = "programmable.signed-protected-acceptance-command.v1";
@@ -25,7 +28,6 @@ const SUBMIT_LAUNCH_REPOSITORY = "0xprogrammable/submit-launch";
 const SUBMIT_LAUNCH_REPOSITORY_ID = "1320171831";
 const SIGNING_DOMAIN = Buffer.from("programmable.submit-launch.protected-acceptance-command.v1\0", "utf8");
 const PACKAGE_BINDING_DOMAIN = "programmable.submit-launch.six-file-package-binding.v1";
-const ENTITLEMENT_ID_DOMAIN = "programmable.submit-launch.launch-entitlement-id.v1";
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const APPLICATION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
@@ -57,7 +59,7 @@ export function authorityKeyId(publicKey) {
   return `ed25519:sha256:${crypto.createHash("sha256").update(spki).digest("hex")}`;
 }
 
-export function inspectSixFileApplicationPackage({ packageDirectory }) {
+export function inspectSixFileApplicationPackage({ packageDirectory, legacyPolicyAdapter }) {
   if (typeof packageDirectory !== "string" || packageDirectory.length === 0) {
     reject("PACKAGE_DIRECTORY_INVALID", "The six-file package directory must be an explicit path.");
   }
@@ -88,7 +90,7 @@ export function inspectSixFileApplicationPackage({ packageDirectory }) {
   ]));
   let validated;
   try {
-    validated = validatePublicApplicationPackageFiles({ applicationId, packageFiles });
+    validated = validatePublicApplicationPackageFiles({ applicationId, packageFiles, legacyPolicyAdapter });
   } catch (error) {
     reject("PACKAGE_VALIDATION_FAILED", `The frozen public application validator rejected the package: ${error.code ?? error.message}`);
   }
@@ -124,6 +126,7 @@ export function compileLaunchEntitlementEnvelope({
   packageDirectory,
   launchPlanFile,
   trustedAuthorityPublicKey,
+  trustedPolicyRecord,
   now = new Date()
 }) {
   validateSignedCommand(signedCommand);
@@ -139,92 +142,22 @@ export function compileLaunchEntitlementEnvelope({
   }
   validateCommandTimeWindow(signedCommand.command, now);
 
-  const inspected = inspectSixFileApplicationPackage({ packageDirectory });
-  const { application } = inspected;
-  const command = signedCommand.command;
-  if (command.application.applicationId !== application.applicationId) {
-    reject("APPLICATION_ID_MISMATCH", "The signed application id does not match the six-file package.");
+  let productionProfile;
+  try {
+    // The enabled build binding is used only as the existing WeakSet-backed
+    // provenance probe. Caller-shaped policy objects cannot pass it.
+    buildLaunchPolicyBinding(trustedPolicyRecord, "build");
+    productionProfile = selectLaunchPolicyProfile(trustedPolicyRecord.policy, "production-launch");
+  } catch (error) {
+    reject("PRODUCTION_POLICY_TRUST_INVALID", "Production compilation requires the exact protected-base central policy record.");
   }
-  if (command.application.applicationRevision !== application.applicationRevision) {
-    reject("APPLICATION_REVISION_MISMATCH", "The signed application revision does not match the six-file package.");
+  if (productionProfile.enabled !== true) {
+    reject("PRODUCTION_LAUNCH_DISABLED", "The current central launch policy keeps production launch disabled.");
   }
-  if (command.application.builderGitHubUserId !== application.builder.githubUserId) {
-    reject("BUILDER_ID_MISMATCH", "The signed builder identity does not match the six-file package.");
-  }
-  if (command.pullRequest.authorGitHubUserId !== application.builder.githubUserId) {
-    reject("PULL_REQUEST_AUTHOR_MISMATCH", "The pull-request author must be the bound application builder.");
-  }
-  if (command.application.packageDigest !== inspected.binding.digest) {
-    reject("PACKAGE_DIGEST_MISMATCH", "The six-file package does not match the digest accepted by the protected command.");
-  }
-
-  const projectedSource = projectApplicationSource(application.source);
-  if (canonicalJson(command.source) !== canonicalJson(projectedSource)) {
-    reject("SOURCE_BINDING_MISMATCH", "The protected command source binding does not match the validated application source.");
-  }
-  if (!application.source.primary.sourcePaths.includes(command.launchPlan.path)) {
-    reject("LAUNCH_PLAN_PATH_UNDECLARED", "The exact launch-plan path must be declared in the primary sourcePaths set.");
-  }
-  const launchPlanBytes = readStableRegularFile(
-    launchPlanFile,
-    MAXIMUM_LAUNCH_PLAN_BYTES,
-    "LAUNCH_PLAN_FILE_INVALID"
-  );
-  validateLaunchPlanJson(launchPlanBytes);
-  const observedLaunchPlan = {
-    byteLength: launchPlanBytes.length,
-    gitBlobOid: gitBlobOid(launchPlanBytes),
-    path: command.launchPlan.path,
-    repositoryRole: "primary",
-    sha256: digestBytes(launchPlanBytes)
-  };
-  if (
-    observedLaunchPlan.byteLength !== command.launchPlan.byteLength
-    || observedLaunchPlan.gitBlobOid !== command.launchPlan.gitBlobOid
-    || observedLaunchPlan.sha256 !== command.launchPlan.sha256
-  ) {
-    reject("LAUNCH_PLAN_BINDING_MISMATCH", "The launch-plan bytes do not match the exact source blob accepted by the protected command.");
-  }
-
-  const signedCommandDigest = digestBytes(Buffer.from(canonicalJson(signedCommand), "utf8"));
-  const entitlementId = domainDigest(ENTITLEMENT_ID_DOMAIN, {
-    adapterProfile: SIX_FILE_ADAPTER_PROFILE,
-    application: command.application,
-    entitlement: command.entitlement,
-    launchPlan: command.launchPlan,
-    pullRequest: command.pullRequest,
-    review: command.review,
-    source: command.source
-  });
-  return deepFreeze({
-    acceptanceCommand: structuredClone(command),
-    adapter: {
-      launchSpecificationAuthority: "exact-primary-source-blob",
-      nativeSevenFileControlPackage: false,
-      profile: SIX_FILE_ADAPTER_PROFILE,
-      synthesizedLaunchJson: false
-    },
-    authorization: {
-      ...structuredClone(signedCommand.authorization),
-      signedCommandDigest
-    },
-    controlPackage: structuredClone(inspected.binding),
-    entitlementId,
-    execution: {
-      approvalServiceHandoff: "authenticated-ingress-requires-native-review-reconciliation-v1",
-      durableApprovalGrantState: "not-issued",
-      launchPermitState: "not-issued",
-      registryPublicationState: "requires-finalized-launch",
-      walletBindingState: "required-at-claim"
-    },
-    launchSpecification: {
-      ...observedLaunchPlan,
-      transport: "exact-source-file-v1"
-    },
-    schemaVersion: LAUNCH_ENTITLEMENT_ENVELOPE_VERSION,
-    source: structuredClone(projectedSource),
-    state: "accepted"
-  });
+  // The v1 policy contract itself forbids an enabled production profile. If a
+  // future policy changes that authority, it must introduce a new command and
+  // signing domain rather than reviving the opaque v1 policyBundleDigest.
+  reject("PRODUCTION_COMMAND_VERSION_UNSUPPORTED", "Production enablement requires a new policy-bound entitlement command version.");
 }
 
 export function parseCanonicalSignedCommand(source) {
@@ -365,30 +298,6 @@ function validateCommandTimeWindow(command, now) {
   }
   if (now.getTime() < acceptedAt || now.getTime() > validUntil) {
     reject("COMMAND_NOT_CURRENT", "The protected acceptance command is not valid at the compiler clock time.");
-  }
-}
-
-function projectApplicationSource(source) {
-  const projectRepository = (repository) => ({
-    numericRepositoryId: repository.numericRepositoryId,
-    repositoryUri: repository.repositoryUri,
-    revisionObjectId: repository.revisionObjectId,
-    treeObjectId: repository.treeObjectId
-  });
-  return {
-    companions: source.companions.map(projectRepository),
-    primary: projectRepository(source.primary),
-    schemaVersion: "1.0.0"
-  };
-}
-
-function validateLaunchPlanJson(bytes) {
-  let source;
-  try {
-    source = UTF8_DECODER.decode(bytes);
-    parseBoundedLosslessJson(source);
-  } catch {
-    reject("LAUNCH_PLAN_JSON_INVALID", "The exact launch-plan blob must be bounded, duplicate-free UTF-8 JSON.");
   }
 }
 

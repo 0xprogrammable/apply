@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -8,107 +9,147 @@ import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020
 
 import { canonicalJson, evaluateOpenReview, validateOpenReviewInput } from "../review/open-review-engine.mjs";
 
-const root = path.resolve(".");
+const root = path.resolve(import.meta.dirname, "..");
 
-test("a disclosed high fee is not treated as an integrity failure", () => {
+test("legacy Open Review is a disabled production compatibility preview", () => {
   const decision = evaluateOpenReview(fixture("disclosed-high-fee.json"));
-  assert.equal(decision.status, "launch_ready");
-  assert.equal(decision.checkerOnly, true);
-  assert.equal(decision.launchAuthorized, false);
-  assert.equal(decision.independentAudit, false);
+  assert.equal(decision.profileId, "production-launch");
+  assert.equal(decision.status, "profile_disabled");
+  assert.equal(decision.outcome, null);
+  assert.equal(decision.currentPolicyBinding, null);
+  assert.deepEqual(decision.authority, {
+    checkerOnly: true,
+    independentAudit: false,
+    launchAuthorized: false,
+    publicRoutingAuthorized: false,
+    realFundsAuthorized: false
+  });
+  assert.doesNotMatch(JSON.stringify(decision), /launch_ready|LAUNCH_APPROVED/u);
 });
 
-test("novel platform-owned semantics remain pending rather than unsafe", () => {
-  const decision = evaluateOpenReview(fixture("novel-platform-pending.json"));
-  assert.equal(decision.status, "platform_analysis_pending");
-  assert.deepEqual(decision.rationaleCodes, ["PLATFORM_CRITICAL_EVIDENCE_OPEN"]);
-  assert.equal(decision.blocker, null);
+test("legacy novelty unknowns and witnesses remain bounded advisories only", () => {
+  const novel = evaluateOpenReview(fixture("novel-platform-pending.json"));
+  assert.equal(novel.status, "profile_disabled");
+  assert.deepEqual(novel.findings, []);
+  assert.equal(novel.advisories.length, 5);
+
+  const witness = evaluateOpenReview(fixture("proven-unauthorized-diversion.json"));
+  assert.equal(witness.status, "profile_disabled");
+  assert.deepEqual(witness.findings, []);
+  assert.equal(witness.advisories.some(({ summary }) => summary.includes("UNAUTHORIZED_VALUE_DIVERSION")), true);
 });
 
-test("only a complete supported and independently replayed witness hard-blocks", () => {
-  const input = fixture("proven-unauthorized-diversion.json");
-  assert.equal(evaluateOpenReview(input).status, "blocked_proven_integrity_failure");
-
-  input.witnesses[0].independentlyReplayed = false;
-  const incomplete = evaluateOpenReview(input);
-  assert.equal(incomplete.status, "platform_analysis_pending");
-  assert.equal(incomplete.blocker, null);
-});
-
-test("candidate-owned gaps request changes without calling the project unsafe", () => {
+test("the compatibility adapter cannot inject a policy or produce authority", () => {
   const input = fixture("disclosed-high-fee.json");
-  input.obligations.find(({ axis }) => axis === "disclosure").state = "unknown";
-  input.obligations.find(({ axis }) => axis === "disclosure").evidence = [];
-  const decision = evaluateOpenReview(input);
-  assert.equal(decision.status, "changes_requested");
-  assert.equal(decision.blocker, null);
+  const injected = { policyId: "attacker", outcome: "LAUNCH_APPROVED", profiles: [] };
+  const decision = evaluateOpenReview(input, injected);
+  assert.equal(evaluateOpenReview.length, 1);
+  assert.equal(decision.trustedPolicy.policyId, "programmable-central-launch-policy");
+  assert.equal(decision.outcome, null);
+  assert.equal(decision.authority.launchAuthorized, false);
 });
 
-test("any exact revision drift invalidates the prior review", () => {
+test("all compatibility rationales cite a Rule ID in the canonical policy", () => {
+  const policy = JSON.parse(fs.readFileSync(path.join(root, "policy/launch-policy.v1.json"), "utf8"));
+  const ids = new Set(policy.rules.map(({ id }) => id));
+  for (const name of legacyExamples()) {
+    const decision = evaluateOpenReview(fixture(name));
+    for (const advisory of decision.advisories) assert.equal(ids.has(advisory.ruleId), true, `${name}: ${advisory.ruleId}`);
+    for (const finding of decision.findings) assert.equal(ids.has(finding.ruleId), true, `${name}: ${finding.ruleId}`);
+  }
+});
+
+test("legacy exact revisions remain visible without becoming launch authority", () => {
   const input = fixture("disclosed-high-fee.json");
   input.currentRevision.commit = "d".repeat(40);
-  assert.equal(evaluateOpenReview(input).status, "changed_since_review");
+  const decision = evaluateOpenReview(input);
+  assert.equal(decision.status, "profile_disabled");
+  assert.equal(decision.expectedSubject.commit, "a".repeat(40));
+  assert.equal(decision.currentSubject.commit, "d".repeat(40));
 });
 
-test("decisions and their digests are deterministic", () => {
-  const input = fixture("disclosed-high-fee.json");
-  const first = evaluateOpenReview(input);
-  const second = evaluateOpenReview(input);
-  assert.equal(canonicalJson(first), canonicalJson(second));
-  assert.match(first.digest, /^sha256:[0-9a-f]{64}$/u);
-});
-
-test("closed critical obligations require evidence and all critical axes", () => {
+test("legacy closed obligations still require evidence", () => {
   const input = fixture("disclosed-high-fee.json");
   input.obligations[0].evidence = [];
   assert.throws(() => validateOpenReviewInput(input), hasCode("CLOSED_WITHOUT_EVIDENCE"));
-
-  const missingAxis = fixture("disclosed-high-fee.json");
-  missingAxis.obligations = missingAxis.obligations.filter(({ axis }) => axis !== "integrity");
-  assert.throws(() => validateOpenReviewInput(missingAxis), hasCode("REQUIRED_AXIS_MISSING"));
 });
 
-test("candidate-controlled scores and extra fields cannot affect the decision", () => {
+test("candidate-controlled scores and extra fields cannot affect compatibility", () => {
   const input = fixture("disclosed-high-fee.json");
   input.riskScore = 100;
   assert.throws(() => validateOpenReviewInput(input), hasCode("FIELDS_INVALID"));
 });
 
-test("the published policy keeps novelty neutral and unknown distinct from unsafe", () => {
-  const policy = JSON.parse(fs.readFileSync(path.join(root, "review/policy.v1.json"), "utf8"));
-  assert.equal(policy.principles.noveltyIsNeutral, true);
-  assert.equal(policy.principles.unknownIsUnsafe, false);
-  assert.equal(policy.principles.modelVoteCanCloseCriticalUnknown, false);
-  assert.equal(policy.blockerRules.filter(({ enforcement }) => enforcement === "hard_block_with_complete_witness").length, 1);
+test("legacy input arrays are resource-bounded", () => {
+  const input = fixture("disclosed-high-fee.json");
+  input.obligations = Array.from({ length: 121 }, (_, index) => ({
+    ...structuredClone(input.obligations[0]),
+    id: `artifact.${String(index).padStart(3, "0")}`
+  }));
+  assert.throws(() => validateOpenReviewInput(input), hasCode("OBLIGATIONS_INVALID"));
 });
 
-test("all public examples and decisions conform to the published closed schemas", () => {
-  const ajv = new Ajv2020({ allErrors: true, strict: true });
-  const validateInput = ajv.compile(JSON.parse(fs.readFileSync(path.join(root, "review/schemas/open-review-input.v1.schema.json"), "utf8")));
-  const validateDecision = ajv.compile(JSON.parse(fs.readFileSync(path.join(root, "review/schemas/open-review-decision.v1.schema.json"), "utf8")));
+test("compatibility decisions and digests are deterministic", () => {
+  const input = fixture("disclosed-high-fee.json");
+  const first = evaluateOpenReview(input);
+  const second = evaluateOpenReview(input);
+  assert.equal(canonicalJson(first), canonicalJson(second));
+  assert.equal(first.digest, second.digest);
+  assert.match(first.digest, /^sha256:[0-9a-f]{64}$/u);
+});
 
-  for (const name of fs.readdirSync(path.join(root, "review/examples")).filter((entry) => entry.endsWith(".json")).sort()) {
+test("legacy inputs and current decisions conform to their closed schemas", () => {
+  const ajv = new Ajv2020({ allErrors: true, strict: true });
+  const validateLegacyInput = ajv.compile(readJson("review/schemas/open-review-input.v1.schema.json"));
+  const validateDecision = ajv.compile(readJson("review/schemas/launch-policy-review-decision.v1.schema.json"));
+
+  for (const name of legacyExamples()) {
     const input = fixture(name);
-    assert.equal(validateInput(input), true, `${name}: ${JSON.stringify(validateInput.errors)}`);
+    assert.equal(validateLegacyInput(input), true, `${name}: ${JSON.stringify(validateLegacyInput.errors)}`);
     const decision = evaluateOpenReview(input);
     assert.equal(validateDecision(decision), true, `${name}: ${JSON.stringify(validateDecision.errors)}`);
   }
 });
 
-test("the public CLI emits a checker-only decision", () => {
+test("the public CLI preserves its one-file checker-only transport", () => {
   const result = childProcess.spawnSync(process.execPath, ["review/cli.mjs", "review/examples/disclosed-high-fee.json"], {
     cwd: root,
     encoding: "utf8"
   });
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
+  assert.equal(result.stdout, `${canonicalJson(output)}\n`);
   assert.equal(output.ok, true);
-  assert.equal(output.decision.status, "launch_ready");
-  assert.equal(output.decision.launchAuthorized, false);
+  assert.equal(output.decision.status, "profile_disabled");
+  assert.equal(output.decision.authority.launchAuthorized, false);
+});
+
+test("the public CLI rejects ambiguous duplicate-key JSON", (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "legacy-review-cli-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const inputPath = path.join(directory, "duplicate.json");
+  fs.writeFileSync(inputPath, '{"schemaVersion":"programmable.open-review-input.v1","schemaVersion":"attacker"}\n');
+  const result = childProcess.spawnSync(process.execPath, ["review/cli.mjs", inputPath], {
+    cwd: root,
+    encoding: "utf8"
+  });
+  assert.equal(result.status, 1);
+  const output = JSON.parse(result.stdout);
+  assert.equal(result.stdout, `${canonicalJson(output)}\n`);
+  assert.equal(output.ok, false);
+  assert.equal(output.error.code, "INPUT_JSON_INVALID");
 });
 
 function fixture(name) {
-  return JSON.parse(fs.readFileSync(path.join(root, "review/examples", name), "utf8"));
+  return readJson(`review/examples/${name}`);
+}
+
+function legacyExamples() {
+  return ["disclosed-high-fee.json", "novel-platform-pending.json", "proven-unauthorized-diversion.json"];
+}
+
+function readJson(relativePath) {
+  return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8"));
 }
 
 function hasCode(code) {
