@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "programmable.launch-policy-review-input.v1",
+  "profileId": "production-launch",
+  "expectedPolicyBinding": null,
+  "expectedSubject": {
+    "numericRepositoryId": "1001",
+    "repository": "example/production-hook",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "usesUniswapV4": true
+  },
+  "currentSubject": {
+    "numericRepositoryId": "1001",
+    "repository": "example/production-hook",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "usesUniswapV4": true
+  },
+  "evaluations": [],
+  "observations": []
+}

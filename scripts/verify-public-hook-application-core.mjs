@@ -24,6 +24,13 @@ import {
 } from "../vendor/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 import { normalizeBuilderTemplate } from "../vendor/programmable-v4-hook-builder/scripts/builder-template-contract.mjs";
 import { hasForbiddenInvisibleOrBidi } from "../vendor/programmable-v4-hook-builder/scripts/metadata-core.mjs";
+import {
+  buildLaunchPolicyBinding,
+  compareLaunchPolicyBindings,
+  parseLaunchPolicyBytes,
+  readTrustedLaunchPolicyFromGit
+} from "./launch-policy-core.mjs";
+import { parseWorkflowCanaryApplicationBytes } from "./workflow-canary-core.mjs";
 
 export const VALIDATOR_VERSION = "2.0.0";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v2.json";
@@ -93,6 +100,7 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   EXECUTABLE_BUILDER_VENDOR_PREFIX
 ]);
 const REGISTRY_MAINTENANCE_FILES = new Set([
+  ".programmable/active-contract.json",
   ".github/CODEOWNERS",
   ".github/ISSUE_TEMPLATE/config.yml",
   ".github/ISSUE_TEMPLATE/documentation.yml",
@@ -112,24 +120,48 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "SUPPORT.md",
   "package-lock.json",
   "package.json",
-  "scripts/generate-registry.mjs",
+  "policy/launch-policy-authority-ownership.v1.json",
+  "policy/launch-policy.v1.json",
+  "policy/schemas/launch-policy-authority-ownership.v1.schema.json",
+  "policy/schemas/launch-policy-binding.v1.schema.json",
+  "policy/schemas/launch-policy.v1.schema.json",
+  "canary/schemas/workflow-canary-application-v1.schema.json",
+  "canary/schemas/workflow-canary-result-v1.schema.json",
   "scripts/acceptance-entitlement-core.mjs",
+  "scripts/canary-eligibility-core.mjs",
+  "scripts/compile-canary-eligibility.mjs",
   "scripts/compile-launch-entitlement.mjs",
+  "scripts/generate-launch-policy-artifacts.mjs",
+  "scripts/generate-registry.mjs",
+  "scripts/launch-policy-authority-ownership.mjs",
+  "scripts/launch-policy-core.mjs",
+  "scripts/launch-policy-handlers.mjs",
+  "scripts/launch-policy.mjs",
   "scripts/registry-core.mjs",
+  "scripts/release-version-core.mjs",
   "scripts/verify-repository.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-public-hook-application.mjs",
+  "scripts/verify-workflow-canary.mjs",
+  "scripts/workflow-canary-core.mjs",
+  "canary-submissions/README.md",
   "submissions/README.md",
   "vendor/receipt.json"
 ]);
 const RESERVED_MAINTENANCE_PREFIXES = Object.freeze([
   ".github/",
+  ".programmable/",
+  "canary-submissions/",
+  "canary/",
+  "policy/",
   "scripts/",
   "submissions/",
   "vendor/"
 ]);
 const SHARED_REGISTRY_DOCUMENTATION_FILES = new Set([]);
 const APPLICATION_PATH_PATTERN = /^submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([^/]+)$/;
+const CANARY_APPLICATION_PREFIX = "canary-submissions/";
+const CANARY_APPLICATION_PATH_PATTERN = /^canary-submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/application\.json$/;
 const SHA1_PATTERN = /^[a-f0-9]{40}$/;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const OPAQUE_ID_PATTERN = /^[1-9][0-9]{0,63}$/;
@@ -159,14 +191,28 @@ const CANDIDATE_FETCH_FILE_SIZE_BYTES = 32 * 1024 * 1024;
 const CANDIDATE_FETCH_REPOSITORY_BYTES = 64 * 1024 * 1024;
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const PULL_REQUEST_NUMBER_PATTERN = /^[1-9][0-9]{0,19}$/u;
-const PROGRAMMABLE_FEE_OWNER = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
-const PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP = 1000;
-const PROGRAMMABLE_FEE_SWAP_MODES = Object.freeze([
-  "zeroForOne-exactInput",
-  "zeroForOne-exactOutput",
-  "oneForZero-exactInput",
-  "oneForZero-exactOutput"
-]);
+const LEGACY_V2_TRANSPORT_RULE_ID = "FROZEN_LEGACY_V2.FEE_PROJECTION";
+const LEGACY_V2_POLICY_PROFILE = "legacy-v2-transport";
+const LEGACY_V2_POLICY_ADAPTER_SCHEMA = "programmable.legacy-v2-policy-adapter.v1";
+const TRUSTED_POLICY_SNAPSHOT_BINDING_SCHEMA = "programmable.trusted-policy-snapshot-binding.v1";
+// These values are frozen into the historical six-file V2 transport. They are
+// compatibility grammar, not current launch-policy requirements or authority.
+const LEGACY_V2_TRANSPORT_EVIDENCE_ID = "zz-programmable-fee-submission";
+const LEGACY_V2_EVIDENCE_ID = "legacy-v2-fee-projection";
+const LEGACY_V2_FEE = Object.freeze({
+  owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  platformHundredthsOfBip: 1000,
+  policyId: "programmable-volume-fee-v1",
+  policyVersion: "1.1.0",
+  swapModes: Object.freeze([
+    "zeroForOne-exactInput",
+    "zeroForOne-exactOutput",
+    "oneForZero-exactInput",
+    "oneForZero-exactOutput"
+  ])
+});
+const legacyPolicyAdapters = new WeakSet();
+const trustedLegacyPolicyAdapters = new WeakSet();
 
 const DEFAULT_LIMITS = Object.freeze({
   maximumChangedFiles: 700,
@@ -208,6 +254,116 @@ function systemBlocked(code, message) {
   throw new PublicIntakeError(code, message, { kind: "system" });
 }
 
+/**
+ * Construct the explicit non-authoritative adapter used by local historical
+ * V2 package inspection. Protected pull-request intake never calls this
+ * function and never accepts caller-supplied policy bytes.
+ */
+export function createHistoricalLegacyV2PolicyAdapterForLocalInspection(options) {
+  if (
+    !isPlainObject(options)
+    || !arraysEqual(Object.keys(options).sort(compareUtf8), ["policyBytes"])
+    || !(options.policyBytes instanceof Uint8Array)
+  ) {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_INPUT_INVALID",
+      "Historical local inspection requires only explicit canonical policy bytes."
+    );
+  }
+  let policyRecord;
+  try {
+    policyRecord = parseLaunchPolicyBytes(Buffer.from(options.policyBytes));
+  } catch {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_INPUT_INVALID",
+      "Historical local inspection received invalid canonical policy bytes."
+    );
+  }
+  return createLegacyV2PolicyAdapter({
+    authority: "non-authoritative-local-inspection",
+    policyBinding: null,
+    policyRecord
+  });
+}
+
+function readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit }) {
+  let policyRecord;
+  try {
+    policyRecord = readTrustedLaunchPolicyFromGit({
+      repositoryRoot: path.resolve(baseRoot ?? ""),
+      expectedBaseCommit
+    });
+  } catch {
+    systemBlocked(
+      "TRUSTED_LAUNCH_POLICY_INVALID",
+      "The exact protected-base launch policy is missing, malformed, or unavailable."
+    );
+  }
+  // Legacy V2 is historical transport, not an enabled review profile. This
+  // closed snapshot identity therefore intentionally has no profileId and is
+  // distinct from programmable.launch-policy-binding.v1. Callers cannot
+  // provide or override any of these fields.
+  const policyBinding = Object.freeze({
+    schemaVersion: TRUSTED_POLICY_SNAPSHOT_BINDING_SCHEMA,
+    repository: policyRecord.repository,
+    numericRepositoryId: policyRecord.numericRepositoryId,
+    baseCommit: policyRecord.baseCommit,
+    baseTree: policyRecord.baseTree,
+    path: policyRecord.path,
+    gitBlobOid: policyRecord.gitBlobOid,
+    policyId: policyRecord.policy.policyId,
+    policyVersion: policyRecord.policy.policyVersion,
+    sha256: policyRecord.sha256
+  });
+  const adapter = createLegacyV2PolicyAdapter({
+    authority: "trusted-protected-base",
+    policyBinding,
+    policyRecord
+  });
+  trustedLegacyPolicyAdapters.add(adapter);
+  return adapter;
+}
+
+function createLegacyV2PolicyAdapter({ authority, policyBinding, policyRecord }) {
+  if (
+    !policyRecord?.policy
+    || !new Set(["non-authoritative-local-inspection", "trusted-protected-base"]).has(authority)
+    || (authority === "trusted-protected-base") !== (policyBinding !== null)
+  ) {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_INVALID",
+      "The frozen historical V2 transport adapter cannot be constructed."
+    );
+  }
+  const adapter = Object.freeze({
+    schemaVersion: LEGACY_V2_POLICY_ADAPTER_SCHEMA,
+    authority,
+    ruleId: LEGACY_V2_TRANSPORT_RULE_ID,
+    evidenceId: LEGACY_V2_EVIDENCE_ID,
+    transportEvidenceId: LEGACY_V2_TRANSPORT_EVIDENCE_ID,
+    fee: LEGACY_V2_FEE,
+    policyBinding
+  });
+  legacyPolicyAdapters.add(adapter);
+  return adapter;
+}
+
+function requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted = false } = {}) {
+  if (
+    !isPlainObject(legacyPolicyAdapter)
+    || !legacyPolicyAdapters.has(legacyPolicyAdapter)
+    || (trusted && !trustedLegacyPolicyAdapters.has(legacyPolicyAdapter))
+  ) {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_REQUIRED",
+      trusted
+        ? "Protected V2 intake requires the adapter derived internally from exact trusted policy bytes."
+        : "V2 package validation requires an explicit central-policy legacy adapter."
+    );
+  }
+  return legacyPolicyAdapter;
+}
+
 export function canonicalJson(value) {
   return JSON.stringify(sortJson(value));
 }
@@ -241,10 +397,35 @@ export function classifyPublicIntakePullRequest({
 
   const submissionChanges = changes.filter((change) => change.path.startsWith("submissions/"));
   const applicationDirectoryChanges = submissionChanges.filter((change) => change.path !== "submissions/README.md");
+  const canaryApplicationChanges = changes.filter((change) => (
+    change.path.startsWith(CANARY_APPLICATION_PREFIX)
+    && change.path !== "canary-submissions/README.md"
+  ));
+  if (canaryApplicationChanges.length > 0) {
+    rejectUnsafeChangedEntries(changes);
+    if (
+      changes.length !== 1
+      || canaryApplicationChanges.length !== 1
+      || canaryApplicationChanges[0].status === "deleted"
+      || !CANARY_APPLICATION_PATH_PATTERN.test(canaryApplicationChanges[0].path)
+    ) {
+      reject(
+        "APPLICATION_PATH_INVALID",
+        "A workflow-canary pull request must add or modify exactly one canary-submissions/<application-id>/application.json blob and no other path."
+      );
+    }
+    return { mode: "workflow-canary", ...comparison };
+  }
   if (applicationDirectoryChanges.length > 0) {
     rejectUnsafeChangedEntries(changes);
     if (changes.every((change) => isAllowlistedApplicationPath(change.path))) {
       return { mode: "application", ...comparison };
+    }
+    if (changes.some((change) => isPolicyMaintenancePath(change.path))) {
+      reject(
+        "APPLICATION_PATH_INVALID",
+        "Applicant V2 data cannot be mixed with trusted policy or active-contract maintenance."
+      );
     }
     reject(
       "CHANGED_PATH_NOT_ALLOWED",
@@ -275,6 +456,10 @@ export function classifyPublicIntakePullRequest({
     "CHANGED_PATH_NOT_ALLOWED",
     "A registry-maintenance pull request may change only first-party registry infrastructure and documentation."
   );
+}
+
+function isPolicyMaintenancePath(entryPath) {
+  return entryPath === ".programmable/active-contract.json" || entryPath.startsWith("policy/");
 }
 
 /**
@@ -560,9 +745,9 @@ export async function fetchPublicApplicationCandidate({
 }
 
 /**
- * Hydrate only the already-classified six-file application package. GitHub's
- * exact tree metadata is checked before any candidate blob is requested, and
- * the bounded Git process is prevented from lazily fetching anything else.
+ * Hydrate only the already-classified V2 package or one-file workflow canary.
+ * GitHub's exact tree metadata is checked before any candidate blob is
+ * requested, and the bounded Git process cannot lazily fetch anything else.
  */
 export async function hydratePublicApplicationCandidate({
   baseRoot,
@@ -591,15 +776,27 @@ export async function hydratePublicApplicationCandidate({
     expectedMergeCommit,
     limits
   });
-  const plan = planApplicationHydration(classified, limits);
-  const intakeStatus = readTrustedIntakeStatus(classified.base);
-  const isUpdate = classifyTrustedBaseApplication(classified.base, plan.applicationId);
-  const continuation = enforceTrustedIntakeStatus({
-    intakeStatus,
-    isUpdate,
-    pullRequestNumber,
-    applicationId: plan.applicationId
-  });
+  const isLegacyV2 = classified.mode === "application";
+  const legacyPolicyAdapter = isLegacyV2
+    ? readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit })
+    : null;
+  if (isLegacyV2) requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted: true });
+  const workflowCanaryPolicy = !isLegacyV2
+    ? readTrustedWorkflowCanaryPolicy({ baseRoot, expectedBaseCommit })
+    : null;
+  const plan = isLegacyV2
+    ? planApplicationHydration(classified, limits)
+    : planWorkflowCanaryHydration(classified, limits);
+  const intakeStatus = isLegacyV2 ? readTrustedIntakeStatus(classified.base) : null;
+  const isUpdate = isLegacyV2 ? classifyTrustedBaseApplication(classified.base, plan.applicationId) : false;
+  const continuation = isLegacyV2
+    ? enforceTrustedIntakeStatus({
+      intakeStatus,
+      isUpdate,
+      pullRequestNumber,
+      applicationId: plan.applicationId
+    })
+    : null;
   const gitDirectory = path.resolve(candidateRoot ?? "");
   requireHydrationRemote(
     gitDirectory,
@@ -679,20 +876,63 @@ export async function hydratePublicApplicationCandidate({
     applicationEntry,
     limits.maximumFileBytes[APPLICATION_FILE]
   );
-  const application = parseCanonicalJson(applicationBytes, APPLICATION_FILE, limits);
-  validateApplicationManifest(application, plan.applicationId, limits);
-  enforceTrustedContinuationIdentity({ continuation, application });
+  if (isLegacyV2) {
+    const application = parseCanonicalJson(applicationBytes, APPLICATION_FILE, limits);
+    validateApplicationManifest(application, plan.applicationId, limits, legacyPolicyAdapter);
+    enforceTrustedContinuationIdentity({ continuation, application });
+  } else {
+    let application;
+    try {
+      application = parseWorkflowCanaryApplicationBytes(applicationBytes, {
+        expectedApplicationId: plan.applicationId
+      });
+    } catch (error) {
+      if (error?.kind === "candidate") reject(error.code, error.message);
+      systemBlocked(error?.code ?? "CANARY_APPLICATION_INVALID", "The bounded canary application could not be validated.");
+    }
+    if (!compareLaunchPolicyBindings(application.expectedPolicyBinding, workflowCanaryPolicy.binding)) {
+      reject("POLICY_DRIFT", "The canary application expected a different protected-base launch policy.");
+    }
+  }
 
-  return {
-    schemaVersion: 1,
-    result: "bounded-application-blobs-hydrated",
-    intakeState: intakeStatus.state,
-    applicationId: plan.applicationId,
-    pullRequestNumber,
-    continuationAuthorized: continuation !== null,
-    fileCount: plan.entries.length,
-    totalBytes: boundedMetadata.totalBytes
-  };
+  return isLegacyV2
+    ? {
+      schemaVersion: 1,
+      result: "bounded-application-blobs-hydrated",
+      intakeState: intakeStatus.state,
+      applicationId: plan.applicationId,
+      pullRequestNumber,
+      continuationAuthorized: continuation !== null,
+      fileCount: plan.entries.length,
+      totalBytes: boundedMetadata.totalBytes
+    }
+    : {
+      schemaVersion: 1,
+      result: "bounded-workflow-canary-blob-hydrated",
+      applicationId: plan.applicationId,
+      pullRequestNumber,
+      policyBinding: workflowCanaryPolicy.binding,
+      fileCount: 1,
+      totalBytes: boundedMetadata.totalBytes
+    };
+}
+
+function readTrustedWorkflowCanaryPolicy({ baseRoot, expectedBaseCommit }) {
+  try {
+    const record = readTrustedLaunchPolicyFromGit({
+      repositoryRoot: path.resolve(baseRoot ?? ""),
+      expectedBaseCommit
+    });
+    return Object.freeze({
+      binding: buildLaunchPolicyBinding(record, "workflow-canary"),
+      record
+    });
+  } catch {
+    systemBlocked(
+      "TRUSTED_LAUNCH_POLICY_INVALID",
+      "The exact protected-base workflow-canary launch policy is missing, malformed, disabled, or unavailable."
+    );
+  }
 }
 
 function validateHydrationAuthority({ repository, readToken }) {
@@ -993,6 +1233,31 @@ function planApplicationHydration(classified, limits) {
     if (!Number.isInteger(maximumBytes)) {
       systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for an allowlisted package file.");
     }
+  }
+  return { applicationId, packageDirectory, entries };
+}
+
+function planWorkflowCanaryHydration(classified, limits) {
+  if (classified.mode !== "workflow-canary" || classified.changes.length !== 1) {
+    reject("APPLICATION_CHANGE_REQUIRED", "Only one closed workflow-canary application may hydrate candidate bytes.");
+  }
+  const [change] = classified.changes;
+  if (change.status === "deleted") {
+    reject("APPLICATION_FILE_DELETED", "Workflow-canary application data cannot be deleted through protected intake.");
+  }
+  const match = CANARY_APPLICATION_PATH_PATTERN.exec(change.path);
+  if (!match) reject("APPLICATION_PATH_INVALID", "The workflow-canary path is outside its closed one-file layout.");
+  const applicationId = match[1];
+  const packageDirectory = `canary-submissions/${applicationId}`;
+  const entries = [...classified.candidate.entries.values()]
+    .filter((entry) => entry.path.startsWith(`${packageDirectory}/`))
+    .sort((left, right) => compareUtf8(left.path, right.path));
+  if (entries.length !== 1 || entries[0].path !== `${packageDirectory}/${APPLICATION_FILE}`) {
+    reject("APPLICATION_PACKAGE_NOT_CLOSED", "The workflow-canary directory must contain exactly one application.json blob.");
+  }
+  assertRegularBlob(entries[0]);
+  if (!Number.isInteger(limits.maximumFileBytes[APPLICATION_FILE])) {
+    systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for workflow-canary application.json.");
   }
   return { applicationId, packageDirectory, entries };
 }
@@ -1517,6 +1782,8 @@ export async function verifyPublicHookApplication({
     expectedMergeCommit,
     limits
   });
+  const legacyPolicyAdapter = readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit });
+  requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted: true });
   if (classified.mode !== "application") {
     reject("APPLICATION_CHANGE_REQUIRED", "This validator accepts exactly one closed public application package.");
   }
@@ -1587,6 +1854,7 @@ export async function verifyPublicHookApplication({
   const { application, compatibility, evidenceIndex } = validatePublicApplicationPackageFiles({
     applicationId,
     packageFiles,
+    legacyPolicyAdapter,
     limits
   });
   enforceTrustedContinuationIdentity({ continuation, application });
@@ -1604,7 +1872,14 @@ export async function verifyPublicHookApplication({
       "application.builder.githubLogin must identify the authenticated author of this pull request."
     );
   }
-  validateRevisionChange({ application, applicationId, packagePrefix, classified, limits });
+  validateRevisionChange({
+    application,
+    applicationId,
+    packagePrefix,
+    classified,
+    legacyPolicyAdapter,
+    limits
+  });
 
   const blobEvidence = evidenceIndex.evidence.filter((record) =>
     validateGitHubEvidenceUrl(record.url, "evidence.url", application.source.primary) === "blob"
@@ -1678,6 +1953,7 @@ export async function verifyPublicHookApplication({
     application,
     evidenceIndex,
     blobObservations,
+    legacyPolicyAdapter,
     limits
   });
 
@@ -1703,7 +1979,20 @@ export async function verifyPublicHookApplication({
     candidateCommit: classified.candidate.commit,
     mergeCommit: classified.candidate.mergeCommit,
     sourceBinding: sourceAuthorityProjection(application.source),
-    evidenceBindings
+    evidenceBindings,
+    policyBinding: legacyPolicyAdapter.policyBinding,
+    policyProfile: LEGACY_V2_POLICY_PROFILE,
+    evaluatedRuleIds: [legacyPolicyAdapter.ruleId],
+    evaluatedEvidenceIds: [legacyPolicyAdapter.evidenceId],
+    authority: {
+      checkerOnly: true,
+      independentAudit: false,
+      launchAuthorized: false,
+      productionDiscoveryAllowed: false,
+      publicRoutingAllowed: false,
+      realUserFundsAllowed: false,
+      workflowCanaryPassed: false
+    }
   };
 }
 
@@ -1919,7 +2208,13 @@ function normalizeExpectedBuilderUserId(value) {
   return value;
 }
 
-export function validatePublicApplicationPackageFiles({ applicationId, packageFiles, limits: limitOverrides = {} }) {
+export function validatePublicApplicationPackageFiles({
+  applicationId,
+  packageFiles,
+  legacyPolicyAdapter,
+  limits: limitOverrides = {}
+}) {
+  requireLegacyV2PolicyAdapter(legacyPolicyAdapter);
   const limits = mergeLimits(limitOverrides);
   if (
     !(packageFiles instanceof Map)
@@ -1937,7 +2232,7 @@ export function validatePublicApplicationPackageFiles({ applicationId, packageFi
     reject("APPLICATION_PACKAGE_TOO_LARGE", "The application review package exceeds the trusted byte limit.");
   }
   const application = parseCanonicalJson(packageFiles.get(APPLICATION_FILE), APPLICATION_FILE, limits);
-  validateApplicationManifest(application, applicationId, limits);
+  validateApplicationManifest(application, applicationId, limits, legacyPolicyAdapter);
   const compatibility = parseCanonicalJson(
     packageFiles.get("compatibility-report.json"),
     "compatibility-report.json",
@@ -1945,7 +2240,7 @@ export function validatePublicApplicationPackageFiles({ applicationId, packageFi
   );
   const evidenceIndex = parseCanonicalJson(packageFiles.get("evidence-index.json"), "evidence-index.json", limits);
   const evidenceIds = validateEvidenceIndex(evidenceIndex, application, limits);
-  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application);
+  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application, legacyPolicyAdapter);
   validateCompatibilityReport(compatibility, application, evidenceIndex, evidenceIds, limits);
   validateProgrammableFeeCompatibility(application, compatibility);
   validateReviewPackageHashes(application, packageFiles);
@@ -2416,7 +2711,8 @@ function validateJsonTree(root, limits) {
   visit(root, 0);
 }
 
-function validateApplicationManifest(application, expectedApplicationId, limits) {
+function validateApplicationManifest(application, expectedApplicationId, limits, legacyPolicyAdapter) {
+  requireLegacyV2PolicyAdapter(legacyPolicyAdapter);
   if (application?.schemaVersion !== 2) {
     reject(
       "PUBLIC_APPLICATION_CONTRACT_UNSUPPORTED",
@@ -2476,7 +2772,7 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   }
 
   validateApplicationSource(application.source);
-  validateProgrammableFeeProjection(application.programmableFee, application.source);
+  validateProgrammableFeeProjection(application.programmableFee, application.source, legacyPolicyAdapter);
   if (application.programmableFee.submissionBinding.path !== `submissions/${application.applicationId}/submission.json`) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_BINDING_INVALID",
@@ -2504,7 +2800,8 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   });
 }
 
-function validateProgrammableFeeProjection(fee, source) {
+function validateProgrammableFeeProjection(fee, source, legacyPolicyAdapter) {
+  const legacyFee = requireLegacyV2PolicyAdapter(legacyPolicyAdapter).fee;
   const invalidFee = (message) => reject("PROGRAMMABLE_FEE_PROJECTION_INVALID", message);
   const exact = (actual, expected, label) => {
     if (canonicalJson(actual) !== canonicalJson(expected)) {
@@ -2585,30 +2882,30 @@ function validateProgrammableFeeProjection(fee, source) {
     throw error;
   }
 
-  exact(fee.policyId, "programmable-volume-fee-v1", "Fee policy id");
-  exact(fee.policyVersion, "1.1.0", "Fee policy version");
+  exact(fee.policyId, legacyFee.policyId, "Fee policy id");
+  exact(fee.policyVersion, legacyFee.policyVersion, "Fee policy version");
   exact(fee.poolScope, "canonical-launch-pool-key", "PoolKey scope");
   exact(fee.rates.unit, "hundredths-of-bip", "Fee unit");
   exact(
     fee.rates.minimumEffectiveHundredthsOfBip,
-    PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP,
+    legacyFee.platformHundredthsOfBip,
     "Effective total fee floor"
   );
   exact(
     fee.rates.platformHundredthsOfBip,
-    PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP,
+    legacyFee.platformHundredthsOfBip,
     "Programmable fee rate"
   );
   exact(
     fee.rates.formula,
-    "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
+    `per-side:effective=max(selected,${legacyFee.platformHundredthsOfBip});platform=${legacyFee.platformHundredthsOfBip};project=effective-${legacyFee.platformHundredthsOfBip}`,
     "Fee allocation formula"
   );
   exact(fee.rates.lpFeeExcluded, true, "LP-fee exclusion");
   exact(fee.basis.volume, "gross-quote-side-swap-volume", "Fee volume basis");
   exact(fee.basis.quoteAsset, "canonical-pool-quote-asset", "Quote-asset basis");
   exact(fee.ownership, {
-    owner: PROGRAMMABLE_FEE_OWNER,
+    owner: legacyFee.owner,
     immutable: true,
     claimAuthority: "owner-only",
     claimAvailability: "anytime",
@@ -2658,9 +2955,9 @@ function validateProgrammableFeeProjection(fee, source) {
     if (!Number.isInteger(selected) || selected < 0 || selected > 999_999) {
       invalidFee(`The selected ${side.toLowerCase()} fee must be an integer in hundredths of a basis point.`);
     }
-    const expectedEffective = Math.max(selected, PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP);
-    if (effective !== expectedEffective || project !== expectedEffective - PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP) {
-      invalidFee(`Effective and project ${side.toLowerCase()} fees must be derived from max(selected, 1000) without adding the platform fee twice.`);
+    const expectedEffective = Math.max(selected, legacyFee.platformHundredthsOfBip);
+    if (effective !== expectedEffective || project !== expectedEffective - legacyFee.platformHundredthsOfBip) {
+      invalidFee(`Effective and project ${side.toLowerCase()} fees must be derived from the central legacy adapter rate without adding the platform fee twice.`);
     }
   }
 
@@ -2668,7 +2965,7 @@ function validateProgrammableFeeProjection(fee, source) {
     invalidFee("Collection status must identify a pending or implemented canonical PoolKey integration.");
   }
   const implemented = fee.collection.status === "implemented";
-  const expectedModes = implemented ? PROGRAMMABLE_FEE_SWAP_MODES : [];
+  const expectedModes = implemented ? legacyFee.swapModes : [];
   exact(fee.collection.supportedSwapModes, expectedModes, "Covered swap modes");
   const swapModePathValues = Object.values(fee.collection.swapModePaths);
   if (implemented) {
@@ -2737,8 +3034,9 @@ function validateProgrammableFeeCompatibility(application, compatibility) {
   }
 }
 
-function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application) {
-  const records = evidenceIndex.evidence.filter(({ id }) => id === "zz-programmable-fee-submission");
+function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application, legacyPolicyAdapter) {
+  const { transportEvidenceId } = requireLegacyV2PolicyAdapter(legacyPolicyAdapter);
+  const records = evidenceIndex.evidence.filter(({ id }) => id === transportEvidenceId);
   if (records.length !== 1) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_BINDING_MISSING",
@@ -2763,9 +3061,15 @@ function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application) {
   }
 }
 
-function validateProgrammableFeeSubmissionObservation({ application, evidenceIndex, blobObservations, limits }) {
-  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application);
-  const observation = blobObservations.find(({ id }) => id === "zz-programmable-fee-submission");
+function validateProgrammableFeeSubmissionObservation({
+  application,
+  evidenceIndex,
+  blobObservations,
+  legacyPolicyAdapter,
+  limits
+}) {
+  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application, legacyPolicyAdapter);
+  const observation = blobObservations.find(({ id }) => id === legacyPolicyAdapter.transportEvidenceId);
   if (!observation || !Buffer.isBuffer(observation.bytes)) {
     systemBlocked(
       "PROGRAMMABLE_FEE_SOURCE_OBSERVATION_MISSING",
@@ -2840,7 +3144,7 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
     ...submission.programmableFee,
     submissionBinding: application.programmableFee.submissionBinding
   };
-  validateProgrammableFeeProjection(recomputed, application.source);
+  validateProgrammableFeeProjection(recomputed, application.source, legacyPolicyAdapter);
   if (canonicalJson(recomputed) !== canonicalJson(application.programmableFee)) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_PROJECTION_MISMATCH",
@@ -3046,7 +3350,14 @@ function validatePublicClaims({ application, compatibility, evidenceIndex, markd
   }
 }
 
-function validateRevisionChange({ application, applicationId, packagePrefix, classified, limits }) {
+function validateRevisionChange({
+  application,
+  applicationId,
+  packagePrefix,
+  classified,
+  legacyPolicyAdapter,
+  limits
+}) {
   const manifestPath = `${packagePrefix}${APPLICATION_FILE}`;
   const baseEntry = classified.base.entries.get(manifestPath);
   if (!baseEntry) {
@@ -3061,7 +3372,7 @@ function validateRevisionChange({ application, applicationId, packagePrefix, cla
     `base:${manifestPath}`,
     limits
   );
-  validateApplicationManifest(prior, applicationId, limits);
+  validateApplicationManifest(prior, applicationId, limits, legacyPolicyAdapter);
   if (application.applicationRevision !== prior.applicationRevision + 1) {
     reject("APPLICATION_REVISION_NOT_INCREMENTED", "An updated application must increment its revision by exactly one.");
   }
