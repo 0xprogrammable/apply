@@ -27,11 +27,12 @@ the public application ledger, and a versioned discovery registry. Complete proj
 public repository.
 
 > [!IMPORTANT]
-> **Public application intake is open.** Use the current stable
-> [Hookbuilder](https://github.com/0xprogrammable/hookbuilder/releases/latest) to build, validate, and submit one exact
-> six-file application. Existing applications keep their original GitHub review threads.
+> **Two intake transports are open.** The hidden Workflow Canary submits one exact JSON file against the central policy.
+> The receipt-bound Hookbuilder v0.5.1 tree may still submit its frozen six-file legacy V2 package while the checked-in
+> intake state remains `open`. Neither path confers audit, public routing, production, funds, or launch authority, and
+> V2 cannot substitute for Canary or Website eligibility.
 
-The separate [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
+The [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
 creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
 An exact passing result can be compiled into a short-lived
 [Hidden Canary eligibility envelope](docs/CANARY_ELIGIBILITY_V1.md) for a Website test surface. Every public,
@@ -47,6 +48,12 @@ The canonical source for Programmable launch requirements is
 [`JSON Schema`](policy/schemas/launch-policy.v1.schema.json) closes the authored format, and
 [`docs/LAUNCH_POLICY.md`](docs/LAUNCH_POLICY.md) is a generated, digest-bound human projection. Edit the JSON only;
 the generated Markdown is never independent authority.
+
+[`policy/launch-policy-authority-ownership.v1.json`](policy/launch-policy-authority-ownership.v1.json) is the separate
+machine-readable ownership proof. It carries no requirement text or parameter values. It binds the closed repository
+file set and hashes, admission entrypoints and import closures, Rule-ID-to-handler mapping, public projections, and the
+exact frozen Hookbuilder receipt. `npm run authority:check` rejects unclassified files, changed modules, or private
+imported gates until maintainers explicitly review and refresh that ownership record.
 
 Third-party developers and agents can inspect the requirements without installing or using Hookbuilder:
 
@@ -110,24 +117,24 @@ npm test
 ## How it works
 
 1. **Build.** Project source stays in its own public GitHub repository.
-2. **Prepare.** [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) prepares six generated
-   application files bound to one repository id, commit, tree, configuration, and evidence set.
-3. **Review.** Submit a Launch validates the bounded application. Review evidence and any later decision remain
-   bound to the exact submitted revision.
-4. **Promote.** Application intake, acceptance, deployment, availability, and launch authorization remain separate
-   facts.
-5. **Discover.** Agents and the Programmable Explorer read digest-bound records from the discovery registry.
+2. **Bind.** The applicant records the exact current `workflow-canary` policy binding and public source identity.
+3. **Submit.** The one-file hidden Canary enters the bounded trusted workflow without executing applicant code.
+4. **Review.** The policy-bound reviewer covers every active Canary Rule ID for that exact revision.
+5. **Expose privately.** A separate signer may issue short-lived eligibility for one protected Website audience.
+6. **Promote later.** Registry, deployment, public availability, funds, and launch authorization remain separate facts.
 
 Application content is untrusted data. The trusted intake workflow uses protected base code, read-only permissions,
 bounded files, and no candidate execution.
 
 ## Application intake
 
-**Status: open.** Start with Hookbuilder. Do not hand-write the application package.
+**Hidden Workflow Canary.** Submit exactly one canonical
+`canary-submissions/<application-id>/application.json` file that binds the central policy and exact public source.
 
-Hookbuilder opens a draft pull request containing exactly six generated files under
-`submissions/<application-id>/`. Existing applications remain on their original review threads. Read the
-[migration contract](docs/MIGRATION.md) for the exact compatibility boundary.
+**Open legacy V2.** While [`docs/builder/intake-status.json`](docs/builder/intake-status.json) reports `open`, the pinned
+Hookbuilder v0.5.1 package may also submit exactly six frozen files under `submissions/<application-id>/`. New and
+existing V2 applications use that bounded compatibility validator, but their bytes are never reinterpreted as Canary
+or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the exact boundary.
 
 ## Fee terms
 

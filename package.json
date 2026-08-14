@@ -7,6 +7,8 @@
     "node": ">=24"
   },
   "scripts": {
+    "authority:check": "node scripts/launch-policy-authority-ownership.mjs --check",
+    "authority:write": "node scripts/launch-policy-authority-ownership.mjs --write",
     "compile:canary-eligibility": "node scripts/compile-canary-eligibility.mjs",
     "compile:entitlement": "node scripts/compile-launch-entitlement.mjs",
     "generate": "node scripts/generate-registry.mjs --write",

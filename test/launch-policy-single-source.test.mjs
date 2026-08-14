@@ -1,0 +1,471 @@
+import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020.js";
+
+import { verifyWebsiteCanaryEligibility } from "../scripts/canary-eligibility-core.mjs";
+import {
+  AUTHORITY_OWNERSHIP_MANIFEST_PATH,
+  canonicalAuthorityJson,
+  LaunchPolicyAuthorityOwnershipError,
+  readLaunchPolicyAuthorityOwnership,
+  verifyLaunchPolicyAuthorityOwnership
+} from "../scripts/launch-policy-authority-ownership.mjs";
+import {
+  buildLaunchPolicyBinding,
+  evaluateLaunchPolicyRules,
+  readTrustedLaunchPolicyFromGit,
+  rulesForProfile
+} from "../scripts/launch-policy-core.mjs";
+import { evaluateOpenReview } from "../review/open-review-engine.mjs";
+import { evaluateTrustedLaunchPolicyReview } from "../review/launch-policy-review-core.mjs";
+
+const root = path.resolve(import.meta.dirname, "..");
+const canonicalPolicyPath = "policy/launch-policy.v1.json";
+
+test("the closed ownership manifest proves one current authored admission authority", () => {
+  const report = verifyLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
+  const manifest = readLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
+  const validateManifest = new Ajv2020({ allErrors: true, strict: true }).compile(
+    readJson("policy/schemas/launch-policy-authority-ownership.v1.schema.json")
+  );
+
+  assert.equal(validateManifest(manifest), true, JSON.stringify(validateManifest.errors));
+  assert.deepEqual(report, {
+    canonicalPolicyPath,
+    entrypoints: manifest.entrypoints.length,
+    files: Object.keys(manifest.fileSha256).length + 1,
+    frozenVendorTree: "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec",
+    ok: true,
+    rules: manifest.semanticRuleMap.length
+  });
+  assert.deepEqual(manifest.fileClasses["canonical-admission-policy"], [canonicalPolicyPath]);
+  assert.deepEqual(manifest.fileClasses["authority-ownership-manifest"], [AUTHORITY_OWNERSHIP_MANIFEST_PATH]);
+  assert.equal(manifest.canonicalPolicy.path, canonicalPolicyPath);
+  assert.equal(manifest.canonicalPolicy.schemaPath, "policy/schemas/launch-policy.v1.schema.json");
+  assert.deepEqual(findForbiddenPolicyValueKeys(manifest), []);
+
+  const policy = readJson(canonicalPolicyPath);
+  assert.equal(policy.repository.name, "0xprogrammable/submit-launch");
+  assert.equal(policy.repository.numericRepositoryId, "1320171831");
+  assert.equal(policy.repository.branch, "main");
+  assert.equal(policy.repository.path, canonicalPolicyPath);
+  assert.equal(policy.effective.state, "current");
+  assert.equal(fs.existsSync(path.join(root, "review/policy.v1.json")), false);
+});
+
+test("the ownership gate rejects an added YAML policy and an indirect imported admission gate", () => {
+  withRepositoryCopy((repositoryRoot) => {
+    const boundedCanaryPath = "canary-submissions/ownership-probe/application.json";
+    fs.mkdirSync(path.dirname(path.join(repositoryRoot, boundedCanaryPath)), { recursive: true });
+    fs.writeFileSync(path.join(repositoryRoot, boundedCanaryPath), "{}\n", "utf8");
+    gitAt(repositoryRoot, ["add", "--", boundedCanaryPath]);
+    assert.equal(verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }).files, 114);
+    gitAt(repositoryRoot, ["rm", "-f", "--", boundedCanaryPath]);
+
+    const yamlPath = path.join(repositoryRoot, "config/private-admission-policy.yaml");
+    fs.mkdirSync(path.dirname(yamlPath), { recursive: true });
+    fs.writeFileSync(yamlPath, "checks:\n  - id: PRIVATE.BLOCK\n    effect: reject\n", "utf8");
+    gitAt(repositoryRoot, ["add", "--", "config/private-admission-policy.yaml"]);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_FILE_SET_MISMATCH"
+    );
+    gitAt(repositoryRoot, ["rm", "-f", "--", "config/private-admission-policy.yaml"]);
+
+    const privateModulePath = "scripts/private-admission-gate.mjs";
+    const workflowPath = "scripts/workflow-canary-core.mjs";
+    fs.writeFileSync(
+      path.join(repositoryRoot, privateModulePath),
+      "export function privateAdmissionGate() { throw new Error(\"PRIVATE_ADMISSION_FAILED\"); }\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(repositoryRoot, workflowPath),
+      `import { privateAdmissionGate } from "./private-admission-gate.mjs";\n${readAt(repositoryRoot, workflowPath)}\nprivateAdmissionGate();\n`,
+      "utf8"
+    );
+    gitAt(repositoryRoot, ["add", "--", privateModulePath, workflowPath]);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_FILE_SET_MISMATCH"
+    );
+
+    const manifest = JSON.parse(readAt(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH));
+    manifest.fileClasses["current-admission-implementation"].push(privateModulePath);
+    manifest.fileClasses["current-admission-implementation"].sort(compareUtf8);
+    manifest.fileSha256[privateModulePath] = digestFile(repositoryRoot, privateModulePath);
+    manifest.fileSha256[workflowPath] = digestFile(repositoryRoot, workflowPath);
+    fs.writeFileSync(
+      path.join(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH),
+      `${canonicalAuthorityJson(manifest)}\n`,
+      "utf8"
+    );
+
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_IMPORT_CLOSURE_MISMATCH"
+    );
+
+    for (const entrypoint of manifest.entrypoints.filter(({ moduleClosure }) => moduleClosure.includes(workflowPath))) {
+      entrypoint.moduleClosure.push(privateModulePath);
+      entrypoint.moduleClosure.sort(compareUtf8);
+    }
+    manifest.moduleOwnership.push({ path: privateModulePath, role: "runtime-control", semanticRuleIds: [] });
+    manifest.moduleOwnership.sort((left, right) => compareUtf8(left.path, right.path));
+    fs.writeFileSync(
+      path.join(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH),
+      `${canonicalAuthorityJson(manifest)}\n`,
+      "utf8"
+    );
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_CONTROL_MODULE_INVALID"
+    );
+
+    manifest.fileClasses["current-admission-implementation"] = manifest.fileClasses["current-admission-implementation"]
+      .filter((modulePath) => modulePath !== privateModulePath);
+    manifest.fileClasses["current-admission-support"].push(privateModulePath);
+    manifest.fileClasses["current-admission-support"].sort(compareUtf8);
+    manifest.moduleOwnership.find(({ path: modulePath }) => modulePath === privateModulePath).role = "pure-support";
+    fs.writeFileSync(
+      path.join(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH),
+      `${canonicalAuthorityJson(manifest)}\n`,
+      "utf8"
+    );
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_SUPPORT_SEMANTICS_FORBIDDEN"
+    );
+  });
+});
+
+test("an executable module cannot self-classify as admission support or runtime control", () => {
+  withRepositoryCopy((repositoryRoot) => {
+    const privateModulePath = "scripts/private-admission-support.mjs";
+    const importerPath = "scripts/compile-canary-eligibility.mjs";
+    fs.writeFileSync(
+      path.join(repositoryRoot, privateModulePath),
+      "export function privateAdmissionSupport() { throw new Error(\"PRIVATE_ADMISSION_FAILED\"); }\n",
+      "utf8"
+    );
+    const importerSource = readAt(repositoryRoot, importerPath);
+    const privateImport = "import { privateAdmissionSupport } from \"./private-admission-support.mjs\";\n";
+    fs.writeFileSync(
+      path.join(repositoryRoot, importerPath),
+      importerSource.startsWith("#!")
+        ? `${importerSource.slice(0, importerSource.indexOf("\n") + 1)}${privateImport}${importerSource.slice(importerSource.indexOf("\n") + 1)}\nprivateAdmissionSupport();\n`
+        : `${privateImport}${importerSource}\nprivateAdmissionSupport();\n`,
+      "utf8"
+    );
+    gitAt(repositoryRoot, ["add", "--", privateModulePath, importerPath]);
+
+    const manifest = JSON.parse(readAt(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH));
+    manifest.fileClasses["current-admission-support"].push(privateModulePath);
+    manifest.fileClasses["current-admission-support"].sort(compareUtf8);
+    manifest.fileSha256[privateModulePath] = digestFile(repositoryRoot, privateModulePath);
+    manifest.fileSha256[importerPath] = digestFile(repositoryRoot, importerPath);
+    for (const entrypoint of manifest.entrypoints.filter(({ moduleClosure }) => moduleClosure.includes(importerPath))) {
+      entrypoint.moduleClosure.push(privateModulePath);
+      entrypoint.moduleClosure.sort(compareUtf8);
+    }
+    manifest.moduleOwnership.push({ path: privateModulePath, role: "pure-support", semanticRuleIds: [] });
+    manifest.moduleOwnership.sort((left, right) => compareUtf8(left.path, right.path));
+    fs.writeFileSync(
+      path.join(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH),
+      `${canonicalAuthorityJson(manifest)}\n`,
+      "utf8"
+    );
+
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_SUPPORT_SEMANTICS_FORBIDDEN"
+    );
+
+    manifest.moduleOwnership.find(({ path: modulePath }) => modulePath === privateModulePath).role = "runtime-control";
+    fs.writeFileSync(
+      path.join(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH),
+      `${canonicalAuthorityJson(manifest)}\n`,
+      "utf8"
+    );
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_CONTROL_MODULE_INVALID"
+    );
+  });
+});
+
+test("every semantic finding and handler maps bijectively to a central Rule ID", () => {
+  const manifest = readLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
+  const policyRecord = trustedPolicyRecord();
+  const policyIds = new Set(policyRecord.policy.rules.map(({ id }) => id));
+  const activeMap = manifest.semanticRuleMap.filter(({ status }) => status === "active");
+  const activeIds = new Set(activeMap.map(({ ruleId }) => ruleId));
+  const currentRules = ["build", "workflow-canary"]
+    .flatMap((profileId) => rulesForProfile(policyRecord.policy, profileId));
+
+  assert.equal(activeIds.size, activeMap.length);
+  assert.deepEqual([...activeIds].sort(compareUtf8), currentRules.map(({ id }) => id).sort(compareUtf8));
+
+  for (const profileId of ["build", "workflow-canary"]) {
+    const rules = rulesForProfile(policyRecord.policy, profileId);
+    const baselineInput = currentReviewInput(policyRecord, profileId, rules);
+    const baseline = evaluateTrustedLaunchPolicyReview({
+      input: baselineInput,
+      repositoryRoot: root,
+      expectedBaseCommit: policyRecord.baseCommit
+    });
+    assert.equal(baseline.status, "passed");
+    assert.deepEqual(baseline.findings, []);
+
+    for (const rule of rules) {
+      const mapping = activeMap.find(({ ruleId }) => ruleId === rule.id);
+      assert.equal(mapping.handlerId, rule.enforcement.handlerId, rule.id);
+      assert.equal(mapping.profiles.includes(profileId), true, rule.id);
+
+      const violatedInput = structuredClone(baselineInput);
+      violatedInput.evaluations.find(({ ruleId }) => ruleId === rule.id).state = "violated";
+      const violated = evaluateTrustedLaunchPolicyReview({
+        input: violatedInput,
+        repositoryRoot: root,
+        expectedBaseCommit: policyRecord.baseCommit
+      });
+      assert.equal(violated.status, "changes_requested", rule.id);
+      assert.deepEqual(violated.findings.map(({ ruleId }) => ruleId), [rule.id], rule.id);
+
+      const missingInput = structuredClone(baselineInput);
+      missingInput.evaluations = missingInput.evaluations.filter(({ ruleId }) => ruleId !== rule.id);
+      const missing = evaluateTrustedLaunchPolicyReview({
+        input: missingInput,
+        repositoryRoot: root,
+        expectedBaseCommit: policyRecord.baseCommit
+      });
+      assert.equal(missing.status, "analysis_pending", rule.id);
+      assert.deepEqual(missing.pendingRuleIds, [rule.id], rule.id);
+
+      const evidence = passedEvidenceForRules(rules);
+      for (const evidenceId of rule.evidence) delete evidence[evidenceId];
+      const direct = evaluateLaunchPolicyRules({
+        policyRecord,
+        profileId,
+        subject: { usesUniswapV4: true },
+        evidence
+      });
+      assert.deepEqual(direct.findings.map(({ ruleId }) => ruleId), [rule.id], rule.id);
+    }
+  }
+
+  const legacyDecision = evaluateOpenReview(readJson("review/examples/disclosed-high-fee.json"));
+  assert.equal(legacyDecision.status, "profile_disabled");
+  assert.deepEqual(
+    [...new Set(legacyDecision.advisories.map(({ ruleId }) => ruleId))],
+    ["LEGACY_V2.ADMISSION"]
+  );
+  for (const advisory of legacyDecision.advisories) assert.equal(policyIds.has(advisory.ruleId), true);
+});
+
+test("the receipt-bound vendored Hookbuilder is frozen legacy data, never current policy authority", () => {
+  const receipt = readJson("vendor/receipt.json");
+  assert.deepEqual(receipt, {
+    commit: "547482adf6ed0ed19e9cd4d0e884abd70e143229",
+    release: "v0.5.1",
+    repository: "0xprogrammable/hookbuilder",
+    schemaVersion: "1.0.0",
+    skillTree: "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec",
+    source: "https://github.com/0xprogrammable/hookbuilder/tree/547482adf6ed0ed19e9cd4d0e884abd70e143229/skills/programmable-v4-hook-builder"
+  });
+
+  assert.equal(git(["status", "--porcelain", "--untracked-files=all", "--", "vendor"]), "");
+  const tree = git(["write-tree"]);
+  const entry = git(["ls-tree", tree, "vendor/programmable-v4-hook-builder"]);
+  assert.match(entry, new RegExp(`^040000 tree ${receipt.skillTree}\\tvendor/programmable-v4-hook-builder$`, "u"));
+  assert.match(read("AGENTS.md"), /frozen, receipt-bound validation dependency for the open legacy V2/u);
+  assert.match(read("AGENTS.md"), /cannot author current central-policy requirements/u);
+});
+
+test("legacy V2 tombstones cannot satisfy workflow-canary or Website eligibility", () => {
+  const policyRecord = trustedPolicyRecord();
+  const intakeStatus = readJson("docs/builder/intake-status.json");
+  const registryConfig = readJson("registry/config.json");
+  assert.equal(intakeStatus.state, "open");
+  assert.deepEqual(registryConfig.activeIntake, {
+    baseBranch: "main",
+    directory: "submissions",
+    repository: "0xprogrammable/submit-launch",
+    state: "open"
+  });
+  for (const relativePath of ["README.md", "CONTRIBUTING.md", "docs/builder/PUBLIC_GITHUB_PR_BETA.md"]) {
+    assert.match(read(relativePath), /open legacy|legacy V2 intake|open, frozen legacy V2/iu, relativePath);
+  }
+  const tombstones = policyRecord.policy.rules.filter(({ id }) => id.startsWith("LEGACY_V2."));
+  assert.deepEqual(
+    tombstones.map(({ id, profiles, status }) => ({ id, profiles, status })),
+    [
+      { id: "LEGACY_V2.ADMISSION", profiles: ["production-launch"], status: "inactive" },
+      { id: "LEGACY_V2.FEE_PROJECTION", profiles: ["production-launch"], status: "inactive" }
+    ]
+  );
+  assert.equal(
+    rulesForProfile(policyRecord.policy, "workflow-canary").some(({ id }) => id.startsWith("LEGACY_V2.")),
+    false
+  );
+
+  assert.throws(
+    () => verifyWebsiteCanaryEligibility({ envelope: { schemaVersion: "programmable.launch-entitlement-envelope.v1" } }),
+    (error) => error?.code === "CANARY_ENVELOPE_UNSUPPORTED"
+  );
+});
+
+test("public docs describe one policy chain through reviewer canary and audience-bound Website eligibility", () => {
+  const readme = read("README.md");
+  const architecture = read("docs/ARCHITECTURE.md");
+  const lifecycle = read("docs/REVIEW_LIFECYCLE.md");
+  const beta = read("docs/builder/PUBLIC_GITHUB_PR_BETA.md");
+  const agents = read("AGENTS.md");
+
+  for (const [name, source] of [
+    ["README", readme],
+    ["architecture", architecture],
+    ["lifecycle", lifecycle],
+    ["public intake", beta],
+    ["agent contract", agents]
+  ]) {
+    assert.match(source, /policy\/launch-policy\.v1\.json/u, `${name} must name the sole authored policy`);
+  }
+  assert.match(architecture, /policy → reviewer → Workflow Canary → signed audience-bound Website eligibility/u);
+  assert.match(lifecycle, /expected Website audience from protected deployment configuration/u);
+  assert.match(beta, /frozen legacy V2 transport/u);
+  assert.match(beta, /cannot satisfy Workflow\s+Canary or Website eligibility/u);
+  assert.match(agents, /only authored source of current Programmable-specific admission requirements/u);
+  assert.match(readme, /Two intake transports are open/u);
+  assert.match(readme, /six-file legacy V2 package while the checked-in/u);
+  assert.match(readme, /V2 cannot substitute for Canary or Website eligibility/u);
+});
+
+function currentReviewInput(policyRecord, profileId, rules) {
+  const subject = {
+    numericRepositoryId: "9001",
+    repository: "example/policy-consumer",
+    commit: "a".repeat(40),
+    tree: "b".repeat(40),
+    configurationHash: `sha256:${"c".repeat(64)}`,
+    usesUniswapV4: true
+  };
+  return {
+    schemaVersion: "programmable.launch-policy-review-input.v1",
+    profileId,
+    expectedPolicyBinding: buildLaunchPolicyBinding(policyRecord, profileId),
+    expectedSubject: subject,
+    currentSubject: structuredClone(subject),
+    evaluations: rules.map((rule) => ({
+      ruleId: rule.id,
+      state: "passed",
+      evidenceRefs: [`sha256:${Buffer.from(rule.id, "utf8").toString("hex").padEnd(64, "0").slice(0, 64)}`],
+      analyzer: { kind: rule.enforcement.mode, id: rule.enforcement.handlerId }
+    })),
+    observations: []
+  };
+}
+
+function passedEvidenceForRules(rules) {
+  return Object.fromEntries(
+    rules.flatMap(({ evidence }) => evidence).map((evidenceId) => [evidenceId, { status: "passed" }])
+  );
+}
+
+function findForbiddenPolicyValueKeys(value, location = "$") {
+  const forbidden = new Set([
+    "applicability",
+    "authority",
+    "evidence",
+    "parameters",
+    "requirement",
+    "severity"
+  ]);
+  if (Array.isArray(value)) return value.flatMap((entry, index) => findForbiddenPolicyValueKeys(entry, `${location}[${index}]`));
+  if (!isPlainObject(value)) return [];
+  return Object.entries(value).flatMap(([key, child]) => [
+    ...(forbidden.has(key) ? [`${location}.${key}`] : []),
+    ...findForbiddenPolicyValueKeys(child, `${location}.${key}`)
+  ]);
+}
+
+function withRepositoryCopy(callback) {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "submit-launch-authority-"));
+  const repositoryRoot = path.join(temporaryRoot, "repository");
+  try {
+    childProcess.execFileSync("git", ["clone", "--quiet", "--no-hardlinks", "--no-local", "--", root, repositoryRoot], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024
+    });
+    for (const relativePath of git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { trim: false }).split("\0").filter(Boolean)) {
+      if (relativePath.startsWith("vendor/programmable-v4-hook-builder/")) continue;
+      const source = path.join(root, relativePath);
+      const target = path.join(repositoryRoot, relativePath);
+      const status = fs.lstatSync(source);
+      if (!status.isFile() || status.isSymbolicLink()) continue;
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+    }
+    gitAt(repositoryRoot, ["add", "--all"]);
+    verifyLaunchPolicyAuthorityOwnership({ repositoryRoot });
+    callback(repositoryRoot);
+  } finally {
+    fs.rmSync(temporaryRoot, { force: true, recursive: true });
+  }
+}
+
+function digestFile(repositoryRoot, relativePath) {
+  return `sha256:${crypto.createHash("sha256").update(fs.readFileSync(path.join(repositoryRoot, relativePath))).digest("hex")}`;
+}
+
+function trustedPolicyRecord() {
+  return readTrustedLaunchPolicyFromGit({
+    repositoryRoot: root,
+    expectedBaseCommit: git(["rev-parse", "--verify", "HEAD^{commit}"])
+  });
+}
+
+function read(relativePath) {
+  return readAt(root, relativePath);
+}
+
+function readAt(repositoryRoot, relativePath) {
+  return fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+}
+
+function readJson(relativePath) {
+  return JSON.parse(read(relativePath));
+}
+
+function git(args, options) {
+  return gitAt(root, args, options);
+}
+
+function gitAt(repositoryRoot, args, { trim = true } = {}) {
+  const output = childProcess.execFileSync("git", args, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024
+  });
+  return trim ? output.trim() : output;
+}
+
+function compareUtf8(left, right) {
+  return Buffer.from(left, "utf8").compare(Buffer.from(right, "utf8"));
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
