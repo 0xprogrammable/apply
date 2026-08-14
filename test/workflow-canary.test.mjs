@@ -94,7 +94,10 @@ test("one inert exact-source canary application passes without fee or audit arti
   assert.equal(result.reviewDecision.digest, result.reviewDecisionDigest);
   assert.match(result.digest, /^sha256:[0-9a-f]{64}$/u);
   assert.deepEqual(
-    findForbiddenArtifactKeys(result, new Set(["fee", "securityApproval", "registry", "auditReport"])),
+    findForbiddenArtifactKeys(
+      result,
+      new Set(["programmableFee", "auditReport", "securityApproval", "registryRecord", "productionLaunch"])
+    ),
     []
   );
 
