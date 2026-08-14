@@ -388,11 +388,12 @@ test("new schemas compile strictly and validate examples and decisions", (t) => 
   assert.equal(validateDecision(pending), false, "pending schema must reject a violation evaluation");
 });
 
-test("published immutable snapshot examples reproduce only against their exact recorded policy commit", () => {
+test("published immutable snapshot examples reproduce only against their exact recorded policy commit", (t) => {
   const expectedBaseCommit = "599cbb7f9e6c6daf8a1aeca85340429db5a4f134";
+  const snapshotRepositoryRoot = materializeImmutablePolicySnapshot(t, expectedBaseCommit);
   const passed = evaluateTrustedLaunchPolicyReview({
     input: readJson("review/examples/canary-passed.json"),
-    repositoryRoot: root,
+    repositoryRoot: snapshotRepositoryRoot,
     expectedBaseCommit
   });
   assert.equal(passed.status, "passed");
@@ -400,15 +401,72 @@ test("published immutable snapshot examples reproduce only against their exact r
 
   const pending = evaluateTrustedLaunchPolicyReview({
     input: readJson("review/examples/canary-analysis-pending.json"),
-    repositoryRoot: root,
+    repositoryRoot: snapshotRepositoryRoot,
     expectedBaseCommit
   });
   assert.equal(pending.status, "analysis_pending");
   assert.deepEqual(pending.pendingRuleIds, ["CANARY.NO_REAL_USER_FUNDS", "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"]);
 });
 
+function materializeImmutablePolicySnapshot(t, expectedBaseCommit) {
+  const fixture = readJson("test/fixtures/launch-policy-review-snapshot-599cbb7.git-objects.v1.json");
+  assert.deepEqual(
+    Object.keys(fixture).sort(),
+    ["baseCommit", "baseTree", "objects", "policyBlobOid", "policyPath", "repository", "schemaVersion"].sort()
+  );
+  assert.equal(fixture.schemaVersion, "programmable.launch-policy-review-git-snapshot.v1");
+  assert.equal(fixture.repository, "0xprogrammable/submit-launch");
+  assert.equal(fixture.baseCommit, expectedBaseCommit);
+  assert.equal(fixture.baseTree, "3a3ffe028ff3e528bbdfb49d10f287a5d6f23b5a");
+  assert.equal(fixture.policyPath, "policy/launch-policy.v1.json");
+  assert.equal(fixture.policyBlobOid, "9310a2a83b13430686aadc07a726cca754f2dc70");
+  assert.deepEqual(
+    fixture.objects.map(({ oid, type }) => ({ oid, type })),
+    [
+      { oid: fixture.policyBlobOid, type: "blob" },
+      { oid: "f20d2dabc8972fc45cb9e8e72ebbebfc92d28e5d", type: "tree" },
+      { oid: fixture.baseTree, type: "tree" },
+      { oid: fixture.baseCommit, type: "commit" }
+    ]
+  );
+
+  const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-snapshot-"));
+  t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
+  runGit(repositoryRoot, ["init", "--initial-branch=main"]);
+  runGit(repositoryRoot, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
+  for (const object of fixture.objects) {
+    assert.deepEqual(Object.keys(object).sort(), ["base64", "oid", "type"].sort());
+    assert.match(object.oid, /^[0-9a-f]{40}$/u);
+    assert.ok(new Set(["blob", "commit", "tree"]).has(object.type));
+    const bytes = Buffer.from(object.base64, "base64");
+    assert.equal(bytes.toString("base64"), object.base64);
+    assert.equal(runGitWithInput(repositoryRoot, ["hash-object", "-w", "-t", object.type, "--stdin"], bytes), object.oid);
+  }
+  assert.equal(runGit(repositoryRoot, ["rev-parse", `${expectedBaseCommit}^{tree}`]), fixture.baseTree);
+  assert.equal(
+    runGit(repositoryRoot, ["rev-parse", `${expectedBaseCommit}:${fixture.policyPath}`]),
+    fixture.policyBlobOid
+  );
+  return repositoryRoot;
+}
+
 function readJson(relativePath) {
   return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8"));
+}
+
+function runGitWithInput(repositoryRoot, args, input) {
+  return childProcess.execFileSync("git", args, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    input,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_EMAIL: "review-test@example.invalid",
+      GIT_AUTHOR_NAME: "Review Test",
+      GIT_COMMITTER_EMAIL: "review-test@example.invalid",
+      GIT_COMMITTER_NAME: "Review Test"
+    }
+  }).trim();
 }
 
 function hasCode(code) {
