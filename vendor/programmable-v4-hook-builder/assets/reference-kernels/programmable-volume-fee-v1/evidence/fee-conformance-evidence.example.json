@@ -21,6 +21,7 @@
     ]
   },
   "scenarios": [
+    { "id": "fee-policy-getters-exact", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testFeePolicyGettersExact" },
     { "id": "rate-selected-zero", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedZero" },
     { "id": "rate-selected-below-floor", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedBelowFloor" },
     { "id": "rate-selected-at-floor", "status": "not-run", "test": "ProgrammableVolumeFeeHookV1Test::testRateSelectedAtFloor" },

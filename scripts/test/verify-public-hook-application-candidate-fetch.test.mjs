@@ -11,6 +11,7 @@ import {
   canonicalJson,
   classifyBoundedApplicationPathChanges,
   classifyPublicIntakePullRequest,
+  createHistoricalLegacyV2PolicyAdapterForLocalInspection,
   fetchPublicApplicationCandidate,
   hydratePublicApplicationCandidate,
   measureHydrationDirectory,
@@ -21,9 +22,17 @@ import {
   verifyBoundedApplicationPullRequestPaths,
   verifyPublicHookApplication
 } from "../verify-public-hook-application-core.mjs";
+import {
+  buildLaunchPolicyBinding,
+  readTrustedLaunchPolicyFromGit
+} from "../launch-policy-core.mjs";
 
 const PULL_REQUEST_NUMBER = "7";
 const BUILDER_USER_ID = "9007199254740993";
+const TRUSTED_POLICY_BYTES = fs.readFileSync(path.resolve("policy/launch-policy.v1.json"));
+const LOCAL_LEGACY_POLICY_ADAPTER = createHistoricalLegacyV2PolicyAdapterForLocalInspection({
+  policyBytes: TRUSTED_POLICY_BYTES
+});
 const PRIMARY = Object.freeze({
   repositoryUri: "https://github.com/alice/example-hook",
   numericRepositoryId: "123456789",
@@ -146,13 +155,69 @@ test("trusted application validation hydrates only the six closed package blobs"
   assert.equal(fs.existsSync(path.join(candidateData, "submissions")), false);
 });
 
+test("workflow canary hydration materializes exactly one policy-bound JSON blob", async (t) => {
+  const fixture = createRevisionPair(t);
+  const policyRecord = readTrustedLaunchPolicyFromGit({
+    repositoryRoot: fixture.base,
+    expectedBaseCommit: fixture.baseCommit
+  });
+  const applicationBytes = jsonBytes({
+    schemaVersion: "programmable.workflow-canary-application.v1",
+    applicationId: "example-hook",
+    applicationRevision: 1,
+    builder: { githubLogin: "alice", githubUserId: BUILDER_USER_ID },
+    source: {
+      repository: "alice/example-hook",
+      numericRepositoryId: PRIMARY.numericRepositoryId,
+      commit: PRIMARY.revisionObjectId,
+      tree: PRIMARY.treeObjectId
+    },
+    expectedPolicyBinding: buildLaunchPolicyBinding(policyRecord, "workflow-canary"),
+    title: "Example Hook",
+    summary: "One hidden workflow canary.",
+    declarations: {
+      hiddenFromPublicRoutingAndDiscovery: true,
+      independentAudit: false,
+      productionRouting: false,
+      realUserFunds: false
+    }
+  });
+  const applicationPath = "canary-submissions/example-hook/application.json";
+  writeFile(fixture.candidate, applicationPath, applicationBytes);
+  const candidateCommit = commitAll(fixture.candidate, "one workflow canary blob");
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  const applicationObjectId = blobObjectIdAtPath(fixture.candidate, applicationPath);
+  const unrelatedBaseObjectId = blobObjectIdAtPath(fixture.base, "README.md");
+  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, applicationObjectId), false);
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
+  const hydration = await hydratePublicApplicationCandidate({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    repository: "central/repository",
+    readToken: "test-read-token"
+  }, localHydrationDependencies(fixture, "canary-submissions/example-hook"));
+
+  assert.equal(hydration.result, "bounded-workflow-canary-blob-hydrated");
+  assert.equal(hydration.applicationId, "example-hook");
+  assert.equal(hydration.fileCount, 1);
+  assert.deepEqual(hydration.policyBinding, buildLaunchPolicyBinding(policyRecord, "workflow-canary"));
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, applicationObjectId), true);
+  assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
+});
+
 test("candidate package cannot remove the mandatory companion closure receipt index", () => {
   const packageFiles = makePackage();
   const application = JSON.parse(packageFiles.get("application.json").toString("utf8"));
   delete application.companionClosure;
   packageFiles.set("application.json", jsonBytes(application));
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles }),
     (error) => error?.code === "OBJECT_NOT_CLOSED" && error?.kind === "candidate"
   );
 });
@@ -913,12 +978,15 @@ function makeProgrammableFee() {
     poolScope: "canonical-launch-pool-key",
     rates: {
       unit: "hundredths-of-bip",
-      selectedHundredthsOfBip: 30000,
+      selectedBuyHundredthsOfBip: 30000,
+      selectedSellHundredthsOfBip: 20000,
       minimumEffectiveHundredthsOfBip: 1000,
-      effectiveHundredthsOfBip: 30000,
+      effectiveBuyHundredthsOfBip: 30000,
+      effectiveSellHundredthsOfBip: 20000,
       platformHundredthsOfBip: 1000,
-      projectHundredthsOfBip: 29000,
-      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      projectBuyHundredthsOfBip: 29000,
+      projectSellHundredthsOfBip: 19000,
+      formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
       lpFeeExcluded: true
     },
     basis: { volume: "gross-quote-side-swap-volume", quoteAsset: "canonical-pool-quote-asset" },
@@ -978,7 +1046,7 @@ function sourceSubmissionBytes(programmableFee) {
     model: { id: "example-hook" },
     programmableFee,
     schemaVersion: 1,
-    standardVersion: "1.5.0"
+    standardVersion: "1.6.0"
   })}\n`, "utf8");
 }
 
@@ -1015,6 +1083,13 @@ function continuationRecord(overrides = {}) {
   };
 }
 
+function validatePackageFiles(options) {
+  return validatePublicApplicationPackageFiles({
+    ...options,
+    legacyPolicyAdapter: LOCAL_LEGACY_POLICY_ADAPTER
+  });
+}
+
 function createRevisionPair(t, {
   intakeState = "open",
   existingApplication = false,
@@ -1027,7 +1102,9 @@ function createRevisionPair(t, {
   fs.mkdirSync(base);
   git(base, ["init", "-b", "main"]);
   configureIdentity(base, "Trusted Test", "trusted@example.invalid");
+  git(base, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
   writeFile(base, "README.md", "trusted base\n");
+  writeFile(base, "policy/launch-policy.v1.json", TRUSTED_POLICY_BYTES);
   writeFile(
     base,
     "docs/builder/intake-status.json",
@@ -1198,17 +1275,17 @@ function trustedGitEnvironment() {
   };
 }
 
-function localHydrationDependencies(fixture) {
+function localHydrationDependencies(fixture, packageDirectory = "submissions/example-hook") {
   return {
     allowFileProtocolForTests: true,
     remoteUrlForTests: pathToFileURL(fixture.candidate).href,
-    fetchImplementation: createTreeMetadataFetch(fixture.candidate)
+    fetchImplementation: createTreeMetadataFetch(fixture.candidate, packageDirectory)
   };
 }
 
-function createTreeMetadataFetch(repository) {
-  const packageTreeObjectId = git(repository, ["rev-parse", "HEAD:submissions/example-hook"]);
-  const records = git(repository, ["ls-tree", "-l", "HEAD:submissions/example-hook"])
+function createTreeMetadataFetch(repository, packageDirectory = "submissions/example-hook") {
+  const packageTreeObjectId = git(repository, ["rev-parse", `HEAD:${packageDirectory}`]);
+  const records = git(repository, ["ls-tree", "-l", `HEAD:${packageDirectory}`])
     .split("\n")
     .filter(Boolean)
     .map((line) => {

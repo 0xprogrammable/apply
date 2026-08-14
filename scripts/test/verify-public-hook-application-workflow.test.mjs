@@ -8,6 +8,12 @@ const ordinary = fs.readFileSync(path.resolve(".github/workflows/verify.yml"), "
 const postMerge = fs.readFileSync(path.resolve(".github/workflows/verify-post-merge.yml"), "utf8");
 const codeql = fs.readFileSync(path.resolve(".github/workflows/codeql.yml"), "utf8");
 const validator = fs.readFileSync(path.resolve("scripts/verify-public-hook-application-core.mjs"), "utf8");
+const validatorCli = fs.readFileSync(path.resolve("scripts/verify-public-hook-application.mjs"), "utf8");
+const canaryValidator = fs.readFileSync(path.resolve("scripts/workflow-canary-core.mjs"), "utf8");
+const canaryValidatorCli = fs.readFileSync(path.resolve("scripts/verify-workflow-canary.mjs"), "utf8");
+const packageManifest = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
+const packageLock = JSON.parse(fs.readFileSync(path.resolve("package-lock.json"), "utf8"));
+const readme = fs.readFileSync(path.resolve("README.md"), "utf8");
 const ordinaryCandidateJob = ordinary.slice(
   ordinary.indexOf("  repository:"),
   ordinary.indexOf("  bounded-application:")
@@ -19,7 +25,7 @@ const codeqlBoundedJob = codeql.slice(codeql.indexOf("  bounded-application:"), 
 const codeqlRequiredJob = codeql.slice(codeql.indexOf("  required:"));
 const publicJob = intake.slice(intake.indexOf("  public-intake:"));
 const verificationStep = publicJob.slice(
-  publicJob.indexOf("- name: Verify closed public application package"),
+  publicJob.indexOf("- name: Verify policy-bound closed public application package"),
   publicJob.indexOf("- name: Defer executable registry maintenance")
 );
 const fetchStep = publicJob.slice(
@@ -62,25 +68,70 @@ test("only a closed six-file application is hydrated and public source lookup ha
   assert.doesNotMatch(verificationStep, /github\.token|secrets\./u);
 });
 
+test("one-file workflow canary stays policy-bound, inert, authenticated, and non-authoritative", () => {
+  assert.match(publicJob, /application\|workflow-canary\|registry-maintenance\|no-op/u);
+  assert.match(publicJob, /mode == 'application' \|\| steps\.classify\.outputs\.mode == 'workflow-canary'/u);
+  assert.match(publicJob, /- name: Verify policy-bound hidden workflow canary/u);
+  assert.match(publicJob, /if: steps\.classify\.outputs\.mode == 'workflow-canary'/u);
+  assert.match(publicJob, /scripts\/verify-workflow-canary\.mjs/u);
+  for (const option of [
+    "--expected-base-repository",
+    "--expected-base-repository-id",
+    "--expected-base-commit",
+    "--expected-builder-login",
+    "--expected-builder-user-id",
+    "--expected-head-repository",
+    "--expected-head-repository-id",
+    "--expected-candidate-commit",
+    "--expected-merge-commit"
+  ]) assert.match(publicJob, new RegExp(option, "u"));
+  assert.match(canaryValidator, /readTrustedLaunchPolicyFromGit/u);
+  assert.match(canaryValidator, /evaluateTrustedLaunchPolicyReview/u);
+  assert.match(canaryValidator, /resolveGitHubPublicSourceV1/u);
+  assert.match(canaryValidator, /GIT_NO_LAZY_FETCH/u);
+  assert.doesNotMatch(canaryValidatorCli, /--policy(?:\s|=)|--profile(?:\s|=)|POLICY_(?:PATH|URL|BYTES)/u);
+  assert.doesNotMatch(canaryValidator, /npm\s+(?:ci|install|test)|import\(.*candidate|LAUNCH_APPROVED/u);
+});
+
+test("protected V2 intake resolves policy only from the exact trusted base", () => {
+  assert.match(validator, /readTrustedLaunchPolicyFromGit/u);
+  assert.match(validator, /repositoryRoot: path\.resolve\(baseRoot \?\? ""\)/u);
+  assert.match(validator, /expectedBaseCommit/u);
+  assert.match(verificationStep, /--base-root "\$GITHUB_WORKSPACE\/trusted"/u);
+  assert.match(verificationStep, /--expected-base-commit "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/u);
+  assert.doesNotMatch(validatorCli, /--policy(?:\s|=)|--profile(?:\s|=)|POLICY_(?:PATH|URL|BYTES)/u);
+  assert.doesNotMatch(publicJob, /--policy(?:\s|=)|--profile(?:\s|=)|POLICY_(?:PATH|URL|BYTES)/u);
+});
+
 test("credentials are removed and maintenance is deferred to ordinary CI", () => {
   assert.match(publicJob, /- name: Remove candidate fetch credential\n\s+if: always\(\)/u);
   assert.match(publicJob, /--unset-all http\.https:\/\/github\.com\/\.extraheader/u);
-  assert.match(publicJob, /application\|registry-maintenance\|no-op/u);
+  assert.match(publicJob, /application\|workflow-canary\|registry-maintenance\|no-op/u);
   assert.match(publicJob, /mode == 'registry-maintenance'/u);
   assert.match(publicJob, /No maintenance blob is hydrated, parsed, or executed under pull_request_target/u);
 });
 
-test("ordinary CI is read-only, credential-free, pinned, and covers Node 20 and 22", () => {
+test("ordinary CI is read-only, credential-free, pinned, and runs only Node 24", () => {
   assert.match(ordinary, /\npermissions:\n  contents: read\n/u);
   assert.match(ordinaryCandidateJob, /if: github\.event_name != 'pull_request_target'/u);
   assert.match(ordinaryCandidateJob, /persist-credentials: false/u);
-  assert.match(ordinaryCandidateJob, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(ordinaryCandidateJob, /node:\n\s+- 24/u);
+  assert.doesNotMatch(ordinaryCandidateJob, /\n\s+- 22(?:\n|$)/u);
   assert.match(ordinaryCandidateJob, /run: npm test/u);
   assert.doesNotMatch(ordinaryCandidateJob, /secrets\.|github\.token|contents:\s*write/u);
   for (const source of [intake, ordinary, postMerge, codeql]) {
     const uses = [...source.matchAll(/^\s*uses:\s*([^\s#]+)/gmu)].map((match) => match[1]);
     assert.ok(uses.length >= 2);
     for (const action of uses) assert.match(action, /^[^@\s]+@[a-f0-9]{40}$/u);
+  }
+});
+
+test("the active runtime contract is Node 24-only", () => {
+  assert.equal(packageManifest.engines.node, ">=24");
+  assert.equal(packageLock.packages[""].engines.node, ">=24");
+  assert.match(readme, /Node\.js 24 or newer is required/u);
+  for (const source of [ordinary, postMerge, intake, codeql]) {
+    assert.doesNotMatch(source, /node-version:\s*(?:20|22)(?:\s|$)|\n\s+- (?:20|22)(?:\n|$)/u);
   }
 });
 
@@ -113,7 +164,8 @@ test("application-only pull requests get the existing required contexts from tru
   }
   assert.match(ordinaryBoundedJob, /if: github\.event_name == 'pull_request_target'/u);
   assert.match(ordinaryBoundedJob, /name: Bounded application \/ Node \$\{\{ matrix\.node \}\}/u);
-  assert.match(ordinaryBoundedJob, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(ordinaryBoundedJob, /node:\n\s+- 24/u);
+  assert.doesNotMatch(ordinaryBoundedJob, /\n\s+- 22(?:\n|$)/u);
   assert.match(codeqlBoundedJob, /if: github\.event_name == 'pull_request_target'/u);
   assert.match(codeqlBoundedJob, /name: Bounded application \/ CodeQL not applicable/u);
   for (const source of [ordinaryBoundedJob, codeqlBoundedJob]) {
@@ -148,9 +200,10 @@ test("exact main runs repository tests once and still validates every maintained
   assert.doesNotMatch(ordinary, /\n  push:/u);
   assert.match(codeql, /\n  push:\n\s+branches:\n\s+- main/u);
   assert.equal(count(postMerge, "run: npm test"), 1);
-  assert.match(postMerge, /node:\n\s+- 20\n\s+- 22/u);
+  assert.match(postMerge, /node:\n\s+- 24/u);
+  assert.doesNotMatch(postMerge, /\n\s+- 22(?:\n|$)/u);
   assert.match(postMerge, /node-version: \$\{\{ matrix\.node \}\}/u);
-  assert.match(postMerge, /if: matrix\.node == 20/u);
+  assert.match(postMerge, /if: matrix\.node == 24/u);
   assert.match(postMerge, /--verify-maintained/u);
 });
 

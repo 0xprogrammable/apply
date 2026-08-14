@@ -42,6 +42,7 @@ contract ProgrammableVolumeFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGua
     uint256 public constant MIN_GROSS_QUOTE_AMOUNT = 1000;
     bool public constant SAME_POOL_SWAP_FORBIDDEN = true;
     address public constant PROGRAMMABLE_FEE_OWNER = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
+    bytes32 public constant PROGRAMMABLE_FEE_POLICY_HASH = keccak256("programmable-volume-fee-v1");
 
     bytes4 private constant CLAIM_UNLOCK_MAGIC = bytes4(keccak256("PROGRAMMABLE_VOLUME_FEE_V1_CLAIM"));
 

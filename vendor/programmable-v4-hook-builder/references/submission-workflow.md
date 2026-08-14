@@ -1,9 +1,40 @@
-# Submit a Launch workflow
+# Submission V1 workflow
 
-The current public path is **Submit a Launch**. The complete project stays in the builder's own public GitHub
-repository. A draft pull request to `0xprogrammable/submit-launch` carries only one bounded six-file application
-record that points to the exact public source revision. No wallet connection, GitHub App installation, claim link,
-remote application draft, launch permit, or connected application service is part of this beta.
+This chapter owns the released six-file `prepare-pr` and confirmed draft-PR transport. New public review requests go
+only to `0xprogrammable/submit-launch:main`; follow
+[agent-entry-and-application.md](agent-entry-and-application.md). Use
+[open-world-v2-workflow.md](open-world-v2-workflow.md) to build and verify an Open-World project before an eligible
+handoff.
+
+For exact candidate Application V3 replay, the GitHub sequence is namespaced and separate:
+`open-world prepare-revision` derives revision/lineage through GET-only discovery, `open-world application` builds the
+complete zero-network package, and `open-world submit|update|status` models its separate review thread. Those candidate
+commands do not replace the released top-level Applicant transport.
+
+The **Public GitHub PR Builder Beta** keeps the complete project in the builder's own public GitHub
+repository. A draft pull request carried one bounded six-file application record pointing to the exact public source
+revision. No wallet connection, GitHub App installation, claim link, remote application draft, launch permit, or
+connected application service was part of that beta.
+
+## Resolve the active package contract first
+
+This skill revision documents the released six-file Builder Beta package. A trusted intake channel may be migrating to
+a different closed package, including a seven-file generation with central `launch.json`. Before scaffolding, repairing,
+or reviewing, bind the exact default-branch workflow or service revision, PR target base, validator revision, allowed
+filenames, package-contract id or digest, skill revision, criteria revision, and fee-policy version. Do not assume that
+the target branch and the trusted workflow run the same generator.
+
+`doctor` proves local tool readiness only. Resolve the channel contract read-only from immutable objects on the target
+repository's current default branch: record the branch head/tree, relevant workflow and validator blob ids, package file
+allowlist/schema id, published skill/criteria/fee revisions, and any separately deployed service revision supplied by the
+platform. Compare those exact identities before generating. Until a released `resolve-contract` command exists, do not
+describe `doctor` as channel-contract discovery.
+
+If those authorities disagree, stop package generation and report `PACKAGE_CONTRACT_DRIFT`. Name the applicant action,
+if any, separately from the platform release repair. Do not ask the applicant to guess which file set is authoritative,
+do not hand-edit one generation into the other, and do not interpret a green structural check as semantic launch
+readiness. The schema, generator, validator, documentation, and trusted workflow must be released as one coordinated
+platform change.
 
 Submission remains separate from the release registry. A builder can propose and test any reviewable v4 project without
 creating the appearance that Programmable has selected, accepted, scheduled, deployed, or made it available.
@@ -14,17 +45,18 @@ current Programmable launch integration remains Ethereum Mainnet-only, so every 
 separate release gate and cannot claim current platform launchability. Exact Base or Unichain official deployment
 records remain a runtime-unverified reference tier, not Programmable-tested deployment evidence.
 
-Submission standard `1.5.0` retains the mandatory Programmable volume-fee record, open project-surface and capability
-graph, exact builder-template provenance, and time-bounded per-provider evidence. It adds a machine-enforced v4 SDK
-safety profile for package-root imports, hooked quote simulation, hookData parity, explicit per-hop bounds, and current
-slippage semantics. It preserves unfamiliar games, maps,
+Submission standard `1.6.0` retains the mandatory Programmable volume-fee record, open project-surface and capability
+graph, exact builder-template provenance, time-bounded per-provider evidence, and the machine-enforced v4 SDK safety
+profile introduced in 1.5.0. It adds an open-ended `launchPlan`, one positive uint128
+`pool.minimumInitialLiquidity`, exact launch source/test closure, and a required post-acceptance bundle for the generic
+launch executor. It preserves unfamiliar games, maps,
 services, databases, data sources, keepers, claims and later kinds for architecture review while deriving non-bypassable
 security profiles from explicit triggers. It also separates a signed offchain data source from an optional onchain
 oracle verifier. It retains explicit `official-launchpad` and `model-specific-no-hook` proposal paths and now permits
 the same optional top-level `tokenMechanics` transfer-policy, transfer-tax, automatic-liquidity, provider-limit and test
 profile with either `hook.used` value. Existing unpublished `1.4.0` drafts with those fields nested under
 `noHookArchitecture` remain valid through deterministic fallback; matching duplicates are accepted and divergent
-duplicates are blocked. A `1.4.0` or older submission is not
+duplicates are blocked. A `1.5.0` or older submission is not
 silently reinterpreted. Regenerate it from the current template; review every surface, capability, exposure, path,
 profile, no-hook route, target chain, network slug, dependency and deployment trust tier; then commit the fresh report
 and gate-status authority digests.
@@ -58,8 +90,10 @@ The builder repository contains:
 - Builder identity, contact, license declaration, and optional beneficiary address
 
 No implementation language is required at proposal stage. The proposal must still resolve the user outcome, project
-surfaces, value flow, canonical PoolKey, whether a custom hook is used, authorities, dependencies, hard failure behavior,
-and expected evidence. Hook callbacks, a permission mask, and CREATE2 planning apply only when `hook.used` is true. A
+surfaces, value flow, canonical PoolKey, whether its mandatory fee hook is standard-profile or integrates additional
+project-defined behavior, authorities, dependencies, hard failure behavior, and expected evidence. Hook callbacks, a
+permission mask, and CREATE2 planning apply only when `hook.used` is true. That value includes the standard fee-hook
+profile; it does not imply extra custom behavior. A
 no-hook proposal may select its applicable route and keep `programmableFee.collection.status` at
 `pending-hook-integration`. It may reach `readiness.design: DESIGN_READY` when the integration plan is complete, but it
 cannot claim `readiness.implementation: STRUCTURALLY_COMPLETE` or launch readiness.
@@ -74,6 +108,8 @@ Adds:
 - Fuzz and invariant properties where state, value, authorization, or arithmetic requires them
 - Pinned dependencies, languages, compilers, runtimes, and build configuration that the implementation actually uses
 - `TEST_PLAN.md` with actual results separated from planned checks
+- One hash-bound executable launch-plan artifact in the applicant repository, referenced through the existing
+  implementation/specification and review-target paths
 
 Solidity and Foundry evidence is required when Solidity is declared. A platform-launch-ready prototype additionally
 requires exact source and tests for either a project-specific standard-profile hook or its integrated custom hook, including
@@ -98,11 +134,24 @@ candidate after confirming:
 - Gas and size evidence for deployed contracts
 - Pinned-chain lifecycle and current-head smoke evidence for surfaces that touch chain state
 - Reproducible permission mask and CREATE2 plan when a custom hook is used
+- Complete executable launch plan with ABI-checked targets, dependency order, initialization, liquidity/custody,
+  atomicity boundaries, required platform capability ids, and postconditions
 - Deployment plan for deployable components without credentials or signed transactions
 - UI, app, game, service, router, indexer, monitoring, and incident requirements for intended surfaces
 - All independent reviews required at candidate selection by the risk tier
 
 Candidate selection is not acceptance, deployment, routing approval or availability.
+
+### Launch-admission self-check
+
+Apply [approval-criteria.md](approval-criteria.md) before preparing a launch-admission result. A proposal may receive
+architecture feedback, but only an executable prototype can receive a positive launch-admission verdict. Keep the
+current central six-file contract unchanged; the applicant launch plan remains a bound public-source artifact until a
+trusted central schema and compiler are released together.
+
+Report exactly one predicted verdict: `CHANGES REQUIRED` for any applicant-controlled blocker, `PLATFORM PENDING` only
+after every applicant gate passes and only maintainer/provider work remains, or `READY FOR FINAL VERIFICATION` when
+the supported platform pre-final gates also pass. None of these strings creates an acceptance record or launch permit.
 
 ### Acceptance and availability are separate
 
@@ -142,6 +191,12 @@ manifest must be canonical JSON committed in the primary repository's exact HEAD
 `prepare-pr` resolves the companion's immutable numeric repository id and root tree independently. A branch, tag,
 private repository, credentialed URL, local path, ZIP, pasted source, symlink, gitlink, or Git LFS pointer is not an
 accepted source binding.
+
+Keep every bound public source commit anonymously retrievable from the same numeric repository id until the identical
+final-verification path has retained the reviewed source bundle. Do not delete and recreate a repository under the same
+slug, make it private, transfer it without reauthorization, force-push away the declared immutable review ref, remove a
+submodule or LFS object, or otherwise make the commit unreachable. A rename that preserves the numeric id may be
+revalidated; deletion and recreation is a new source authority and invalidates prior positive evidence.
 
 ### Programmable central application pull request
 
@@ -226,6 +281,11 @@ node "$SKILL_ROOT/scripts/cli.mjs" package \
   --repository-root "$REPOSITORY_ROOT"
 ```
 
+Without a `--require-*` flag, `check` exit code `0` means the report was generated, even when blockers remain. Its
+machine-readable `commandOutcome.zeroExitMeaning` is `REPORT_GENERATED_ONLY_NOT_READINESS` in that mode. Use
+`--require-design-ready` or `--require-intake-ready` when the exit code must enforce that local gate; neither proves
+independent prototype validation, acceptance, deployment, routing, or launch readiness.
+
 Commit the generated report. If the design changes, regenerate it. CI should fail when the report no longer matches the
 submission contents or standard version. Every package preserves the authoritative `readiness.design` and
 `readiness.implementation` fields. A proposal may also preserve the legacy `REDESIGN_REQUIRED` or `UNSUPPORTED`
@@ -269,6 +329,20 @@ These checks do not audit, accept, deploy, approve routing or prove availability
 Contributor-controlled `submission.json`, `gate-status.json`, and evidence files can complete only declared prototype
 checks. They cannot complete candidate, maintainer-review, deployment, verification, provider, or availability gates.
 
+A prototype also declares at least one successful source-owned GitHub Actions run for the exact primary commit in
+`implementation.githubActionsRunIds`. Use the pinned Foundry or npm example under `assets/templates/` as a starting
+point and keep the actual build and test commands explicit. The numeric run id, exact workflow blob, repository id,
+commit, and tree are source evidence; they are not an independent audit. Registry intake binds those public facts but
+never executes candidate code and never decides whether the workflow covers the right security properties. Missing
+exact-revision workflow evidence yields `tooling-blocked`, not an unsafe or unsupported-product result.
+Pending, cancelled, skipped, and failed runs are not evidence passes and fail before any draft pull request is opened.
+
+For the standard Programmable fee path, declare `implementation.feeConformanceManifestPath` and keep the manifest in
+the exact review target. Package verification reruns the Builder's structural fee-conformance checker when that path is
+present. A novel fee implementation may omit the standard manifest and enter `architecture-review-required`; it must
+not be auto-rejected merely because a fixed template cannot understand it. Maintainers still require semantic and
+executable review before implementation conformance.
+
 For prototype product planning, use `submission.json.integration.platformHandoff`. When `intended` is true, provide
 concrete `handoffNotes`. The registry, UI, API, indexer, and test paths are contributor proposals and may remain empty
 until maintainers accept the exact prototype and assign product work. Contributor packages keep `reviewStatus` at
@@ -310,8 +384,9 @@ That workflow unconditionally runs the pinned install, named build, and named te
 receipt binds the exact primary manifest path and is also embedded in the central `application.json`. Central intake
 re-reads the exact manifest, package, source, runtime and workflow objects and recomputes the receipt before accepting
 it. Validate and canonicalize the manifest first with `cli.mjs companion <manifest> --write-canonical`.
-Keep v1 for proposal-only or unsupported build/runtime mechanics. Read `companion-manifests.md` and use
-`companion-manifest-v2.schema.json`; a v1 companion intentionally retains the closure-review diagnostic.
+For exact historical V1 reproduction or an explicit forward migration, preserve whichever companion-manifest version
+the original application used; a historical v1 companion retains its closure-review diagnostic. Do not select this
+archival Submission V1 path for a new V2/V3 proposal merely because its build or runtime mechanics are unsupported.
 
 `prepare-pr` independently resolves every declared public repository's numeric id, exact commit, root tree, and
 declared paths. It also observes the exact current `0xprogrammable/submit-launch:main` commit before deriving the
@@ -321,8 +396,67 @@ project commits or package-only corrections in that same pull request do not inc
 a moving central base fails before output is written.
 
 The result separates `sourceHead` from `centralPullRequestTarget`, includes the observed central base commit and next
-application revision, and embeds the deterministic six-file package plus a copy-ready draft PR body. It does not push a
-branch or open a pull request.
+application revision, and embeds the deterministic six-file package plus the draft PR body consumed by the confirmed
+application client. `centralPackage.compatibilityResult` is the authoritative overall application result. The legacy
+`submission.preflightDecision` is a design-only compatibility projection and must never be shown as overall readiness.
+It does not push a branch or open a pull request.
+
+## Submit or update through the confirmed application client
+
+This is the normal public builder path. Save the canonical `prepare-pr` result outside the source repository, then use
+the application client. Do not manually fork the central repository, push a central branch, or open the draft pull
+request as an alternative to this flow.
+
+```bash
+PREPARED_APPLICATION="/absolute/outside-repo/prepare-pr.json"
+node "$SKILL_ROOT/scripts/cli.mjs" prepare-pr \
+  "submissions/$APPLICATION_ID" \
+  --repository-root "$REPOSITORY_ROOT" \
+  > "$PREPARED_APPLICATION"
+```
+
+First create a read-only submit plan. This invocation performs authenticated GitHub reads but no GitHub writes:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" submit \
+  --prepared "$PREPARED_APPLICATION" \
+  --repository-root "$REPOSITORY_ROOT"
+```
+
+Review the exact `externalWrites` list and `confirmationDigest`. Only after explicit human authorization, execute that
+same current plan with its exact digest:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" submit \
+  --prepared "$PREPARED_APPLICATION" \
+  --repository-root "$REPOSITORY_ROOT" \
+  --confirm-external-write "sha256:<exact-plan-digest>"
+```
+
+After changing an already-submitted application, regenerate the package for the new exact public source revision and
+plan an update to the same open draft. Do not open a replacement draft:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" update \
+  --prepared "/absolute/outside-repo/new-prepare-pr.json" \
+  --repository-root "$REPOSITORY_ROOT" \
+  --pull-request "123"
+```
+
+Review and explicitly authorize the new update digest before executing that exact current update plan:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" update \
+  --prepared "/absolute/outside-repo/new-prepare-pr.json" \
+  --repository-root "$REPOSITORY_ROOT" \
+  --pull-request "123" \
+  --confirm-external-write "sha256:<exact-update-plan-digest>"
+```
+
+The digest authorizes only the writes enumerated by that current plan; any relevant account, source, base, fork,
+branch, pull request, or package change requires a new read-only plan. The client creates or updates a draft only; it
+never marks the pull request ready for review. See
+[github-application-journey.md](github-application-journey.md) for status, recovery, identity, and intake-state rules.
 
 Large declared path sets are not verified with one anonymous REST request per file. The resolver keeps GitHub REST as
 the bounded repository/commit/tree control plane. The central intake reads exact declared objects through one anonymous
@@ -348,6 +482,13 @@ a separate 64 MiB process-monitor cap and post-command measurement; it is fail-c
 quota, so multiple fast writes can briefly overshoot before the complete process group is killed and the temporary
 repository is removed. A successful leader is also followed by a group kill so a remote helper or `index-pack` cannot
 survive the bounded operation.
+
+## Maintainer-only manual recovery fallback
+
+The rest of this section is not the normal public builder path. It is reserved for an explicitly authorized central
+repository maintainer recovering from an application-client incident. Ordinary builders must use the confirmed
+`submit` or `update` flow above. Manual central materialization, commits, pushes, forks, or pull-request creation are
+not an equivalent builder workflow.
 
 To materialize the generated files, pass an explicit new target directory outside the builder source repository. Its
 parent `submissions/` directory must already exist, the target itself must not exist, and its basename must equal the
@@ -397,15 +538,11 @@ immutable main, preserves the pending revision and full numeric repository linea
 inodes, bytes, and main stability before a rollback-capable swap. It does not prove which pull request owns the local
 directory, so use it only for the already-open application pull request you are updating.
 
-## Open a draft pull request
+### Failure recovery
 
-1. Keep the complete project in its own public GitHub repository and push the exact clean revision prepared above.
-2. Fork [`0xprogrammable/submit-launch`](https://github.com/0xprogrammable/submit-launch).
-3. Create a branch from the current central `main` branch.
-4. Materialize or copy exactly the generated six files into `submissions/<application-id>/`.
-5. Confirm that the central diff contains no project source, extra submission files, registry edits, or workflows.
-6. Push the central branch to the fork.
-7. Open a draft pull request against `0xprogrammable/submit-launch:main` with the generated PR body.
+Do not bypass the client by creating a fork, branch, package commit, or pull request manually. Preserve the exact
+prepared package and rerun the read-only plan. If the plan cannot resume safely, report the typed failure and wait for
+the canonical client or intake contract to be repaired.
 
 Do not edit the model registry, create an acceptance record or set candidate status. Submission contents are untrusted
 input. Intake automation must use trusted code from the base repository and must not execute contributor-supplied
@@ -422,7 +559,7 @@ A submission PR states:
 - Stage: proposal or prototype
 - Exact authoritative design and implementation readiness, compatibility-only legacy decision, and risk tier
 - User outcome, project surfaces, and model difference
-- Whether a custom hook is used; permissions and mask only when it is
+- Whether the mandatory fee hook uses the standard profile or integrates additional project-defined behavior; permissions and mask when `hook.used` is true
 - Assets, fees, custody, value flow, authorities, and dependencies
 - Tests actually run and tests still required
 - Known limitations and open decisions
@@ -439,11 +576,11 @@ The agent may:
 
 - Create and validate local files
 - Explain findings and propose redesigns
-- Prepare a branch, commit, or copy-ready PR body when the user requests it
+- Prepare the local application package and a read-only GitHub action plan
 
 The agent may not, without separate explicit authority:
 
-- Open or merge the pull request
+- Confirm external GitHub writes, open or update the pull request, or merge it
 - Write a maintainer acceptance record
 - Add the submission to the release registry
 - Deploy or sign transactions
@@ -455,6 +592,36 @@ The agent may not, without separate explicit authority:
 An accepted model moves to a separate platform-integration handoff. Confirm that the acceptance record resolves to the
 same model id, version, prototype commit, submission hash, review-target hash, scope, and open conditions as the reviewed
 package. A merged PR, passing tests, candidate record, or maintainer comment is not a substitute.
+
+After that identity is fixed, copy `assets/templates/launch-bundle-input.example.json` into the evidence root outside
+the accepted source revision and fill every field from actual local bytes. Generate the candidate with:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" launch-bundle \
+  --repository-root "$REPOSITORY_ROOT" \
+  --registry-root "/path/to/exact/programmable-registry-checkout" \
+  --evidence-root "/path/to/immutable-launch-evidence" \
+  --submission "path/to/submission.json" \
+  --bindings "path/to/launch-bundle-input.json"
+```
+
+`--submission` is relative to the accepted source root. `--bindings` and optional `--write` are relative to the evidence
+root. The command validates the filled input against `launch-bundle-input-v1.schema.json` and the derived bundle against
+`launch-bundle-output-v1.schema.json` before emitting or writing it.
+
+The source and Registry checkouts must have the exact bound commit, tree, canonical GitHub origin, clean tracked state,
+and committed submission, review target and acceptance bytes. Build settings, dependency locks and artifact source must
+come from the accepted source revision; build output, artifact JSON and verification evidence must come from the
+separate evidence root. Every bound file is a regular file with an exact SHA-256. Artifact JSON pointers select creation
+and deployed bytecode; the Builder derives constructor, init-code and runtime hashes rather than accepting free
+runtime-hash claims. Missing, cross-root or mismatched provenance fails closed.
+
+The result contains the exact current-private Admin `DeploymentSpecV1`, `LaunchExecutorCallV1`, decoded
+`PoolConfigurationV1`, PoolId, source/artifact/evidence hashes, target and hook expected runtime hashes, and the three
+executor configuration hashes. It always remains `NOT_AUTHORIZED`, `runtimeEvidence.state: NOT_RUN`,
+`deploymentEvidence.state: NOT_PROVIDED`, unsigned and unexecuted. Admin must independently verify canonical Registry
+head/authenticity, hermetic builds, accepted source closure, onchain code at a pinned block, configuration, fee
+conformance, current gate state and signing authority. A bundle candidate is not a permit or deployment receipt.
 
 Load `official-model-patterns.md` when the release derives from an official pattern. Load
 `routing-and-discovery.md` for product indexing, discovery, Hooklist, quoting, routing, and provider boundaries.

@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  bundledVersionStatus,
   BuilderLifecycleError,
   checkSignedUpdate,
   digestCanonical,
@@ -36,10 +37,30 @@ test("version reports exact local standards without external action and renders 
   const second = versionStatus(JSON.parse(JSON.stringify(fixture.state)));
   assert.equal(canonicalJson(first), canonicalJson(second));
   assert.equal(first.installed.releaseVersion, "0.2.1");
+  assert.equal(first.installed.publicationState, "not-verified");
+  assert.equal(first.publicationStateVerified, false);
   assert.equal(first.historicalStandardsPreserved, true);
   assert.equal(first.networkAccessed, false);
   assert.deepEqual(first.externalActionsPerformed, []);
   assert.equal(renderHumanStatus(first), renderHumanStatus(second));
+});
+
+test("bundled version reports standalone code constants without requiring state", () => {
+  const result = bundledVersionStatus();
+  assert.equal(result.installed.releaseVersion, "0.5.1");
+  assert.equal(result.installed.channel, "stable");
+  assert.equal(result.installed.publicationState, "release-package");
+  assert.equal(result.installed.standards.skill, "0.5.1");
+  assert.equal(result.installed.standards.engine, "0.5.1");
+  assert.equal(result.installed.standards.policy, "1.1.0");
+  assert.equal(result.installed.standards.schema, "1.6.0");
+  assert.equal(result.installed.standards.submission, "1.6.0");
+  assert.equal(result.trust.status, "NOT_PROVIDED");
+  assert.equal(result.versionSource, "bundled-code-constants");
+  assert.equal(result.publicationStateVerified, false);
+  assert.equal(result.installedStateOverrideUsed, false);
+  assert.equal(result.networkAccessed, false);
+  assert.deepEqual(result.externalActionsPerformed, []);
 });
 
 test("update-check verifies the supplied pin and Ed25519 payload without activation", () => {
@@ -576,11 +597,11 @@ test("shipped candidate template remains an incomplete caller declaration", () =
   assert.equal(result.publicationPerformed, false);
   assert.equal(result.callerDeclaredPlanComplete, false);
   assert.deepEqual(result.candidate.plannedRelease.builder, {
-    fromVersion: "0.3.0",
-    toVersion: "0.4.0",
+    fromVersion: "0.4.0",
+    toVersion: "0.5.1",
     semanticClassification: "minor"
   });
-  assert.deepEqual(result.candidate.plannedRelease.submissionStandard, { fromVersion: "1.4.0", toVersion: "1.5.0" });
+  assert.deepEqual(result.candidate.plannedRelease.submissionStandard, { fromVersion: "1.5.0", toVersion: "1.6.0" });
   assert.deepEqual(result.candidate.plannedRelease.feePolicy, { fromVersion: "1.1.0", toVersion: "1.1.0" });
   assert.equal(result.candidate.plannedRelease.source.commitSha, null);
   assert.equal(result.candidate.plannedRelease.source.treeSha, null);
@@ -816,10 +837,23 @@ test("standalone CLI preserves canonical JSON on stdout when human output is req
     const parsed = JSON.parse(result.stdout);
     assert.equal(result.stdout, `${canonicalJson(parsed)}\n`);
     assert.equal(parsed.ok, true);
-    assert.match(result.stderr, /^Builder 0\.2\.1 \(stable\)/u);
+    assert.match(result.stderr, /^Builder 0\.2\.1 \(stable; not-verified\)/u);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
+});
+
+test("standalone CLI reports bundled version without an installed-state file", () => {
+  const result = childProcess.spawnSync(process.execPath, [lifecycleCli, "version"], {
+    encoding: "utf8",
+    shell: false
+  });
+  assert.equal(result.status, 0, result.stdout || result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.result.installed.releaseVersion, "0.5.1");
+  assert.equal(parsed.result.installed.publicationState, "release-package");
+  assert.equal(parsed.result.versionSource, "bundled-code-constants");
+  assert.equal(parsed.result.installedStateOverrideUsed, false);
 });
 
 test("standalone CLI rejects duplicate JSON keys before lifecycle evaluation", () => {

@@ -7,6 +7,7 @@ import process from "node:process";
 import test from "node:test";
 
 import {
+  createHistoricalLegacyV2PolicyAdapterForLocalInspection,
   MAINTAINED_LEGACY_PACKAGE_TIMEOUT_MS,
   MAXIMUM_MAINTAINED_LEGACY_PACKAGES,
   PUBLIC_APPLICATION_FILES,
@@ -14,6 +15,29 @@ import {
   inspectMaintainedSubmissions,
   verifyMaintainedSubmissions
 } from "../verify-public-hook-application-core.mjs";
+
+test("historical local V2 inspection is explicit and has no trusted policy binding", () => {
+  const policyBytes = fs.readFileSync(path.resolve("policy/launch-policy.v1.json"));
+  const adapter = createHistoricalLegacyV2PolicyAdapterForLocalInspection({ policyBytes });
+
+  assert.equal(adapter.authority, "non-authoritative-local-inspection");
+  assert.equal(adapter.policyBinding, null);
+  assert.equal(adapter.ruleId, "FROZEN_LEGACY_V2.FEE_PROJECTION");
+  assert.equal(adapter.evidenceId, "legacy-v2-fee-projection");
+  assert.equal(adapter.transportEvidenceId, "zz-programmable-fee-submission");
+  assert.deepEqual(adapter.fee, {
+    owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    platformHundredthsOfBip: 1000,
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.1.0",
+    swapModes: [
+      "zeroForOne-exactInput",
+      "zeroForOne-exactOutput",
+      "oneForZero-exactInput",
+      "oneForZero-exactOutput"
+    ]
+  });
+});
 
 test("the trusted post-merge command accepts 129 closed application directories", (t) => {
   const repositoryRoot = createRepositoryFixture(t);

@@ -1,23 +1,32 @@
 # Review and promotion lifecycle
 
-The public lifecycle separates deterministic review from launch authority. The current public policy and preview engine
-are documented in [Open Review Standard v1](OPEN_REVIEW_STANDARD.md).
+Every current requirement begins in
+[`policy/launch-policy.v1.json`](../policy/launch-policy.v1.json). The [policy-bound reviewer](OPEN_REVIEW_STANDARD.md),
+Workflow Canary, and Website eligibility verifier consume one exact protected-base binding; none may maintain a second
+requirement list.
 
 | State | Evidence | Meaning |
 | --- | --- | --- |
-| Prepared | Local six-file package | No GitHub action occurred |
-| Submitted | Draft application pull request | Public review thread exists |
-| Intake passed | Trusted check is green | Package shape and exact public evidence passed known checks |
-| Changes requested | GitHub review state | Builder must update the exact application revision |
-| Review ready | Public checker decision | Critical evidence is closed for one exact revision; no launch right exists yet |
-| Accepted | Maintainer acceptance record | One exact source revision may be promoted |
+| Built | `BUILT_NOT_REVIEWED` under the bound `build` profile | The Builder completed declared checks; no review or launch right exists |
+| Canary prepared | Local one-file application | No GitHub or Website action occurred |
+| Canary submitted | One-file pull request in `canary-submissions/` | Hidden workflow review data exists |
+| Canary passed | Exact `CANARY_WORKFLOW_PASSED` result and policy-bound reviewer decision | The hidden GitHub handoff passed; all production authority remains false |
+| Website eligible | Short-lived signed envelope for the expected Website audience from protected deployment configuration | Only that hidden Website environment may consume the exact result |
+| Accepted or indexed | Separate maintainer record | Registry evidence exists; it is not implied by Canary eligibility |
 | Deployed | Deployment evidence | Contracts or services were deployed; not automatically available |
 | Available | Platform release evidence | Programmable currently exposes the project |
 | Suspended or retired | Maintainer lifecycle record | Availability is intentionally restricted or ended |
 
-An application merge does not synthesize an acceptance record. Promotion is a separate maintainer pull request that
-adds an append-only acceptance record, updates or adds the full project record, advances the Registry history version,
-and regenerates the indexes.
+Policy or subject drift stops the chain before a semantic pass. The Website must independently pin the signer, exact
+policy binding, expected audience, current time, and protected replay state; copying those values from an envelope is
+not authority.
+
+The six-file V2 application remains an open but frozen legacy transport while the checked-in intake state is `open`.
+Its frozen compatibility checks, green checks, merge, or old [launch-entitlement
+bridge](ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md) cannot satisfy Workflow Canary or Website eligibility and are not current
+launch-policy requirements.
+The current `production-launch` profile is disabled and no path emits
+`LAUNCH_APPROVED`.
 
 Acceptance is not an independent audit, deployment authorization, provider guarantee, Uniswap endorsement, or promise
 of future availability. Those claims require their own attributable evidence.

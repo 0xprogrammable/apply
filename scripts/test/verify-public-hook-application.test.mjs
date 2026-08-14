@@ -11,6 +11,7 @@ import Ajv2020 from "./schema-validator/node_modules/ajv/dist/2020.js";
 import {
   canonicalJson,
   classifyPublicIntakePullRequest,
+  createHistoricalLegacyV2PolicyAdapterForLocalInspection,
   createTrustedPublicApplicationResolutionSessionV1,
   PUBLIC_APPLICATION_FILES,
   PUBLIC_APPLICATION_SCHEMA_ID,
@@ -49,6 +50,10 @@ const BUILDER_USER_ID = "9007199254740993";
 const PULL_REQUEST_NUMBER = "7";
 const EVIDENCE_BYTES = Buffer.from("exact builder-owned compatibility evidence for the declared source revision\n", "utf8");
 const EVIDENCE_SHA256 = `sha256:${crypto.createHash("sha256").update(EVIDENCE_BYTES).digest("hex")}`;
+const TRUSTED_POLICY_BYTES = fs.readFileSync(path.resolve("policy/launch-policy.v1.json"));
+const LOCAL_LEGACY_POLICY_ADAPTER = createHistoricalLegacyV2PolicyAdapterForLocalInspection({
+  policyBytes: TRUSTED_POLICY_BYTES
+});
 
 test("the frozen six-file package and public schema identity are exported", () => {
   assert.equal(VALIDATOR_VERSION, "2.0.0");
@@ -82,7 +87,7 @@ test("the checked-in trusted intake status is a closed canonical regular file", 
 
 test("pure package validation accepts a canonical hash-bound review package", () => {
   const files = makePackage();
-  const result = validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files });
+  const result = validatePackageFiles({ applicationId: "example-hook", packageFiles: files });
   assert.equal(result.application.applicationRevision, 1);
   assert.equal(result.compatibility.result, "architecture-review-required");
   assert.equal(result.evidenceIndex.attestation, "builder-declared-untrusted");
@@ -94,19 +99,91 @@ test("pure package validation accepts a canonical hash-bound review package", ()
   assert.equal(result.application.source.primary.sourcePaths.includes("test/ProgrammableFeeHook.t.sol"), false);
 });
 
+test("pure V2 package inspection requires an explicit legacy policy adapter", () => {
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({
+      applicationId: "example-hook",
+      packageFiles: makePackage()
+    }),
+    hasCode("LEGACY_V2_POLICY_ADAPTER_REQUIRED")
+  );
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({
+      applicationId: "example-hook",
+      packageFiles: makePackage(),
+      legacyPolicyAdapter: structuredClone(LOCAL_LEGACY_POLICY_ADAPTER)
+    }),
+    hasCode("LEGACY_V2_POLICY_ADAPTER_REQUIRED")
+  );
+});
+
+function validatePackageFiles(options) {
+  return validatePublicApplicationPackageFiles({
+    ...options,
+    legacyPolicyAdapter: LOCAL_LEGACY_POLICY_ADAPTER
+  });
+}
+
+test("legacy V2 fee grammar stays frozen outside the current one-rule policy", () => {
+  const policy = JSON.parse(TRUSTED_POLICY_BYTES.toString("utf8"));
+  assert.equal(policy.rules.some(({ id }) => id === LOCAL_LEGACY_POLICY_ADAPTER.ruleId), false);
+  assert.equal(LOCAL_LEGACY_POLICY_ADAPTER.ruleId, "FROZEN_LEGACY_V2.FEE_PROJECTION");
+  assert.equal(LOCAL_LEGACY_POLICY_ADAPTER.evidenceId, "legacy-v2-fee-projection");
+  assert.equal(LOCAL_LEGACY_POLICY_ADAPTER.transportEvidenceId, "zz-programmable-fee-submission");
+  assert.deepEqual(LOCAL_LEGACY_POLICY_ADAPTER.fee, {
+    owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    platformHundredthsOfBip: 1000,
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.1.0",
+    swapModes: [
+      "zeroForOne-exactInput",
+      "zeroForOne-exactOutput",
+      "oneForZero-exactInput",
+      "oneForZero-exactOutput"
+    ]
+  });
+
+  const mutatedPolicyAdapter = localLegacyPolicyAdapterWithPolicyMutation((rule) => {
+    rule.parameters.treasury = "0x0000000000000000000000000000000000000001";
+    rule.parameters.hundredthsOfBip = 999;
+  });
+  assert.deepEqual(mutatedPolicyAdapter.fee, LOCAL_LEGACY_POLICY_ADAPTER.fee);
+  assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
+    applicationId: "example-hook",
+    packageFiles: makePackage(),
+    legacyPolicyAdapter: mutatedPolicyAdapter
+  }));
+});
+
+function localLegacyPolicyAdapterWithPolicyMutation(mutate) {
+  const policy = JSON.parse(TRUSTED_POLICY_BYTES.toString("utf8"));
+  mutate(policy.rules[0]);
+  return createHistoricalLegacyV2PolicyAdapterForLocalInspection({
+    policyBytes: Buffer.from(`${canonicalJson(policy)}\n`, "utf8")
+  });
+}
+
 test("trusted package validation rejects legacy and malformed mandatory fee projections", () => {
   const legacy = makePackage({ mutateApplication(application) {
     application.schemaVersion = 1;
     delete application.programmableFee;
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: legacy }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: legacy }),
     hasCode("PUBLIC_APPLICATION_CONTRACT_UNSUPPORTED")
   );
 
   const cases = [
     ["missing projection", (application) => { delete application.programmableFee; }, "OBJECT_NOT_CLOSED"],
     ["wrong rate", (application) => { application.programmableFee.rates.platformHundredthsOfBip = 999; }],
+    ["legacy scalar rates", (application) => {
+      const rates = application.programmableFee.rates;
+      rates.selectedHundredthsOfBip = rates.selectedBuyHundredthsOfBip;
+      delete rates.selectedBuyHundredthsOfBip;
+    }],
+    ["wrong buy derivation", (application) => { application.programmableFee.rates.effectiveBuyHundredthsOfBip += 1; }],
+    ["wrong sell derivation", (application) => { application.programmableFee.rates.projectSellHundredthsOfBip += 1; }],
+    ["partially unresolved buy", (application) => { application.programmableFee.rates.selectedBuyHundredthsOfBip = null; }],
     ["wrong owner", (application) => { application.programmableFee.ownership.owner = "0x0000000000000000000000000000000000000001"; }],
     ["mutable owner", (application) => { application.programmableFee.ownership.immutable = false; }],
     ["delayed claim availability", (application) => { application.programmableFee.ownership.claimAvailability = "scheduled"; }],
@@ -124,7 +201,7 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
   for (const [name, mutate, expectedCode = "PROGRAMMABLE_FEE_PROJECTION_INVALID"] of cases) {
     const files = makePackage({ mutateApplication: mutate });
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       hasCode(expectedCode),
       name
     );
@@ -134,16 +211,16 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
     index.evidence = index.evidence.filter(({ id }) => id !== "zz-programmable-fee-submission");
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: unbound }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: unbound }),
     hasCode("PROGRAMMABLE_FEE_SOURCE_BINDING_MISSING")
   );
 
   const zeroSelected = makePackage({ mutateApplication(application) {
-    application.programmableFee.rates.selectedHundredthsOfBip = 0;
-    application.programmableFee.rates.effectiveHundredthsOfBip = 1000;
-    application.programmableFee.rates.projectHundredthsOfBip = 0;
+    application.programmableFee.rates.selectedBuyHundredthsOfBip = 0;
+    application.programmableFee.rates.effectiveBuyHundredthsOfBip = 1000;
+    application.programmableFee.rates.projectBuyHundredthsOfBip = 0;
   } });
-  assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
+  assert.doesNotThrow(() => validatePackageFiles({
     applicationId: "example-hook",
     packageFiles: zeroSelected
   }));
@@ -151,9 +228,9 @@ test("trusted package validation rejects legacy and malformed mandatory fee proj
 
 test("trusted intake recomputes the fee projection from exact source submission bytes", async (t) => {
   const files = makePackage({ mutateApplication(application) {
-    application.programmableFee.rates.selectedHundredthsOfBip = 40000;
-    application.programmableFee.rates.effectiveHundredthsOfBip = 40000;
-    application.programmableFee.rates.projectHundredthsOfBip = 39000;
+    application.programmableFee.rates.selectedSellHundredthsOfBip = 40000;
+    application.programmableFee.rates.effectiveSellHundredthsOfBip = 40000;
+    application.programmableFee.rates.projectSellHundredthsOfBip = 39000;
   } });
   const fixture = createRevisionPair(t);
   writePackage(fixture.candidate, files);
@@ -298,6 +375,81 @@ test("trusted intake accepts one new application and verifies exact public sourc
   });
   assert.equal(report.evidenceBindings[0].sha256, EVIDENCE_SHA256);
   assert.equal(report.evidenceBindings[0].statusAuthority, "builder-declared-untrusted");
+});
+
+test("unchanged V2 bytes bind the exact trusted policy snapshot without canary or launch authority", async (t) => {
+  const fixture = createRevisionPair(t);
+  const files = makePackage();
+  const bytesBefore = new Map([...files].map(([name, bytes]) => [name, Buffer.from(bytes)]));
+  writePackage(fixture.candidate, files);
+  const candidateCommit = commitAll(fixture.candidate, "add frozen V2 application");
+
+  const report = await verifyPublicHookApplication(inputFor(fixture, candidateCommit));
+
+  assert.deepEqual(report.policyBinding, {
+    schemaVersion: "programmable.trusted-policy-snapshot-binding.v1",
+    repository: "0xprogrammable/submit-launch",
+    numericRepositoryId: "1320171831",
+    baseCommit: fixture.baseCommit,
+    baseTree: git(fixture.base, ["rev-parse", `${fixture.baseCommit}^{tree}`]),
+    path: "policy/launch-policy.v1.json",
+    gitBlobOid: git(fixture.base, ["rev-parse", `${fixture.baseCommit}:policy/launch-policy.v1.json`]),
+    policyId: "programmable-central-launch-policy",
+    policyVersion: "1.2.0",
+    sha256: `sha256:${crypto.createHash("sha256").update(TRUSTED_POLICY_BYTES).digest("hex")}`
+  });
+  assert.equal(Object.hasOwn(report.policyBinding, "profileId"), false);
+  assert.equal(report.policyProfile, "legacy-v2-transport");
+  assert.deepEqual(report.evaluatedRuleIds, ["FROZEN_LEGACY_V2.FEE_PROJECTION"]);
+  assert.deepEqual(report.evaluatedEvidenceIds, ["legacy-v2-fee-projection"]);
+  assert.deepEqual(report.authority, {
+    checkerOnly: true,
+    independentAudit: false,
+    launchAuthorized: false,
+    productionDiscoveryAllowed: false,
+    publicRoutingAllowed: false,
+    realUserFundsAllowed: false,
+    workflowCanaryPassed: false
+  });
+  for (const [name, bytes] of files) assert.deepEqual(bytes, bytesBefore.get(name), name);
+});
+
+test("missing or malformed trusted launch policy system-blocks before V2 candidate validation", async (t) => {
+  for (const [name, mutatePolicy] of [
+    ["missing", (repository) => fs.rmSync(path.join(repository, "policy/launch-policy.v1.json"))],
+    ["malformed", (repository) => writeFile(repository, "policy/launch-policy.v1.json", "{\"not\":\"canonical policy\"}\n")]
+  ]) {
+    await t.test(name, async (t2) => {
+      const fixture = createRevisionPair(t2);
+      mutatePolicy(fixture.base);
+      fixture.baseCommit = commitAll(fixture.base, `${name} trusted policy`);
+      resetClone(fixture);
+      writePackage(fixture.candidate, makePackage());
+      const candidateCommit = commitAll(fixture.candidate, `application against ${name} trusted policy`);
+      await assert.rejects(
+        () => verifyPublicHookApplication(inputFor(fixture, candidateCommit)),
+        (error) => error instanceof PublicIntakeError
+          && error.kind === "system"
+          && error.code === "TRUSTED_LAUNCH_POLICY_INVALID"
+      );
+    });
+  }
+});
+
+test("candidate working-tree policy substitution cannot affect the trusted V2 adapter", async (t) => {
+  const fixture = createRevisionPair(t);
+  writePackage(fixture.candidate, makePackage());
+  const candidateCommit = commitAll(fixture.candidate, "add frozen V2 application");
+  const input = inputFor(fixture, candidateCommit);
+  writeFile(fixture.candidate, "policy/launch-policy.v1.json", "{\"candidate\":\"substitution\"}\n");
+
+  const report = await verifyPublicHookApplication(input);
+
+  assert.equal(report.policyBinding.baseCommit, fixture.baseCommit);
+  assert.equal(
+    report.policyBinding.sha256,
+    `sha256:${crypto.createHash("sha256").update(TRUSTED_POLICY_BYTES).digest("hex")}`
+  );
 });
 
 test("trusted intake independently recomputes an exact companion v2 receipt", async (t) => {
@@ -795,7 +947,7 @@ test("pure package validation stays structural and rejects malformed manifest lo
     application.builder.githubLogin = "alice/forged";
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles }),
     hasCode("STRING_PATTERN_INVALID")
   );
 });
@@ -847,20 +999,29 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "LICENSE",
+    ".programmable/active-contract.json",
+    "policy/launch-policy.v1.json",
     "README.md",
     "SECURITY.md",
     "SUPPORT.md",
+    "acceptance/schemas/launch-entitlement-envelope-v1.schema.json",
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary-submissions/README.md",
     "docs/builder/PUBLIC_GITHUB_PR_BETA.md",
     "docs/builder/intake-status.json",
     "docs/DISCOVERY_CONTRACT.md",
     "registry/schema/project.schema.json",
-    "review/policy.v1.json",
+    "review/launch-policy-review-core.mjs",
+    "scripts/acceptance-entitlement-core.mjs",
+    "scripts/compile-launch-entitlement.mjs",
     "scripts/test/schema-validator/package.json",
     "scripts/test/verify-public-hook-application-maintained.test.mjs",
     "scripts/test/verify-public-hook-application-workflow.test.mjs",
     "scripts/generate-registry.mjs",
     "scripts/registry-core.mjs",
     "scripts/verify-public-hook-application-core.mjs",
+    "scripts/workflow-canary-core.mjs",
+    "scripts/verify-workflow-canary.mjs",
     "test/registry.test.mjs",
     "vendor/programmable-v4-hook-builder/SKILL.md",
     "vendor/receipt.json"
@@ -870,6 +1031,100 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
   const candidateCommit = commitAll(fixture.candidate, "registry maintenance change");
   const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
   assert.equal(result.mode, "registry-maintenance");
+});
+
+test("all exact central policy Canary and release scripts are maintenance while adjacent paths stay closed", (t) => {
+  const exactPaths = [
+    ".programmable/active-contract.json",
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary/schemas/workflow-canary-result-v1.schema.json",
+    "scripts/canary-eligibility-core.mjs",
+    "scripts/compile-canary-eligibility.mjs",
+    "scripts/generate-launch-policy-artifacts.mjs",
+    "scripts/launch-policy-authority-ownership.mjs",
+    "scripts/launch-policy-core.mjs",
+    "scripts/launch-policy-handlers.mjs",
+    "scripts/launch-policy.mjs",
+    "scripts/release-version-core.mjs",
+    "scripts/verify-workflow-canary.mjs",
+    "scripts/workflow-canary-core.mjs"
+  ];
+  for (const relativePath of exactPaths) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, `maintenance fixture for ${relativePath}\n`);
+    const candidateCommit = commitAll(fixture.candidate, `maintain ${relativePath}`);
+    assert.equal(
+      classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)).mode,
+      "registry-maintenance",
+      relativePath
+    );
+  }
+
+  for (const relativePath of [
+    ".programmable/private-policy.json",
+    "canary/schemas/private-canary.schema.json",
+    "policy/private-admission.json",
+    "scripts/launch-policy-private-gate.mjs",
+    "scripts/release-version-helper.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, "unreviewed maintenance path\n");
+    const candidateCommit = commitAll(fixture.candidate, `reject ${relativePath}`);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED"),
+      relativePath
+    );
+  }
+});
+
+test("bounded Registry maintenance accepts 700 changed files and rejects 701", async (t) => {
+  for (const [changedFileCount, expectedMode, expectedCode] of [
+    [700, "registry-maintenance", null],
+    [701, null, "TOO_MANY_CHANGED_FILES"]
+  ]) {
+    await t.test(String(changedFileCount), (t2) => {
+      const fixture = createRevisionPair(t2);
+      for (let index = 0; index < changedFileCount; index += 1) {
+        writeFile(
+          fixture.candidate,
+          `vendor/programmable-v4-hook-builder/capacity-fixture/file-${String(index).padStart(3, "0")}.txt`,
+          "bounded maintenance fixture\n"
+        );
+      }
+      const candidateCommit = commitAll(fixture.candidate, `${changedFileCount}-file registry maintenance change`);
+      const classify = () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+      if (expectedCode === null) {
+        const result = classify();
+        assert.equal(result.mode, expectedMode);
+        assert.equal(result.changes.length, changedFileCount);
+      } else {
+        assert.throws(classify, hasCode(expectedCode));
+      }
+    });
+  }
+});
+
+test("expanded maintenance capacity preserves the exact six-file application closure", async (t) => {
+  await t.test("six files", (t2) => {
+    const fixture = createRevisionPair(t2);
+    writePackage(fixture.candidate, makePackage());
+    const candidateCommit = commitAll(fixture.candidate, "closed six-file application");
+    const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+    assert.equal(result.mode, "application");
+    assert.equal(result.changes.length, PUBLIC_APPLICATION_FILES.length);
+  });
+
+  await t.test("seventh file", (t2) => {
+    const fixture = createRevisionPair(t2);
+    writePackage(fixture.candidate, makePackage());
+    writeFile(fixture.candidate, "submissions/example-hook/extra.json", "{}\n");
+    const candidateCommit = commitAll(fixture.candidate, "application with a seventh file");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED")
+    );
+  });
 });
 
 test("the exact versioned vendor receipt is trusted Registry maintenance", (t) => {
@@ -1080,6 +1335,30 @@ test("an application mixed with a workflow or any other central-repository file 
   );
 });
 
+test("application or canary data mixed with central policy maintenance never enters applicant validation", async (t) => {
+  await t.test("V2 application plus policy", (t2) => {
+    const fixture = createRevisionPair(t2);
+    writePackage(fixture.candidate, makePackage());
+    writeFile(fixture.candidate, "policy/launch-policy.v1.json", `${TRUSTED_POLICY_BYTES.toString("utf8")} `);
+    const candidateCommit = commitAll(fixture.candidate, "mix V2 application with policy");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("APPLICATION_PATH_INVALID")
+    );
+  });
+
+  await t.test("canary namespace plus active contract", (t2) => {
+    const fixture = createRevisionPair(t2);
+    writeFile(fixture.candidate, "canary-submissions/example-hook/application.json", "{}\n");
+    writeFile(fixture.candidate, ".programmable/active-contract.json", "{}\n");
+    const candidateCommit = commitAll(fixture.candidate, "mix canary data with active contract");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("APPLICATION_PATH_INVALID")
+    );
+  });
+});
+
 test("any submissions change mixed with registry maintenance is rejected", (t) => {
   const fixture = createRevisionPair(t);
   writePackage(fixture.candidate, makePackage());
@@ -1121,27 +1400,81 @@ test("registry maintenance cannot be mixed with unrelated central-repository cha
   );
 });
 
-test("unsafe registry-maintenance Git entries are rejected before candidate code can run", (t) => {
-  const fixture = createRevisionPair(t);
-  const skillPath = path.join(fixture.candidate, "vendor/programmable-v4-hook-builder/SKILL.md");
-  fs.mkdirSync(path.dirname(skillPath), { recursive: true });
-  fs.symlinkSync("../../../README.md", skillPath);
-  const candidateCommit = commitAll(fixture.candidate, "symlinked maintenance file");
-  assert.throws(
-    () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
-    hasCode("LINKED_CONTENT_FORBIDDEN")
-  );
+test("only the exact Builder vendor path permits executable maintenance blobs", async (t) => {
+  await t.test("exact vendor path", (t2) => {
+    const fixture = createRevisionPair(t2);
+    const marker = path.join(fixture.root, "candidate-vendor-script-executed");
+    const executablePath = "vendor/programmable-v4-hook-builder/scripts/candidate-tool.mjs";
+    writeFile(
+      fixture.candidate,
+      executablePath,
+      `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(marker)}, "executed");\n`
+    );
+    fs.chmodSync(path.join(fixture.candidate, executablePath), 0o755);
+    const candidateCommit = commitAll(fixture.candidate, "executable exact-vendor maintenance blob");
+    const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+    assert.equal(result.mode, "registry-maintenance");
+    assert.equal(fs.existsSync(marker), false);
+  });
+
+  await t.test("vendor sibling", (t2) => {
+    const fixture = createRevisionPair(t2);
+    const executablePath = "vendor/programmable-v4-hook-builder-copy/scripts/candidate-tool.mjs";
+    writeFile(fixture.candidate, executablePath, "export {};\n");
+    fs.chmodSync(path.join(fixture.candidate, executablePath), 0o755);
+    const candidateCommit = commitAll(fixture.candidate, "executable vendor-sibling blob");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED")
+    );
+  });
+
+  for (const [name, executablePath] of [
+    ["root maintenance file", "README.md"],
+    ["Registry file", "registry/schema/candidate.json"],
+    ["documentation file", "docs/candidate.md"],
+    ["trusted script file", "scripts/verify-repository.mjs"]
+  ]) {
+    await t.test(name, (t2) => {
+      const fixture = createRevisionPair(t2);
+      writeFile(fixture.candidate, executablePath, "executable non-vendor maintenance blob\n");
+      fs.chmodSync(path.join(fixture.candidate, executablePath), 0o755);
+      const candidateCommit = commitAll(fixture.candidate, `executable ${name}`);
+      assert.throws(
+        () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+        hasCode("FILE_MODE_FORBIDDEN")
+      );
+    });
+  }
 });
 
-test("executable registry-maintenance Git entries are rejected deterministically", (t) => {
-  const fixture = createRevisionPair(t);
-  writeFile(fixture.candidate, "docs/builder/PUBLIC_GITHUB_PR_BETA.md", "executable documentation\n");
-  fs.chmodSync(path.join(fixture.candidate, "docs/builder/PUBLIC_GITHUB_PR_BETA.md"), 0o755);
-  const candidateCommit = commitAll(fixture.candidate, "executable maintenance file");
-  assert.throws(
-    () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
-    hasCode("FILE_MODE_FORBIDDEN")
-  );
+test("exact Builder vendor symlinks and gitlinks remain forbidden", async (t) => {
+  await t.test("symlink", (t2) => {
+    const fixture = createRevisionPair(t2);
+    const skillPath = path.join(fixture.candidate, "vendor/programmable-v4-hook-builder/SKILL.md");
+    fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+    fs.symlinkSync("../../../README.md", skillPath);
+    const candidateCommit = commitAll(fixture.candidate, "symlinked vendor maintenance file");
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("LINKED_CONTENT_FORBIDDEN")
+    );
+  });
+
+  await t.test("gitlink", (t2) => {
+    const fixture = createRevisionPair(t2);
+    git(fixture.candidate, [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `160000,${fixture.baseCommit},vendor/programmable-v4-hook-builder/linked-repository`
+    ]);
+    const candidateCommit = git(fixture.candidate, ["commit", "-m", "gitlinked vendor maintenance path"]);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("LINKED_CONTENT_FORBIDDEN")
+    );
+  });
 });
 
 test("candidate scripts are rejected as unexpected data and never executed", async (t) => {
@@ -1231,7 +1564,7 @@ test("source paths cannot escape the external public repository", () => {
     application.source.primary.sourcePaths = ["../private-key"];
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("SOURCE_CONTRACT_INVALID")
   );
 });
@@ -1246,7 +1579,7 @@ test("trusted package paths accept NFC UTF-8 and spaces through 1024 bytes but r
     );
     application.source.primary.sourcePaths.sort(compareUtf8);
   } });
-  assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
+  assert.doesNotThrow(() => validatePackageFiles({
     applicationId: "example-hook",
     packageFiles: accepted
   }));
@@ -1262,7 +1595,7 @@ test("trusted package paths accept NFC UTF-8 and spaces through 1024 bytes but r
       application.source.primary.sourcePaths = [invalidPath];
     } });
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       (error) => error instanceof PublicIntakeError
         && ["SOURCE_CONTRACT_INVALID", "JSON_TEXT_UNSAFE"].includes(error.code)
     );
@@ -1273,7 +1606,7 @@ test("finding paths share the NFC UTF-8 1024-byte source-path contract", () => {
   const exactBound = `z/${"x".repeat(1_022)}`;
   const accepted = makePackage();
   setFindingPath(accepted, exactBound);
-  assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
+  assert.doesNotThrow(() => validatePackageFiles({
     applicationId: "example-hook",
     packageFiles: accepted
   }));
@@ -1282,7 +1615,7 @@ test("finding paths share the NFC UTF-8 1024-byte source-path contract", () => {
     const files = makePackage();
     setFindingPath(files, invalidPath);
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       (error) => error instanceof PublicIntakeError
         && ["FINDING_PATH_INVALID", "JSON_TEXT_UNSAFE"].includes(error.code)
     );
@@ -1294,7 +1627,7 @@ test("closed JSON rejects additional manifest properties even when canonical", (
     application.execute = "candidate-script.js";
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("OBJECT_NOT_CLOSED")
   );
 });
@@ -1308,7 +1641,7 @@ test("the trusted core requires a proposal or prototype stage", () => {
       }
     });
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       hasCode(stage === undefined ? "OBJECT_NOT_CLOSED" : "APPLICATION_STAGE_INVALID")
     );
   }
@@ -1316,7 +1649,7 @@ test("the trusted core requires a proposal or prototype stage", () => {
 
 test("prototype-ready preserves prior error priority and valid public claims require trusted reconstruction", () => {
   assert.throws(
-    () => validatePublicApplicationPackageFiles({
+    () => validatePackageFiles({
       applicationId: "example-hook",
       packageFiles: makePackage({ stage: "proposal", compatibilityResult: "prototype-ready" })
     }),
@@ -1324,7 +1657,7 @@ test("prototype-ready preserves prior error priority and valid public claims req
   );
 
   assert.throws(
-    () => validatePublicApplicationPackageFiles({
+    () => validatePackageFiles({
       applicationId: "example-hook",
       packageFiles: makePackage({ stage: "prototype", compatibilityResult: "prototype-ready" })
     }),
@@ -1333,7 +1666,7 @@ test("prototype-ready preserves prior error priority and valid public claims req
 
   const actionPrimary = { ...PRIMARY, githubActionsRunIds: ["123"] };
   assert.throws(
-    () => validatePublicApplicationPackageFiles({
+    () => validatePackageFiles({
       applicationId: "example-hook",
       packageFiles: makePackage({
         stage: "prototype",
@@ -1360,7 +1693,7 @@ test("prototype-ready preserves prior error priority and valid public claims req
   ];
   for (const [stage, compatibilityResult, evidenceStatus, findings] of cases) {
     assert.doesNotThrow(
-      () => validatePublicApplicationPackageFiles({
+      () => validatePackageFiles({
         applicationId: "example-hook",
         packageFiles: makePackage({ stage, compatibilityResult, evidenceStatus, findings })
       }),
@@ -1382,7 +1715,7 @@ test("compatibility result, findings, and evidence statuses must agree", () => {
   ];
   for (const [name, options] of cases) {
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: makePackage(options) }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: makePackage(options) }),
       hasCode("COMPATIBILITY_EVIDENCE_MISMATCH"),
       name
     );
@@ -1402,7 +1735,7 @@ test("rebinding hashes cannot hide unsupported claims in any of the six public f
     const files = makePackage();
     injectUnsupportedClaim(files, fileName, claim);
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       hasCode("UNSUPPORTED_PUBLIC_CLAIM"),
       fileName
     );
@@ -1415,7 +1748,7 @@ test("true declarations do not substitute for scanning actual public claims", ()
   const application = JSON.parse(files.get("application.json").toString("utf8"));
   assert.ok(Object.values(application.declarations).every((value) => value === true));
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("UNSUPPORTED_PUBLIC_CLAIM")
   );
 });
@@ -1431,7 +1764,7 @@ test("honest negations and evidence-status wording remain acceptable public copy
     }
   });
   assert.doesNotThrow(() =>
-    validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files })
+    validatePackageFiles({ applicationId: "example-hook", packageFiles: files })
   );
 });
 
@@ -1452,7 +1785,7 @@ test("claim scanning ignores machine identifiers, repository names, paths, conta
     }
   });
   assert.doesNotThrow(() =>
-    validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files })
+    validatePackageFiles({ applicationId: "example-hook", packageFiles: files })
   );
 });
 
@@ -1463,7 +1796,7 @@ test("the trusted core requires at least one evidence record", () => {
   files.set("evidence-index.json", jsonBytes(evidence));
   rebindApplicationReviewPackage(files);
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("EVIDENCE_COUNT_INVALID")
   );
 });
@@ -1479,7 +1812,7 @@ test("evidence is bound to an exact declared blob or Actions run", () => {
     const files = makePackage();
     mutateFirstEvidence(files, (record) => Object.assign(record, { url, sha256 }));
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       hasCode(code),
       name
     );
@@ -1492,11 +1825,11 @@ test("evidence is bound to an exact declared blob or Actions run", () => {
     sha256: null
   }));
   assert.doesNotThrow(() =>
-    validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: actionFiles })
+    validatePackageFiles({ applicationId: "example-hook", packageFiles: actionFiles })
   );
   mutateFirstEvidence(actionFiles, (record) => { record.sha256 = "sha256:" + "e".repeat(64); });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: actionFiles }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: actionFiles }),
     hasCode("EVIDENCE_ACTION_HASH_INVALID")
   );
 
@@ -1506,7 +1839,7 @@ test("evidence is bound to an exact declared blob or Actions run", () => {
     }
   });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: duplicateTarget }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: duplicateTarget }),
     hasCode("EVIDENCE_TARGET_DUPLICATE")
   );
 });
@@ -1788,7 +2121,7 @@ test("per-file and aggregate package byte ceilings are enforced by the pure core
   const files = makePackage();
   const totalBytes = [...files.values()].reduce((total, bytes) => total + bytes.length, 0);
   assert.throws(
-    () => validatePublicApplicationPackageFiles({
+    () => validatePackageFiles({
       applicationId: "example-hook",
       packageFiles: files,
       limits: { maximumPackageBytes: totalBytes - 1 }
@@ -1796,7 +2129,7 @@ test("per-file and aggregate package byte ceilings are enforced by the pure core
     hasCode("APPLICATION_PACKAGE_TOO_LARGE")
   );
   assert.throws(
-    () => validatePublicApplicationPackageFiles({
+    () => validatePackageFiles({
       applicationId: "example-hook",
       packageFiles: files,
       limits: { maximumFileBytes: { "PROPOSAL.md": files.get("PROPOSAL.md").length - 1 } }
@@ -1810,7 +2143,7 @@ test("the frozen source contract rejects noncanonical URI casing and array order
     application.source.primary.repositoryUri = "https://github.com/Alice/example-hook";
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: uppercase }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: uppercase }),
     hasCode("SOURCE_CONTRACT_INVALID")
   );
 
@@ -1818,7 +2151,7 @@ test("the frozen source contract rejects noncanonical URI casing and array order
     application.source.primary.sourcePaths = ["test", "src"];
   } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: unsorted }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: unsorted }),
     hasCode("SOURCE_CONTRACT_ORDER_INVALID")
   );
 });
@@ -1827,7 +2160,7 @@ test("review files are cryptographically bound to application.json", () => {
   const files = makePackage();
   files.set("THREAT_MODEL.md", Buffer.from("# Threat model\nChanged after the manifest hash was created.\n"));
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("REVIEW_FILE_BINDING_MISMATCH")
   );
 });
@@ -1837,7 +2170,7 @@ test("noncanonical JSON and duplicate-key spellings cannot pass canonical closur
   const parsed = JSON.parse(files.get("evidence-index.json").toString("utf8"));
   files.set("evidence-index.json", Buffer.from(`${JSON.stringify(parsed, null, 2)}\n`));
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("JSON_NOT_CANONICAL")
   );
 });
@@ -1861,7 +2194,7 @@ test("active markdown, embedded images, unsafe schemes, controls, and bidi overr
     const malicious = `${substantivePrefix}${maliciousSuffix}`;
     const files = makePackage({ markdown: { "PROPOSAL.md": malicious } });
     assert.throws(
-      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
       (error) => error instanceof PublicIntakeError && ["MARKDOWN_ACTIVE_CONTENT", "MARKDOWN_EMBEDDED_CONTENT", "MARKDOWN_TEXT_UNSAFE"].includes(error.code)
     );
   }
@@ -1870,7 +2203,7 @@ test("active markdown, embedded images, unsafe schemes, controls, and bidi overr
 test("review markdown cannot be an empty heading shell", () => {
   const files = makePackage({ markdown: { "PROPOSAL.md": "# Proposal\nplaceholder\n" } });
   assert.throws(
-    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+    () => validatePackageFiles({ applicationId: "example-hook", packageFiles: files }),
     hasCode("MARKDOWN_CONTENT_INCOMPLETE")
   );
 });
@@ -2227,7 +2560,7 @@ function makeCompanionClosureFixture() {
           {
             uses: `actions/setup-node@${"2".repeat(40)}`,
             with: {
-              "node-version": "22.17.0",
+              "node-version": "24.14.0",
               cache: "npm",
               "cache-dependency-path": "package-lock.json"
             }
@@ -2428,12 +2761,15 @@ function makeProgrammableFee({
     poolScope: "canonical-launch-pool-key",
     rates: {
       unit: "hundredths-of-bip",
-      selectedHundredthsOfBip: 30000,
+      selectedBuyHundredthsOfBip: 30000,
+      selectedSellHundredthsOfBip: 20000,
       minimumEffectiveHundredthsOfBip: 1000,
-      effectiveHundredthsOfBip: 30000,
+      effectiveBuyHundredthsOfBip: 30000,
+      effectiveSellHundredthsOfBip: 20000,
       platformHundredthsOfBip: 1000,
-      projectHundredthsOfBip: 29000,
-      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      projectBuyHundredthsOfBip: 29000,
+      projectSellHundredthsOfBip: 19000,
+      formula: "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
       lpFeeExcluded: true
     },
     basis: {
@@ -2496,7 +2832,7 @@ function sourceSubmissionBytes(applicationId, programmableFee, builderTemplate =
     model: { id: applicationId },
     programmableFee,
     schemaVersion: 1,
-    standardVersion: "1.5.0"
+    standardVersion: "1.6.0"
   })}\n`, "utf8");
 }
 
@@ -2718,7 +3054,9 @@ function createRevisionPair(t) {
   git(base, ["init", "-b", "main"]);
   git(base, ["config", "user.name", "Trusted Test"]);
   git(base, ["config", "user.email", "trusted@example.invalid"]);
+  git(base, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
   writeFile(base, "README.md", "trusted base\n");
+  writeFile(base, "policy/launch-policy.v1.json", TRUSTED_POLICY_BYTES);
   setIntakeStatus(base, "open");
   const baseCommit = commitAll(base, "trusted base");
   cloneRepository(base, candidate);

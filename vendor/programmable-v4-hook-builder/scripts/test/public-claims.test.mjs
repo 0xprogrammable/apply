@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { extractPublicClaimText, findUnsupportedPublicClaims } from "../public-claims-core.mjs";
+import { analyzePublicClaimSource, extractPublicClaimText, findUnsupportedPublicClaims } from "../public-claims-core.mjs";
 import { inspectPublicMetadataText, publicIdentityKey } from "../metadata-core.mjs";
 
 test("unrelated negation does not hide an unsupported provider claim", () => {
@@ -225,6 +228,47 @@ test("HTML and component extraction checks visible copy and accessible labels", 
   assert.match(visible, /Production-ready/);
 });
 
+test("HTML raw-text filtering handles browser-tolerated closing tags without exposing hidden code", () => {
+  const html = `
+    <main>İstanbul hosts a local prototype.</main>
+    <ScRiPt data-label=">">const hidden = "This hook is approved by Uniswap.";</sCrIpT\t\n ignored>
+    <style>.fixture::after { content: "This hook is unruggable."; }</style\r data-extra>
+  `;
+  const visible = extractPublicClaimText(html, ".html");
+
+  assert.match(visible, /İstanbul hosts a local prototype/u);
+  assert.doesNotMatch(visible, /approved by Uniswap/u);
+  assert.doesNotMatch(visible, /unruggable/u);
+  assert.deepEqual(findUnsupportedPublicClaims(visible), []);
+});
+
+test("component script analysis preserves code behind browser-tolerated closing tags", () => {
+  for (const extension of [".vue", ".svelte"]) {
+    const analysis = analyzePublicClaimSource(`
+      <script lang="ts">export const badge = "This hook is approved by Uniswap.";</script\t\n ignored>
+      <main>Prototype only.</main>
+    `, extension);
+
+    assert.equal(analysis.analysisComplete, true, extension);
+    assert.deepEqual(findUnsupportedPublicClaims(analysis.text), [
+      "Uniswap verification, approval, certification or official status"
+    ], extension);
+  }
+});
+
+test("HTML entity extraction decodes exactly once", () => {
+  const visible = extractPublicClaimText(`
+    <p title="&amp;lt;script&amp;gt;">&amp;quot;not approved&amp;quot; &lt;prototype&gt; &#39;local&#39;</p>
+  `, ".html");
+
+  assert.match(visible, /&lt;script&gt;/u);
+  assert.match(visible, /&quot;not approved&quot;/u);
+  assert.match(visible, /<prototype>/u);
+  assert.match(visible, /'local'/u);
+  assert.equal(visible.toLowerCase().includes("<script>"), false);
+  assert.doesNotMatch(visible, /"not approved"/u);
+});
+
 test("declared JSON and YAML locale values expose public claims without treating keys or comments as copy", () => {
   const jsonText = extractPublicClaimText(JSON.stringify({
     "This hook is unruggable.": "Internal translation key only",
@@ -304,4 +348,124 @@ test("escaped JavaScript strings cannot hide public claims", () => {
   assert.deepEqual(findUnsupportedPublicClaims(publicText), [
     "Uniswap verification, approval, certification or official status"
   ]);
+});
+
+test("JavaScript line continuations cannot split a forbidden public claim", () => {
+  for (const lineTerminator of ["\n", "\r", "\r\n", "\u2028", "\u2029"]) {
+    const source = `export const copy = "This hook is un\\${lineTerminator}ruggable.";`;
+    const analysis = analyzePublicClaimSource(source, ".js");
+
+    assert.equal(analysis.analysisComplete, true, JSON.stringify(lineTerminator));
+    assert.match(analysis.text, /This hook is unruggable\./u, JSON.stringify(lineTerminator));
+    assert.deepEqual(
+      findUnsupportedPublicClaims(analysis.text),
+      ["Safety, rug-free or risk-free status"],
+      JSON.stringify(lineTerminator)
+    );
+  }
+});
+
+test("literal-only JavaScript composition cannot split a forbidden public claim", () => {
+  const cases = [
+    `export const badge = ["This hook is un", "ruggable."].join("");`,
+    `export const badge = "This hook is un" + "ruggable.";`,
+    "export const badge = `This hook is unruggable.`;",
+    "export const badge = `This hook is ${[\"un\", \"ruggable\"].join(\"\")}.`;",
+    `export const badge = (["This hook ", "is "].join("") + ("approved by " + "Uniswap."));`
+  ];
+
+  for (const source of cases) {
+    const publicText = extractPublicClaimText(source, ".tsx");
+    assert.ok(findUnsupportedPublicClaims(publicText).length > 0, source);
+  }
+});
+
+test("oversized static joins are bounded before materialization and return an incomplete analysis", () => {
+  const items = Array.from({ length: 27_000 }, () => `""`).join(",");
+  const separator = "x".repeat(20_000);
+  const source = `export const copy = [${items}].join(${JSON.stringify(separator)});`;
+
+  const analysis = analyzePublicClaimSource(source, ".js");
+
+  assert.equal(analysis.analysisComplete, false);
+  assert.deepEqual(analysis.analysisIssues, ["STATIC_JAVASCRIPT_RESOURCE_LIMIT"]);
+  assert.equal(analysis.text, separator);
+});
+
+test("static JavaScript token overflow is explicit and cannot hide a later composed claim", () => {
+  const source = `${";".repeat(100_001)}export const copy = ["This hook is un", "ruggable."].join("");`;
+
+  const analysis = analyzePublicClaimSource(source, ".js");
+
+  assert.equal(analysis.analysisComplete, false);
+  assert.deepEqual(analysis.analysisIssues, ["STATIC_JAVASCRIPT_RESOURCE_LIMIT"]);
+  assert.deepEqual(findUnsupportedPublicClaims(analysis.text), []);
+});
+
+test("static JavaScript evaluator failures return an explicit incomplete result instead of throwing", () => {
+  let analysis;
+  assert.doesNotThrow(() => {
+    analysis = analyzePublicClaimSource(`export const matcher = /unterminated`, ".js");
+  });
+  assert.equal(analysis.analysisComplete, false);
+  assert.deepEqual(analysis.analysisIssues, ["STATIC_JAVASCRIPT_ANALYSIS_FAILED"]);
+});
+
+test("only the selected branch of an exact boolean-literal conditional contributes public claim text", () => {
+  const forbiddenComposition = `["This hook is un", "ruggable."].join("")`;
+  const forbiddenLiteral = `"This hook is unruggable."`;
+  const cases = [
+    [`false ? ${forbiddenComposition} : "Prototype only."`, false],
+    [`true ? "Prototype only." : ${forbiddenComposition}`, false],
+    [`true ? ${forbiddenComposition} : "Prototype only."`, true],
+    [`false ? "Prototype only." : ${forbiddenComposition}`, true],
+    [`enabled ? "Prototype only." : ${forbiddenComposition}`, true],
+    [`false ? ${forbiddenLiteral} : "Prototype only."`, false],
+    [`true ? "Prototype only." : ${forbiddenLiteral}`, false],
+    [`true ? ${forbiddenLiteral} : "Prototype only."`, true],
+    [`false ? "Prototype only." : ${forbiddenLiteral}`, true],
+    [`enabled ? "Prototype only." : ${forbiddenLiteral}`, true]
+  ];
+
+  for (const [expression, forbidden] of cases) {
+    const analysis = analyzePublicClaimSource(`export const copy = ${expression};`, ".js");
+    assert.equal(analysis.analysisComplete, true, expression);
+    assert.equal(findUnsupportedPublicClaims(analysis.text).length > 0, forbidden, expression);
+  }
+});
+
+test("static composition preserves negative disclosures and ignores non-final or regex lookalikes", () => {
+  for (const source of [
+    `export const status = ["This hook is not ", "audited."].join("");`,
+    `export const label = ["Nebula", "Route"].join("");`,
+    `export const transformed = ["This hook is un", "ruggable."].join("").replace("un", "");`,
+    String.raw`export const fixture = /["This hook is un","ruggable."].join\(""\)/;`
+  ]) {
+    const publicText = extractPublicClaimText(source, ".tsx");
+    assert.deepEqual(findUnsupportedPublicClaims(publicText), [], source);
+  }
+});
+
+test("static composition analysis does not execute candidate code, read secrets, or write files", (t) => {
+  const environmentName = `PROGRAMMABLE_PUBLIC_CLAIMS_SECRET_${process.pid}`;
+  const secret = "private-runtime-value-that-must-not-be-read";
+  const marker = path.join(os.tmpdir(), `programmable-public-claims-no-write-${process.pid}-${Date.now()}`);
+  process.env[environmentName] = secret;
+  t.after(() => {
+    delete process.env[environmentName];
+    fs.rmSync(marker, { force: true });
+  });
+
+  const source = `
+    const runtimeSecret = process.env[${JSON.stringify(environmentName)}];
+    globalThis.require?.("node:fs").writeFileSync(${JSON.stringify(marker)}, runtimeSecret);
+    export const badge = ["This hook is un", "ruggable."].join("");
+  `;
+  const publicText = extractPublicClaimText(source, ".tsx");
+  const findings = findUnsupportedPublicClaims(publicText);
+
+  assert.deepEqual(findings, ["Safety, rug-free or risk-free status"]);
+  assert.equal(publicText.includes(secret), false);
+  assert.equal(JSON.stringify(findings).includes(secret), false);
+  assert.equal(fs.existsSync(marker), false);
 });
