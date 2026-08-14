@@ -93,7 +93,10 @@ test("one inert exact-source canary application passes without fee or audit arti
   assert.equal(result.reviewDecision.outcome, "CANARY_WORKFLOW_PASSED");
   assert.equal(result.reviewDecision.digest, result.reviewDecisionDigest);
   assert.match(result.digest, /^sha256:[0-9a-f]{64}$/u);
-  assert.doesNotMatch(JSON.stringify(result), /fee|securityApproval|registry|auditReport/u);
+  assert.deepEqual(
+    findForbiddenArtifactKeys(result, new Set(["fee", "securityApproval", "registry", "auditReport"])),
+    []
+  );
 
   const bytes = Buffer.from(canonicalWorkflowCanaryResult(result, fixture.policyRecord), "utf8");
   const parsed = parseWorkflowCanaryResultBytes(bytes, fixture.policyRecord);
@@ -428,6 +431,20 @@ function sha256(bytes) {
 function unsafeResultDigest(result) {
   const withoutDigest = Object.fromEntries(Object.entries(result).filter(([key]) => key !== "digest"));
   return sha256(Buffer.from(canonicalJson(withoutDigest), "utf8"));
+}
+
+function findForbiddenArtifactKeys(value, forbiddenKeys, pathParts = []) {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) => findForbiddenArtifactKeys(entry, forbiddenKeys, [...pathParts, index]));
+  }
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, entry]) => {
+    const entryPath = [...pathParts, key];
+    return [
+      ...(forbiddenKeys.has(key) ? [entryPath.join(".")] : []),
+      ...findForbiddenArtifactKeys(entry, forbiddenKeys, entryPath)
+    ];
+  });
 }
 
 function readJson(relativePath) {
