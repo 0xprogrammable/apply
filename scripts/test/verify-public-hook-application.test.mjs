@@ -49,6 +49,28 @@ const BUILDER_USER_ID = "9007199254740993";
 const PULL_REQUEST_NUMBER = "7";
 const EVIDENCE_BYTES = Buffer.from("exact builder-owned compatibility evidence for the declared source revision\n", "utf8");
 const EVIDENCE_SHA256 = `sha256:${crypto.createHash("sha256").update(EVIDENCE_BYTES).digest("hex")}`;
+const CENTRAL_POLICY_V1_5_EXACT_MAINTENANCE_FILES = Object.freeze([
+  ".programmable/active-contract.json",
+  ".superpowers/sdd/2026-08-13-central-launch-policy/task-6-report.md",
+  "canary-submissions/README.md",
+  "canary/schemas/workflow-canary-application-v1.schema.json",
+  "canary/schemas/workflow-canary-result-v1.schema.json",
+  "policy/launch-policy-authority-ownership.v1.json",
+  "policy/launch-policy.v1.json",
+  "policy/schemas/launch-policy-authority-ownership.v1.schema.json",
+  "policy/schemas/launch-policy-binding.v1.schema.json",
+  "policy/schemas/launch-policy.v1.schema.json",
+  "scripts/canary-eligibility-core.mjs",
+  "scripts/compile-canary-eligibility.mjs",
+  "scripts/generate-launch-policy-artifacts.mjs",
+  "scripts/launch-policy-authority-ownership.mjs",
+  "scripts/launch-policy-core.mjs",
+  "scripts/launch-policy-handlers.mjs",
+  "scripts/launch-policy.mjs",
+  "scripts/release-version-core.mjs",
+  "scripts/verify-workflow-canary.mjs",
+  "scripts/workflow-canary-core.mjs"
+]);
 
 test("the frozen six-file package and public schema identity are exported", () => {
   assert.equal(VALIDATOR_VERSION, "2.0.0");
@@ -883,6 +905,58 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
   assert.equal(result.mode, "registry-maintenance");
 });
 
+test("the protected-base bootstrap admits the exact central-policy v1.5 maintenance files", (t) => {
+  const fixture = createRevisionPair(t);
+  for (const relativePath of CENTRAL_POLICY_V1_5_EXACT_MAINTENANCE_FILES) {
+    writeFile(fixture.candidate, relativePath, `central-policy v1.5 maintenance fixture for ${relativePath}\n`);
+  }
+  const candidateCommit = commitAll(fixture.candidate, "central-policy v1.5 maintenance change");
+  const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+  assert.equal(result.mode, "registry-maintenance");
+  assert.deepEqual(
+    result.changes.map(({ path: relativePath }) => relativePath),
+    [...CENTRAL_POLICY_V1_5_EXACT_MAINTENANCE_FILES].sort(compareUtf8)
+  );
+});
+
+test("central-policy maintenance allowlists exact paths and rejects nearby unknown files", async (t) => {
+  for (const relativePath of [
+    ".programmable/active-contract.json.bak",
+    ".superpowers/sdd/2026-08-13-central-launch-policy/task-7-report.md",
+    "canary-submissions/example-hook/application.json",
+    "canary/schemas/workflow-canary-result-v2.schema.json",
+    "policy/launch-policy.v2.json",
+    "policy/schemas/launch-policy-extra.v1.schema.json",
+    "scripts/canary-eligibility-helper.mjs",
+    "scripts/launch-policy-debug.mjs",
+    "scripts/release-version-helper.mjs"
+  ]) {
+    await t.test(relativePath, (t2) => {
+      const fixture = createRevisionPair(t2);
+      writeFile(fixture.candidate, relativePath, "unknown central-policy neighbor\n");
+      const candidateCommit = commitAll(fixture.candidate, `unknown central-policy path ${relativePath}`);
+      assert.throws(
+        () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+        hasCode("CHANGED_PATH_NOT_ALLOWED")
+      );
+    });
+  }
+});
+
+test("central-policy maintenance scripts are classified without executing candidate code", (t) => {
+  const fixture = createRevisionPair(t);
+  const marker = path.join(fixture.root, "candidate-central-policy-script-executed");
+  writeFile(
+    fixture.candidate,
+    "scripts/launch-policy-core.mjs",
+    `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(marker)}, "executed");\n`
+  );
+  const candidateCommit = commitAll(fixture.candidate, "central-policy script maintenance");
+  const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
+  assert.equal(result.mode, "registry-maintenance");
+  assert.equal(fs.existsSync(marker), false);
+});
+
 test("bounded Registry maintenance accepts 700 changed files and rejects 701", async (t) => {
   for (const [changedFileCount, expectedMode, expectedCode] of [
     [700, "registry-maintenance", null],
@@ -1145,6 +1219,17 @@ test("any submissions change mixed with registry maintenance is rejected", (t) =
   writePackage(fixture.candidate, makePackage());
   writeFile(fixture.candidate, "vendor/programmable-v4-hook-builder/SKILL.md", "candidate policy fork\n");
   const candidateCommit = commitAll(fixture.candidate, "mixed application and registry maintenance");
+  assert.throws(
+    () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+    hasCode("CHANGED_PATH_NOT_ALLOWED")
+  );
+});
+
+test("a six-file application cannot be mixed with central-policy maintenance", (t) => {
+  const fixture = createRevisionPair(t);
+  writePackage(fixture.candidate, makePackage());
+  writeFile(fixture.candidate, "scripts/launch-policy-core.mjs", "export {};\n");
+  const candidateCommit = commitAll(fixture.candidate, "mixed application and central-policy maintenance");
   assert.throws(
     () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
     hasCode("CHANGED_PATH_NOT_ALLOWED")
