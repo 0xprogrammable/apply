@@ -9,18 +9,24 @@ import {
   readCanonicalSignedCommandFile,
   readTrustedAuthorityPublicKeyFile
 } from "./acceptance-entitlement-core.mjs";
+import { readTrustedLaunchPolicyFromGit } from "./launch-policy-core.mjs";
 
-const USAGE = "Usage: node scripts/compile-launch-entitlement.mjs --signed-command <canonical-json> --package-directory <six-file-directory> --launch-plan-file <exact-source-json> --trusted-authority-public-key <ed25519-public-pem>";
+const USAGE = "Usage: node scripts/compile-launch-entitlement.mjs --signed-command <canonical-json> --package-directory <six-file-directory> --launch-plan-file <exact-source-json> --trusted-authority-public-key <ed25519-public-pem> --trusted-policy-repository-root <protected-checkout> --expected-policy-base-commit <40-hex>";
 
 try {
   const options = parseArguments(process.argv.slice(2));
   const signedCommand = readCanonicalSignedCommandFile(options.signedCommand);
   const trustedAuthorityPublicKey = readTrustedAuthorityPublicKeyFile(options.trustedAuthorityPublicKey);
+  const trustedPolicyRecord = readTrustedLaunchPolicyFromGit({
+    repositoryRoot: options.trustedPolicyRepositoryRoot,
+    expectedBaseCommit: options.expectedPolicyBaseCommit
+  });
   const envelope = compileLaunchEntitlementEnvelope({
     signedCommand,
     packageDirectory: options.packageDirectory,
     launchPlanFile: options.launchPlanFile,
-    trustedAuthorityPublicKey
+    trustedAuthorityPublicKey,
+    trustedPolicyRecord
   });
   process.stdout.write(`${canonicalJson(envelope)}\n`);
 } catch (error) {
@@ -39,9 +45,11 @@ function parseArguments(args) {
     "--launch-plan-file",
     "--package-directory",
     "--signed-command",
-    "--trusted-authority-public-key"
+    "--trusted-authority-public-key",
+    "--trusted-policy-repository-root",
+    "--expected-policy-base-commit"
   ]);
-  if (args.length !== 8) throw new LaunchEntitlementError("ARGUMENTS_INVALID", USAGE);
+  if (args.length !== 12) throw new LaunchEntitlementError("ARGUMENTS_INVALID", USAGE);
   const values = new Map();
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
@@ -56,6 +64,8 @@ function parseArguments(args) {
     launchPlanFile: values.get("--launch-plan-file"),
     packageDirectory: values.get("--package-directory"),
     signedCommand: values.get("--signed-command"),
-    trustedAuthorityPublicKey: values.get("--trusted-authority-public-key")
+    trustedAuthorityPublicKey: values.get("--trusted-authority-public-key"),
+    trustedPolicyRepositoryRoot: values.get("--trusted-policy-repository-root"),
+    expectedPolicyBaseCommit: values.get("--expected-policy-base-commit")
   };
 }

@@ -1,79 +1,99 @@
-# Open Review Standard v1
+# Policy-Bound Review Standard v1
 
-Programmable reviews exact project revisions. It does not rank ideas, judge whether a project is interesting, or reject
-unusual tokenomics merely because they are unusual.
+Programmable review decisions consume the canonical
+[`policy/launch-policy.v1.json`](../policy/launch-policy.v1.json). The reviewer, an LLM, a scanner, and the legacy Open
+Review adapter cannot add requirements, change severity or enforcement, select a policy file, or create an approval
+outcome.
 
-The public standard defines five decision-critical axes. A prepared review input records the evidence state for each
-axis:
+The protected evaluator reads the policy only from the exact trusted Submit Launch base commit at the fixed repository
+and path. It compares all eleven fields of the recorded policy binding before it considers rule evaluations. A changed
+repository, commit, tree, policy blob, version, profile, or digest returns `policy_drift`.
 
-1. **Artifact identity** binds the repository, commit, tree, configuration and executable artifact.
-2. **Functionality** checks that declared paths actually execute, including failure, recovery and no-market behavior.
-3. **Disclosure** checks that fees, losses, authority, custody, exits and external dependencies are stated before consent.
-4. **Integrity** reconciles value and authority effects against those disclosures.
-5. **Launch compatibility** checks the separate technical requirements for a Programmable launch.
+## Closed evaluation contract
 
-Advisories are separate. Novelty, complexity, profitability, popularity, a high disclosed fee, an intentional disclosed
-loss, a no-market design, or an unfamiliar architecture is not by itself a blocker.
+An evaluation contains only:
 
-```mermaid
-flowchart LR
-  A["Exact public revision"] --> B["Deterministic evidence"]
-  B --> C["Open review decision"]
-  C --> D["Separate platform signature"]
-  D --> E["Separate single-use launch permit"]
-  U["Candidate repository"] -. "never receives secrets" .-> B
+```json
+{
+  "ruleId": "CANARY.EXACT_PUBLIC_SOURCE",
+  "state": "passed",
+  "evidenceRefs": ["sha256:..."],
+  "analyzer": { "kind": "deterministic", "id": "exact-public-source-v1" }
+}
 ```
 
-The public checker ends at the unsigned review decision. It has no production credentials and cannot sign or issue a
-launch permit. It validates a closed review input and applies the published policy; it does not fetch project
-repositories, run project tests, or independently reproduce the supplied evidence.
+For an active rule, the analyzer kind and id must match the current policy enforcement record. Requirement text,
+severity, owner, enforcement and outcome are projected from the trusted policy, never copied from analyzer input.
+Missing applicable rules and explicit `analysis_pending` states remain pending. Unknown, inactive and out-of-profile
+Rule IDs can produce only non-authoritative advisories. LLM observations are always advisories and cannot pass, violate,
+close or hard-block a deterministic rule.
+
+Applicability is derived from the closed subject. In particular, a caller cannot mark an always-applicable rule as not
+applicable. Expected and current subject identity bind repository id, repository, commit, tree, configuration hash and
+the declared Uniswap v4 context.
 
 ## Decisions
 
 | Status | Meaning |
 | --- | --- |
-| `launch_ready` | Every decision-critical axis is closed for the exact revision. This local result still does not authorize a launch. |
-| `changes_requested` | Candidate-owned evidence or implementation is missing or contradicted. |
-| `platform_analysis_pending` | Platform-owned replay, tooling or external evidence is still missing. Unknown does not mean unsafe. |
-| `blocked_proven_integrity_failure` | A supported universal failure has a complete, revision-bound and independently replayed witness. |
-| `changed_since_review` | The current repository, tree or configuration no longer matches the reviewed revision. |
+| `passed` | Every applicable active rule has a policy-bound passing evaluation. The outcome is still checker-only. |
+| `analysis_pending` | At least one applicable active rule is missing or pending. Unknown does not mean unsafe. |
+| `changes_requested` | At least one policy-bound deterministic evaluation reports a violation. |
+| `policy_drift` | The recorded eleven-field policy binding differs from the exact trusted policy. |
+| `subject_drift` | The current closed subject differs from the subject that was reviewed. |
+| `profile_disabled` | The selected profile is disabled and has no outcome. |
 
-Only `UNAUTHORIZED_VALUE_DIVERSION` has an automated hard-block replay class in v1. Five additional universal rule
-classes are published in [`review/policy.v1.json`](../review/policy.v1.json), but they remain pending until their dedicated
-replay semantics exist. A model opinion, scanner score, label or incomplete witness cannot hard-block a project.
+`build` may return `BUILT_NOT_REVIEWED`. `workflow-canary` may return `CANARY_WORKFLOW_PASSED` while remaining hidden,
+non-production and without real funds. `production-launch` is disabled and returns no outcome. No current profile can
+authorize a launch.
 
-## Run the public checker
+Every decision has this fixed authority:
 
-Node.js 24 or newer is required. The checker has no runtime dependencies and never executes a candidate repository.
+```json
+{
+  "checkerOnly": true,
+  "independentAudit": false,
+  "launchAuthorized": false,
+  "publicRoutingAuthorized": false,
+  "realFundsAuthorized": false
+}
+```
+
+Decisions contain no timestamps. Their digest covers the deterministic canonical decision bytes, including exact
+policy and subject identity. Canonical validation and digest recomputation additionally require the exact trusted policy
+record returned by the fixed Git reader. They re-derive binding drift, subject drift, applicability, analyzer identity,
+pending rules, findings, status, and outcome from those trusted bytes; a digest by itself is not authenticity.
+
+## Schemas and examples
+
+- [`launch-policy-review-input.v1.schema.json`](../review/schemas/launch-policy-review-input.v1.schema.json)
+- [`launch-policy-review-decision.v1.schema.json`](../review/schemas/launch-policy-review-decision.v1.schema.json)
+- [`canary-passed.json`](../review/examples/canary-passed.json)
+- [`canary-analysis-pending.json`](../review/examples/canary-analysis-pending.json)
+- [`production-disabled.json`](../review/examples/production-disabled.json)
+
+The enabled-profile examples are immutable snapshot fixtures. They bind exact Submit Launch commit
+`599cbb7f9e6c6daf8a1aeca85340429db5a4f134` and policy 1.1.0 in their eleven-field binding; they are not current-HEAD
+bindings. A protected consumer never treats those example fields as current. It resolves the live exact protected base
+it was invoked for and requires the applicant's binding to match it. Reusing a snapshot fixture against a later base
+correctly returns `policy_drift`.
+
+The generic protected interface is `evaluateTrustedLaunchPolicyReview({ input, repositoryRoot, expectedBaseCommit })`.
+The surrounding protected workflow owns those trusted checkout arguments; applicant input does not.
+Downstream consumers use `canonicalLaunchPolicyDecision(decision, trustedPolicyRecord)` and
+`digestLaunchPolicyDecision(decision, trustedPolicyRecord)`. Neither accepts a caller-fabricated policy-shaped object.
+
+## Legacy Open Review compatibility
+
+The old `programmable.open-review-input.v1` files remain accepted by the one-file CLI so existing examples and callers
+fail closed. Because that legacy format cannot bind the current policy or prove equivalent build/canary rules, the
+adapter evaluates only the disabled `production-launch` profile. Old obligations and witnesses are retained as bounded
+advisories under the central `LEGACY_V2.ADMISSION` Rule ID. They never become findings or approval.
 
 ```bash
 npm run review -- review/examples/disclosed-high-fee.json
 ```
 
-The output is deterministic and hash-bound. It is an unsigned local preview with `checkerOnly: true`,
-`launchAuthorized: false` and `independentAudit: false`.
-
-The input and decision formats are public:
-
-- [`open-review-input.v1.schema.json`](../review/schemas/open-review-input.v1.schema.json)
-- [`open-review-decision.v1.schema.json`](../review/schemas/open-review-decision.v1.schema.json)
-
-## Hard-block proof
-
-A hard block requires all of the following:
-
-- the exact repository, commit, tree and configuration;
-- a reachable transaction or state sequence;
-- affected actors and value;
-- the violated property;
-- a deterministic reproduction;
-- an independent replay; and
-- a complete witness supported by the current policy version.
-
-Suspicion is not proof. An incomplete witness remains pending. A new revision receives a new review.
-
-## Authority boundary
-
-This repository publishes the standard, schemas, deterministic preview engine, examples and public application ledger.
-Production signing keys, credentials, isolated runners, hidden mutation corpora and launch-permit authority are not
-public application data. A signed platform decision and a later launch permit are separate steps.
+This command reads the exact local Submit Launch `HEAD` policy blob. Its result is a deterministic local snapshot, not
+proof of protected main, an independent audit, a signature, Website eligibility, routing, deployment, funds authority,
+or launch authorization.
