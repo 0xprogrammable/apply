@@ -137,14 +137,14 @@ test("disabled production profile never yields approval", (t) => {
 
 test("policy and subject drift stop before semantic findings", (t) => {
   const fixture = trustedReviewFixture(t);
-  const driftedPolicy = validInput(fixture.policyRecord);
+  const driftedPolicy = validInput(fixture.policyRecord, "build");
   driftedPolicy.expectedPolicyBinding.sha256 = `sha256:${"0".repeat(64)}`;
   driftedPolicy.evaluations[0].state = "violated";
   const policyDecision = evaluate(fixture, driftedPolicy);
   assert.equal(policyDecision.status, "policy_drift");
   assert.deepEqual(policyDecision.findings, []);
 
-  const driftedSubject = validInput(fixture.policyRecord);
+  const driftedSubject = validInput(fixture.policyRecord, "build");
   driftedSubject.currentSubject.commit = "d".repeat(40);
   driftedSubject.evaluations[0].state = "violated";
   const subjectDecision = evaluate(fixture, driftedSubject);
@@ -154,15 +154,15 @@ test("policy and subject drift stop before semantic findings", (t) => {
 
 test("missing rules stay pending while authorized violations project policy metadata", (t) => {
   const fixture = trustedReviewFixture(t);
-  const pendingInput = validInput(fixture.policyRecord);
+  const pendingInput = validInput(fixture.policyRecord, "build");
   const missing = pendingInput.evaluations.pop();
   const pending = evaluate(fixture, pendingInput);
   assert.equal(pending.status, "analysis_pending");
   assert.deepEqual(pending.pendingRuleIds, [missing.ruleId]);
   assert.deepEqual(pending.findings, []);
 
-  const violatedInput = validInput(fixture.policyRecord);
-  const sourceRule = fixture.policyRecord.policy.rules.find(({ id }) => id === "CANARY.EXACT_PUBLIC_SOURCE");
+  const violatedInput = validInput(fixture.policyRecord, "build");
+  const sourceRule = fixture.policyRecord.policy.rules.find(({ id }) => id === "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS");
   violatedInput.evaluations.find(({ ruleId }) => ruleId === sourceRule.id).state = "violated";
   const violated = evaluate(fixture, violatedInput);
   assert.equal(violated.status, "changes_requested");
@@ -178,7 +178,7 @@ test("missing rules stay pending while authorized violations project policy meta
 
 test("unknown evaluations are advisory only and analyzer authority must match policy", (t) => {
   const fixture = trustedReviewFixture(t);
-  const unknown = validInput(fixture.policyRecord);
+  const unknown = validInput(fixture.policyRecord, "build");
   unknown.evaluations.push({
     ruleId: "UNKNOWN.RULE",
     state: "violated",
@@ -190,37 +190,37 @@ test("unknown evaluations are advisory only and analyzer authority must match po
   assert.equal(decision.findings.length, 0);
   assert.equal(decision.advisories.some(({ code }) => code === "UNBOUND_EVALUATION"), true);
 
-  const forged = validInput(fixture.policyRecord);
+  const forged = validInput(fixture.policyRecord, "build");
   forged.evaluations[0].analyzer = { kind: "llm", id: "llm-1" };
   assert.throws(() => evaluate(fixture, forged), hasCode("REVIEW_ANALYZER_MISMATCH"));
 });
 
-test("conditional applicability is derived from the closed subject", (t) => {
+test("the single launch requirement applies regardless of hook architecture", (t) => {
   const fixture = trustedReviewFixture(t);
   const input = validInput(fixture.policyRecord, "build");
   input.expectedSubject.usesUniswapV4 = false;
   input.currentSubject.usesUniswapV4 = false;
-  input.evaluations = input.evaluations.filter(({ ruleId }) => ruleId !== "BUILD.V4_IDENTITY_PERMISSIONS");
   const decision = evaluate(fixture, input);
   assert.equal(decision.status, "passed");
-  assert.deepEqual(decision.notApplicableRuleIds, ["BUILD.V4_IDENTITY_PERMISSIONS"]);
+  assert.deepEqual(decision.notApplicableRuleIds, []);
+  assert.deepEqual(decision.evaluations.map(({ ruleId }) => ruleId), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
 });
 
 test("input grammar is closed and duplicate evaluations cannot compete", (t) => {
   const fixture = trustedReviewFixture(t);
-  const extra = validInput(fixture.policyRecord);
+  const extra = validInput(fixture.policyRecord, "build");
   extra.outcome = "LAUNCH_APPROVED";
   assert.throws(() => validateLaunchPolicyReviewInput(extra), hasCode("REVIEW_INPUT_FIELDS_INVALID"));
 
-  const duplicate = validInput(fixture.policyRecord);
+  const duplicate = validInput(fixture.policyRecord, "build");
   duplicate.evaluations.push(structuredClone(duplicate.evaluations[0]));
   assert.throws(() => validateLaunchPolicyReviewInput(duplicate), hasCode("REVIEW_EVALUATION_DUPLICATE"));
 
-  const injectedMetadata = validInput(fixture.policyRecord);
+  const injectedMetadata = validInput(fixture.policyRecord, "build");
   injectedMetadata.evaluations[0].severity = "blocker";
   assert.throws(() => validateLaunchPolicyReviewInput(injectedMetadata), hasCode("REVIEW_EVALUATION_INVALID"));
 
-  const unsortedEvidence = validInput(fixture.policyRecord);
+  const unsortedEvidence = validInput(fixture.policyRecord, "build");
   unsortedEvidence.evaluations[0].evidenceRefs = [`sha256:${"2".repeat(64)}`, `sha256:${"1".repeat(64)}`];
   assert.throws(() => validateLaunchPolicyReviewInput(unsortedEvidence), hasCode("REVIEW_EVIDENCE_REFS_INVALID"));
 });
@@ -244,7 +244,7 @@ test("decisions and digests are deterministic and timestamp-free", (t) => {
 
 test("canonical decision validation rejects re-digested authority or outcome escalation", (t) => {
   const fixture = trustedReviewFixture(t);
-  const original = evaluate(fixture, validInput(fixture.policyRecord));
+  const original = evaluate(fixture, validInput(fixture.policyRecord, "build"));
 
   const authority = structuredClone(original);
   authority.authority.launchAuthorized = true;
@@ -259,7 +259,7 @@ test("canonical decision validation rejects re-digested authority or outcome esc
 
 test("canonical validation re-establishes binding subject and verdict semantics from trusted policy", (t) => {
   const fixture = trustedReviewFixture(t);
-  const original = evaluate(fixture, validInput(fixture.policyRecord));
+  const original = evaluate(fixture, validInput(fixture.policyRecord, "build"));
   assert.equal(canonicalLaunchPolicyDecision(original, fixture.policyRecord), canonicalJson(original));
   assert.equal(digestLaunchPolicyDecision(original, fixture.policyRecord), original.digest);
   assert.throws(() => canonicalLaunchPolicyDecision(original), hasCode("REVIEW_TRUSTED_POLICY_REQUIRED"));
@@ -294,13 +294,13 @@ test("canonical validation re-establishes binding subject and verdict semantics 
 
 test("canonical validation reconstructs analyzer and every finding field from trusted policy", (t) => {
   const fixture = trustedReviewFixture(t);
-  const input = validInput(fixture.policyRecord);
-  input.evaluations.find(({ ruleId }) => ruleId === "CANARY.EXACT_PUBLIC_SOURCE").state = "violated";
+  const input = validInput(fixture.policyRecord, "build");
+  input.evaluations.find(({ ruleId }) => ruleId === "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS").state = "violated";
   const original = evaluate(fixture, input);
   assert.equal(original.status, "changes_requested");
 
   const analyzer = structuredClone(original);
-  analyzer.evaluations.find(({ ruleId }) => ruleId === "CANARY.EXACT_PUBLIC_SOURCE").analyzer = { kind: "llm", id: "llm-1" };
+  analyzer.evaluations.find(({ ruleId }) => ruleId === "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS").analyzer = { kind: "llm", id: "llm-1" };
   analyzer.evaluations = canonicalSort(analyzer.evaluations);
   analyzer.digest = unsafeDecisionDigest(analyzer);
   assert.throws(() => canonicalLaunchPolicyDecision(analyzer, fixture.policyRecord), hasCode("REVIEW_DECISION_POLICY_PROJECTION_INVALID"));
@@ -329,10 +329,10 @@ test("canonical validation reconstructs analyzer and every finding field from tr
 
 test("policy drift never accepts a binding from another profile", (t) => {
   const fixture = trustedReviewFixture(t);
-  const original = evaluate(fixture, validInput(fixture.policyRecord));
+  const original = evaluate(fixture, validInput(fixture.policyRecord, "build"));
 
   const crossExpected = asPolicyDrift(original);
-  crossExpected.expectedPolicyBinding.profileId = "build";
+  crossExpected.expectedPolicyBinding.profileId = "workflow-canary";
   crossExpected.digest = unsafeDecisionDigest(crossExpected);
   assert.throws(
     () => digestLaunchPolicyDecision(crossExpected, fixture.policyRecord),
@@ -344,7 +344,7 @@ test("policy drift never accepts a binding from another profile", (t) => {
   );
 
   const crossCurrent = asPolicyDrift(original);
-  crossCurrent.currentPolicyBinding.profileId = "build";
+  crossCurrent.currentPolicyBinding.profileId = "workflow-canary";
   crossCurrent.digest = unsafeDecisionDigest(crossCurrent);
   assert.throws(
     () => digestLaunchPolicyDecision(crossCurrent, fixture.policyRecord),
@@ -376,13 +376,14 @@ test("new schemas compile strictly and validate examples and decisions", (t) => 
     assert.equal(validateDecision(decision), true, `${name}: ${JSON.stringify(validateDecision.errors)}`);
   }
 
-  const passed = evaluate(fixture, validInput(fixture.policyRecord));
+  const passed = evaluate(fixture, validInput(fixture.policyRecord, "build"));
   const contradicted = structuredClone(passed);
   contradicted.evaluations[0].state = "violated";
   assert.equal(validateDecision(contradicted), false, "passed schema must reject a violation evaluation");
 
-  const pendingInput = validInput(fixture.policyRecord);
-  pendingInput.evaluations.pop();
+  const pendingInput = validInput(fixture.policyRecord, "build");
+  pendingInput.evaluations[0].state = "analysis_pending";
+  pendingInput.evaluations[0].evidenceRefs = [];
   const pending = structuredClone(evaluate(fixture, pendingInput));
   pending.evaluations[0].state = "violated";
   assert.equal(validateDecision(pending), false, "pending schema must reject a violation evaluation");

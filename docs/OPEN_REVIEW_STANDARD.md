@@ -15,10 +15,10 @@ An evaluation contains only:
 
 ```json
 {
-  "ruleId": "CANARY.EXACT_PUBLIC_SOURCE",
+  "ruleId": "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
   "state": "passed",
   "evidenceRefs": ["sha256:..."],
-  "analyzer": { "kind": "deterministic", "id": "exact-public-source-v1" }
+  "analyzer": { "kind": "deterministic", "id": "ethereum-treasury-10-bps-v1" }
 }
 ```
 
@@ -86,9 +86,10 @@ Downstream consumers use `canonicalLaunchPolicyDecision(decision, trustedPolicyR
 ## Legacy Open Review compatibility
 
 The old `programmable.open-review-input.v1` files remain accepted by the one-file CLI so existing examples and callers
-fail closed. Because that legacy format cannot bind the current policy or prove equivalent build/canary rules, the
-adapter evaluates only the disabled `production-launch` profile. Old obligations and witnesses are retained as bounded
-advisories under the central `LEGACY_V2.ADMISSION` Rule ID. They never become findings or approval.
+fail closed. Because that legacy format cannot bind the current policy or prove the current launch requirement, the
+adapter evaluates only the disabled `production-launch` profile. Old obligations and witnesses remain bounded,
+explicitly unbound compatibility advisories. They are not central-policy Rule IDs and never become findings or
+approval.
 
 ```bash
 npm run review -- review/examples/disclosed-high-fee.json

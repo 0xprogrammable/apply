@@ -191,13 +191,26 @@ const CANDIDATE_FETCH_FILE_SIZE_BYTES = 32 * 1024 * 1024;
 const CANDIDATE_FETCH_REPOSITORY_BYTES = 64 * 1024 * 1024;
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const PULL_REQUEST_NUMBER_PATTERN = /^[1-9][0-9]{0,19}$/u;
-const LEGACY_V2_POLICY_RULE_ID = "LEGACY_V2.FEE_PROJECTION";
+const LEGACY_V2_TRANSPORT_RULE_ID = "FROZEN_LEGACY_V2.FEE_PROJECTION";
 const LEGACY_V2_POLICY_PROFILE = "legacy-v2-transport";
 const LEGACY_V2_POLICY_ADAPTER_SCHEMA = "programmable.legacy-v2-policy-adapter.v1";
 const TRUSTED_POLICY_SNAPSHOT_BINDING_SCHEMA = "programmable.trusted-policy-snapshot-binding.v1";
-// This id is frozen into historical V2 candidate bytes. It maps to, but is
-// deliberately not replaced by, the central rule evidence id.
+// These values are frozen into the historical six-file V2 transport. They are
+// compatibility grammar, not current launch-policy requirements or authority.
 const LEGACY_V2_TRANSPORT_EVIDENCE_ID = "zz-programmable-fee-submission";
+const LEGACY_V2_EVIDENCE_ID = "legacy-v2-fee-projection";
+const LEGACY_V2_FEE = Object.freeze({
+  owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  platformHundredthsOfBip: 1000,
+  policyId: "programmable-volume-fee-v1",
+  policyVersion: "1.1.0",
+  swapModes: Object.freeze([
+    "zeroForOne-exactInput",
+    "zeroForOne-exactOutput",
+    "oneForZero-exactInput",
+    "oneForZero-exactOutput"
+  ])
+});
 const legacyPolicyAdapters = new WeakSet();
 const trustedLegacyPolicyAdapters = new WeakSet();
 
@@ -312,72 +325,23 @@ function readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit }) {
 }
 
 function createLegacyV2PolicyAdapter({ authority, policyBinding, policyRecord }) {
-  const rules = policyRecord?.policy?.rules;
-  const rule = Array.isArray(rules)
-    ? rules.find(({ id }) => id === LEGACY_V2_POLICY_RULE_ID)
-    : null;
-  const parameters = rule?.parameters;
-  const parameterKeys = [
-    "evidenceId",
-    "owner",
-    "platformHundredthsOfBip",
-    "policyId",
-    "policyVersion",
-    "swapModes"
-  ];
   if (
-    !rule
-    || rule.status !== "inactive"
-    || rule.applicability?.mode !== "historical"
-    || !arraysEqual(rule.profiles ?? [], ["production-launch"])
-    || rule.enforcement?.mode !== "legacy-adapter"
-    || rule.enforcement?.handlerId !== null
-    || !isPlainObject(parameters)
-    || !arraysEqual(Object.keys(parameters).sort(compareUtf8), [...parameterKeys].sort(compareUtf8))
-    || !Array.isArray(rule.evidence)
-    || !arraysEqual(rule.evidence, [parameters.evidenceId])
-    || typeof parameters.evidenceId !== "string"
-    || !EVIDENCE_ID_PATTERN.test(parameters.evidenceId)
-    || typeof parameters.owner !== "string"
-    || !/^0x[0-9A-Fa-f]{40}$/u.test(parameters.owner)
-    || !Number.isSafeInteger(parameters.platformHundredthsOfBip)
-    || parameters.platformHundredthsOfBip < 1
-    || parameters.platformHundredthsOfBip > 999_999
-    || typeof parameters.policyId !== "string"
-    || !/^[a-z0-9][a-z0-9.-]{2,79}$/u.test(parameters.policyId)
-    || typeof parameters.policyVersion !== "string"
-    || !/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u.test(parameters.policyVersion)
-    || !Array.isArray(parameters.swapModes)
-    || parameters.swapModes.length < 1
-    || parameters.swapModes.length > 16
-    || new Set(parameters.swapModes).size !== parameters.swapModes.length
-    || parameters.swapModes.some((mode) => (
-      typeof mode !== "string"
-      || mode.length < 1
-      || mode.length > 127
-      || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(mode)
-    ))
+    !policyRecord?.policy
     || !new Set(["non-authoritative-local-inspection", "trusted-protected-base"]).has(authority)
     || (authority === "trusted-protected-base") !== (policyBinding !== null)
   ) {
     systemBlocked(
       "LEGACY_V2_POLICY_ADAPTER_INVALID",
-      "The central historical V2 fee-projection rule cannot produce the closed legacy adapter."
+      "The frozen historical V2 transport adapter cannot be constructed."
     );
   }
   const adapter = Object.freeze({
     schemaVersion: LEGACY_V2_POLICY_ADAPTER_SCHEMA,
     authority,
-    ruleId: rule.id,
-    evidenceId: parameters.evidenceId,
+    ruleId: LEGACY_V2_TRANSPORT_RULE_ID,
+    evidenceId: LEGACY_V2_EVIDENCE_ID,
     transportEvidenceId: LEGACY_V2_TRANSPORT_EVIDENCE_ID,
-    fee: Object.freeze({
-      owner: parameters.owner,
-      platformHundredthsOfBip: parameters.platformHundredthsOfBip,
-      policyId: parameters.policyId,
-      policyVersion: parameters.policyVersion,
-      swapModes: Object.freeze([...parameters.swapModes])
-    }),
+    fee: LEGACY_V2_FEE,
     policyBinding
   });
   legacyPolicyAdapters.add(adapter);

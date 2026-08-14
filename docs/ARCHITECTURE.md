@@ -28,7 +28,7 @@ The source repository never moves into this repository. An application pull requ
 policy, workflows, schemas, project records, or another application. The receipt-bound
 `vendor/programmable-v4-hook-builder/` tree is frozen validation data for the open legacy six-file V2 intake, not a
 current central-policy requirement source. New V2 applications remain accepted only while the checked-in intake state
-is `open`; V2 packages and inactive policy tombstones cannot satisfy Workflow Canary or Website eligibility.
+is `open`; V2 packages and frozen compatibility checks cannot satisfy Workflow Canary or Website eligibility.
 
 Strict JSON, path safety, size limits, Git identity, authentication, signatures, and key or audience pinning are
 implementation security controls. They protect the policy path but do not create separate semantic admission rules.

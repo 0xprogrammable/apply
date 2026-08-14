@@ -18,21 +18,24 @@ import {
 
 test("historical local V2 inspection is explicit and has no trusted policy binding", () => {
   const policyBytes = fs.readFileSync(path.resolve("policy/launch-policy.v1.json"));
-  const policy = JSON.parse(policyBytes.toString("utf8"));
-  const rule = policy.rules.find(({ id }) => id === "LEGACY_V2.FEE_PROJECTION");
   const adapter = createHistoricalLegacyV2PolicyAdapterForLocalInspection({ policyBytes });
 
   assert.equal(adapter.authority, "non-authoritative-local-inspection");
   assert.equal(adapter.policyBinding, null);
-  assert.equal(adapter.ruleId, rule.id);
-  assert.equal(adapter.evidenceId, rule.parameters.evidenceId);
+  assert.equal(adapter.ruleId, "FROZEN_LEGACY_V2.FEE_PROJECTION");
+  assert.equal(adapter.evidenceId, "legacy-v2-fee-projection");
   assert.equal(adapter.transportEvidenceId, "zz-programmable-fee-submission");
   assert.deepEqual(adapter.fee, {
-    owner: rule.parameters.owner,
-    platformHundredthsOfBip: rule.parameters.platformHundredthsOfBip,
-    policyId: rule.parameters.policyId,
-    policyVersion: rule.parameters.policyVersion,
-    swapModes: rule.parameters.swapModes
+    owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    platformHundredthsOfBip: 1000,
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.1.0",
+    swapModes: [
+      "zeroForOne-exactInput",
+      "zeroForOne-exactOutput",
+      "oneForZero-exactInput",
+      "oneForZero-exactOutput"
+    ]
   });
 });
 

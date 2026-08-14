@@ -22,8 +22,9 @@ policy binding, expected audience, current time, and protected replay state; cop
 not authority.
 
 The six-file V2 application remains an open but frozen legacy transport while the checked-in intake state is `open`.
-Its inactive `LEGACY_V2.*` policy tombstones, green checks, merge, or old
-[launch-entitlement bridge](ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md) cannot satisfy Workflow Canary or Website eligibility.
+Its frozen compatibility checks, green checks, merge, or old [launch-entitlement
+bridge](ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md) cannot satisfy Workflow Canary or Website eligibility and are not current
+launch-policy requirements.
 The current `production-launch` profile is disabled and no path emits
 `LAUNCH_APPROVED`.
 

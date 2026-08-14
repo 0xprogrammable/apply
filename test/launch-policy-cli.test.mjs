@@ -159,14 +159,7 @@ test("third-party requirements CLI needs no Hookbuilder and projects declared ru
   assert.equal(output.profile.authority.launchAuthorized, false);
   assert.equal(output.profile.authority.publicRoutingAllowed, false);
   assert.equal(output.profile.authority.realUserFundsAllowed, false);
-  assert.deepEqual(output.rules.map(({ id }) => id), [
-    "CANARY.APPLICATION_IDENTITY",
-    "CANARY.EXACT_PUBLIC_SOURCE",
-    "CANARY.HIDDEN_NAMESPACE",
-    "CANARY.NO_PUBLIC_ROUTING",
-    "CANARY.NO_REAL_USER_FUNDS",
-    "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD"
-  ]);
+  assert.deepEqual(output.rules, []);
   assert.equal(output.policy.path, "policy/launch-policy.v1.json");
   assert.match(output.policy.sha256, /^sha256:[0-9a-f]{64}$/u);
 });
@@ -178,7 +171,10 @@ test("requirements can describe disabled production without inventing approval a
   assert.equal(output.profile.enabled, false);
   assert.equal(output.profile.outcome, null);
   assert.equal(output.profile.authority.launchAuthorized, false);
-  assert.deepEqual(output.rules, []);
+  assert.deepEqual(output.rules.map(({ id, requirement }) => ({ id, requirement })), [{
+    id: "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    requirement: "A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury."
+  }]);
   assert.doesNotMatch(result.stdout, /LAUNCH_APPROVED/u);
 });
 

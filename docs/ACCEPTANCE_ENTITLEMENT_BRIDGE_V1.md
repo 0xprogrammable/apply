@@ -18,8 +18,9 @@ domain with complete validator coverage. The old v1 command will not silently ga
 ## Preserved historical transport
 
 The six-file V2 application remains unchanged. Local inspection is explicitly non-authoritative and requires the
-legacy adapter derived from the canonical policy's inactive `LEGACY_V2.FEE_PROJECTION` history. The checked-in command
-and envelope schemas are not loosened, and historical bytes are not reinterpreted as Workflow Canary eligibility.
+explicit frozen V2 transport adapter. Its old fee grammar is compatibility data, not a current central-policy Rule ID.
+The checked-in command and envelope schemas are not loosened, and historical bytes are not reinterpreted as Workflow
+Canary eligibility.
 
 The separate [Hidden Canary eligibility contract](CANARY_ELIGIBILITY_V1.md) is the active non-production Website
 handoff. It accepts only an exact passing Workflow Canary result and always keeps discovery, routing, real funds, audit,
