@@ -21,11 +21,14 @@ const ROLE_PATHS = Object.freeze({
   workflow: Object.freeze([".github/workflows/verify-hook-builder.yml"]),
   validator: Object.freeze([
     "scripts/verify-public-hook-application.mjs",
+    "scripts/verify-public-application-v3-core.mjs",
+    "scripts/verify-public-application-v3-shared.mjs",
     "scripts/verify-workflow-canary.mjs"
   ]),
   package: Object.freeze([
     "canary/schemas/workflow-canary-application-v1.schema.json",
     "canary/schemas/workflow-canary-result-v1.schema.json",
+    "intake/schemas/public-pr-application-v3.schema.json",
     "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
   ]),
   policy: Object.freeze([POLICY_PATH])
