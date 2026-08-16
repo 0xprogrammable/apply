@@ -20,34 +20,80 @@
   "properties": {
     "boundedApplicantData": {
       "items": {
-        "additionalProperties": false,
-        "properties": {
-          "contract": {
-            "pattern": "^[a-z0-9][a-z0-9.-]{1,79}$",
-            "type": "string"
-          },
-          "files": {
-            "items": {
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-              "type": "string"
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "contract": {
+                "enum": [
+                  "workflow-canary-application-v1",
+                  "public-pr-application-v2-six-file-v1"
+                ]
+              },
+              "files": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "rootPath": {
+                "$ref": "#/$defs/path"
+              }
             },
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
+            "required": [
+              "contract",
+              "files",
+              "rootPath"
+            ],
+            "type": "object"
           },
-          "rootPath": {
-            "$ref": "#/$defs/path"
+          {
+            "additionalProperties": false,
+            "properties": {
+              "contract": {
+                "const": "public-pr-application-v3.1-immutable-revision-v1"
+              },
+              "layout": {
+                "const": "application-v3-revision-tree"
+              },
+              "maximumFileBytes": {
+                "const": 4194304
+              },
+              "maximumFiles": {
+                "const": 100
+              },
+              "maximumPackageBytes": {
+                "const": 12582912
+              },
+              "rootFile": {
+                "const": "application.v3.json"
+              },
+              "rootMaximumBytes": {
+                "const": 262144
+              },
+              "rootPath": {
+                "const": "submissions"
+              }
+            },
+            "required": [
+              "contract",
+              "layout",
+              "maximumFileBytes",
+              "maximumFiles",
+              "maximumPackageBytes",
+              "rootFile",
+              "rootMaximumBytes",
+              "rootPath"
+            ],
+            "type": "object"
           }
-        },
-        "required": [
-          "contract",
-          "files",
-          "rootPath"
-        ],
-        "type": "object"
+        ]
       },
-      "maxItems": 2,
-      "minItems": 2,
+      "maxItems": 3,
+      "minItems": 3,
       "type": "array"
     },
     "canonicalPolicy": {

@@ -338,15 +338,16 @@ test("public docs describe one policy chain through reviewer canary and audience
   ]) {
     assert.match(source, /policy\/launch-policy\.v1\.json/u, `${name} must name the sole authored policy`);
   }
-  assert.match(architecture, /policy → reviewer → Workflow Canary → signed audience-bound Website eligibility/u);
+  assert.match(architecture, /policy → reviewer → Workflow Canary → signed audience-bound Website\s+eligibility/u);
   assert.match(lifecycle, /expected Website audience from protected deployment configuration/u);
   assert.match(beta, /frozen legacy V2 transport/u);
   assert.match(beta, /cannot satisfy Workflow\s+Canary or Website eligibility/u);
   assert.match(agents, /only authored source of current Programmable-specific admission requirements/u);
   assert.match(readme, /A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury/u);
-  assert.match(readme, /Two intake transports are open/u);
+  assert.match(readme, /Three intake transports are open/u);
+  assert.match(readme, /Generic Application V3\.1 accepts one immutable revision/u);
   assert.match(readme, /six-file legacy V2 package while the checked-in/u);
-  assert.match(readme, /V2 cannot substitute for Canary or Website eligibility/u);
+  assert.match(readme, /existing V2 applications use that bounded compatibility validator/u);
 });
 
 function currentReviewInput(policyRecord, profileId, rules) {

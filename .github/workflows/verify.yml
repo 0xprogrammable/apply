@@ -9,6 +9,7 @@ on:
       - "submissions/*/THREAT_MODEL.md"
       - "submissions/*/compatibility-report.json"
       - "submissions/*/evidence-index.json"
+      - "submissions/*/v3/revisions/*/**"
   pull_request_target:
     branches:
       - main
@@ -19,6 +20,7 @@ on:
       - "submissions/*/THREAT_MODEL.md"
       - "submissions/*/compatibility-report.json"
       - "submissions/*/evidence-index.json"
+      - "submissions/*/v3/revisions/*/**"
   workflow_dispatch:
 
 permissions:

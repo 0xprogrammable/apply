@@ -8,14 +8,15 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 test("the public landing page states the checker and intake boundaries", () => {
   const readme = read("README.md");
-  assert.match(readme, /Two intake transports are open/u);
+  assert.match(readme, /Three intake transports are open/u);
+  assert.match(readme, /Generic Application V3\.1/u);
   assert.match(readme, /Hidden Workflow Canary/u);
   assert.match(readme, /Open legacy V2/u);
-  assert.match(readme, /V2 cannot substitute for Canary or Website eligibility/u);
+  assert.match(readme, /existing V2 applications use that bounded compatibility validator/u);
   assert.match(readme, /does not fetch\nproject repositories, reproduce evidence, perform an audit/u);
   assert.match(readme, /checkerOnly: true/u);
   assert.match(readme, /launchAuthorized: false/u);
-  assert.ok(readme.indexOf("Two intake transports are open") < readme.indexOf("## How it works"));
+  assert.ok(readme.indexOf("Three intake transports are open") < readme.indexOf("## How it works"));
   assert.doesNotMatch(readme, /programmable-registry|programmable-v4-builder/u);
 });
 

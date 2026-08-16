@@ -86,6 +86,9 @@ test("generated-artifact verifier fails closed on stale bytes", (t) => {
     ".github/workflows/verify-hook-builder.yml",
     "canary/schemas/workflow-canary-application-v1.schema.json",
     "canary/schemas/workflow-canary-result-v1.schema.json",
+    "intake/schemas/public-pr-application-v3.schema.json",
+    "scripts/verify-public-application-v3-core.mjs",
+    "scripts/verify-public-application-v3-shared.mjs",
     "scripts/verify-public-hook-application.mjs",
     "scripts/verify-workflow-canary.mjs",
     "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
@@ -122,6 +125,10 @@ test("active contract contains the four fixed nonempty roles with exact path dig
         sha256: digest("canary/schemas/workflow-canary-result-v1.schema.json")
       },
       {
+        path: "intake/schemas/public-pr-application-v3.schema.json",
+        sha256: digest("intake/schemas/public-pr-application-v3.schema.json")
+      },
+      {
         path: "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json",
         sha256: digest("vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json")
       }
@@ -134,6 +141,14 @@ test("active contract contains the four fixed nonempty roles with exact path dig
       {
         path: "scripts/verify-public-hook-application.mjs",
         sha256: digest("scripts/verify-public-hook-application.mjs")
+      },
+      {
+        path: "scripts/verify-public-application-v3-core.mjs",
+        sha256: digest("scripts/verify-public-application-v3-core.mjs")
+      },
+      {
+        path: "scripts/verify-public-application-v3-shared.mjs",
+        sha256: digest("scripts/verify-public-application-v3-shared.mjs")
       },
       {
         path: "scripts/verify-workflow-canary.mjs",

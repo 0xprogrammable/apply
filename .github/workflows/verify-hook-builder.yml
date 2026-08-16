@@ -81,7 +81,7 @@ jobs:
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
             --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}")"
           case "$mode" in
-            application|workflow-canary|registry-maintenance|no-op) ;;
+            application|application-v3|workflow-canary|registry-maintenance|no-op) ;;
             *)
               echo "::error::The trusted classifier returned an unsupported mode."
               exit 1
@@ -90,7 +90,7 @@ jobs:
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
       - name: Preflight and hydrate only bounded intake blobs
-        if: steps.classify.outputs.mode == 'application' || steps.classify.outputs.mode == 'workflow-canary'
+        if: steps.classify.outputs.mode == 'application' || steps.classify.outputs.mode == 'application-v3' || steps.classify.outputs.mode == 'workflow-canary'
         shell: bash
         env:
           CANDIDATE_READ_TOKEN: ${{ github.token }}
@@ -122,6 +122,26 @@ jobs:
 
       - name: Verify policy-bound closed public application package
         if: steps.classify.outputs.mode == 'application'
+        shell: bash
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          GIT_NO_LAZY_FETCH: "1"
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 120s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/trusted" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-builder-login "${{ github.event.pull_request.user.login }}" \
+            --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
+
+      - name: Verify policy-bound Application V3 package
+        if: steps.classify.outputs.mode == 'application-v3'
         shell: bash
         env:
           GH_TOKEN: ""
