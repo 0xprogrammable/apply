@@ -27,10 +27,11 @@ the public application ledger, and a versioned discovery registry. Complete proj
 public repository.
 
 > [!IMPORTANT]
-> **Two intake transports are open.** The hidden Workflow Canary submits one exact JSON file against the central policy.
-> The receipt-bound Hookbuilder v0.5.1 tree may still submit its frozen six-file legacy V2 package while the checked-in
-> intake state remains `open`. Neither path confers audit, public routing, production, funds, or launch authority, and
-> V2 cannot substitute for Canary or Website eligibility.
+> **Three intake transports are open.** Generic Application V3.1 accepts one immutable revision of any complete
+> no-market, tradable, hook, token, app, game, service, or hybrid project as an official protected draft for review.
+> The hidden Workflow Canary remains a separate one-file handoff test. The receipt-bound Hookbuilder v0.5.1 tree may
+> still submit its frozen six-file legacy V2 package while the checked-in intake state remains `open`. A valid draft is
+> not reviewed, accepted, audited, deployed, available, or launched, and no intake transport grants funds authority.
 
 The [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
 creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
@@ -77,9 +78,10 @@ Every command reads the fixed repository-owned policy path, emits canonical JSON
 applicant code.
 
 The generated [active-contract manifest](.programmable/active-contract.json) provides digest-bound discovery for the
-current workflow, validators, the [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json),
-the [workflow-canary schemas](canary/schemas/), and policy. It is a same-tree discovery record, not approval or proof
-that the tree is protected or live.
+current workflow, validators, the [generic Application V3.1 schema](intake/schemas/public-pr-application-v3.schema.json),
+the [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json), the
+[workflow-canary schemas](canary/schemas/), and policy. It is a same-tree discovery record, not approval or proof that
+the tree is protected or live.
 
 ## Open Review Standard
 
@@ -125,16 +127,25 @@ npm test
 ## How it works
 
 1. **Build.** Project source stays in its own public GitHub repository.
-2. **Bind.** The applicant records the exact current `workflow-canary` policy binding and public source identity.
-3. **Submit.** The one-file hidden Canary enters the bounded trusted workflow without executing applicant code.
-4. **Review.** The policy-bound reviewer binds the exact policy and subject; Canary transport adds no semantic rule.
-5. **Expose privately.** A separate signer may issue short-lived eligibility for one protected Website audience.
+2. **Bind.** Application V3.1 records the exact source revision, owner intent, evidence, and selected policy artifacts.
+3. **Submit.** One pull request adds one immutable revision under
+   `submissions/<application-id>/v3/revisions/<revision>/`.
+4. **Validate.** Protected-base code checks bounded inert data without executing applicant code. A pass means only that
+   the draft is valid for review.
+5. **Review separately.** Reviewers evaluate the exact bound revision; intake never records acceptance or approval.
 6. **Promote later.** Registry, deployment, public availability, funds, and launch authorization remain separate facts.
 
 Application content is untrusted data. The trusted intake workflow uses protected base code, read-only permissions,
 bounded files, and no candidate execution.
 
 ## Application intake
+
+**Generic Application V3.1.** Submit one new immutable revision at
+`submissions/<application-id>/v3/revisions/<revision>/application.v3.json` together with exactly the application-package
+records bound by that manifest. Project kind is not allowlisted: complete no-market, tradable, hook, token, app, game,
+service, and hybrid projects use the same contract. Novel capabilities and evidence remain bound source or additional
+review records instead of being discarded because the validator does not recognize a project category. A green check
+means `ELIGIBLE_FOR_REVIEW` only. Read the [public GitHub intake contract](docs/builder/PUBLIC_GITHUB_PR_BETA.md).
 
 **Hidden Workflow Canary.** Submit exactly one canonical
 `canary-submissions/<application-id>/application.json` file that binds the central policy and exact public source.

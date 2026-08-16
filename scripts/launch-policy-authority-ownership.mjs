@@ -86,6 +86,14 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/launch-policy.mjs",
   "scripts/registry-core.mjs",
   "scripts/release-version-core.mjs",
+  "scripts/verify-open-world-v2-contracts.mjs",
+  "scripts/verify-open-world-v2-package.mjs",
+  "scripts/verify-open-world-v2-validation-fee.mjs",
+  "scripts/verify-open-world-v2-validation-intake.mjs",
+  "scripts/verify-open-world-v2-validation-intent.mjs",
+  "scripts/verify-public-application-v3-core.mjs",
+  "scripts/verify-public-application-v3-generation.mjs",
+  "scripts/verify-public-application-v3-shared.mjs",
   "scripts/verify-public-hook-application.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-repository.mjs",
@@ -119,6 +127,16 @@ const EXPECTED_BOUNDED_APPLICANT_DATA = Object.freeze([
       "compatibility-report.json",
       "evidence-index.json"
     ]),
+    rootPath: "submissions"
+  }),
+  Object.freeze({
+    contract: "public-pr-application-v3.1-immutable-revision-v1",
+    layout: "application-v3-revision-tree",
+    maximumFileBytes: 4 * 1024 * 1024,
+    maximumFiles: 100,
+    maximumPackageBytes: 12 * 1024 * 1024,
+    rootFile: "application.v3.json",
+    rootMaximumBytes: 256 * 1024,
     rootPath: "submissions"
   })
 ]);
@@ -311,7 +329,7 @@ function validateManifestShape(manifest, { requireCompleteHashes }) {
 
 function validateBoundedApplicantData(value) {
   if (canonicalAuthorityJson(value) !== canonicalAuthorityJson(EXPECTED_BOUNDED_APPLICANT_DATA)) {
-    fail("AUTHORITY_OWNERSHIP_BOUNDED_DATA_INVALID", "boundedApplicantData must preserve the exact inert V2 and Workflow Canary package surfaces.");
+    fail("AUTHORITY_OWNERSHIP_BOUNDED_DATA_INVALID", "boundedApplicantData must preserve the exact inert V2, Workflow Canary, and Application V3 revision package surfaces.");
   }
 }
 
@@ -512,8 +530,19 @@ function listRepositoryFiles(repositoryRoot) {
 
 function isBoundedApplicantDataPath(manifest, relativePath) {
   const segments = relativePath.split("/");
-  if (segments.length !== 3 || !APPLICATION_ID.test(segments[1])) return false;
-  return manifest.boundedApplicantData.some(({ files, rootPath }) => segments[0] === rootPath && files.includes(segments[2]));
+  if (!APPLICATION_ID.test(segments[1] ?? "")) return false;
+  return manifest.boundedApplicantData.some((binding) => {
+    if (segments[0] !== binding.rootPath) return false;
+    if (Array.isArray(binding.files)) {
+      return segments.length === 3 && binding.files.includes(segments[2]);
+    }
+    return binding.layout === "application-v3-revision-tree"
+      && segments.length >= 6
+      && segments[2] === "v3"
+      && segments[3] === "revisions"
+      && /^[1-9][0-9]*$/u.test(segments[4])
+      && segments.slice(5).every((segment) => segment.length > 0 && segment !== "." && segment !== ".." && segment !== ".git");
+  });
 }
 
 function classifiedFilePaths(manifest) {

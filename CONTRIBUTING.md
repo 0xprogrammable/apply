@@ -4,6 +4,27 @@ There are four intentionally separate contribution paths. Keep each pull request
 
 ## Application pull requests
 
+### Generic Application V3.1
+
+The default public draft transport is project-agnostic. One pull request adds exactly one immutable revision under
+`submissions/<application-id>/v3/revisions/<positive-decimal-revision>/`. It must contain `application.v3.json` and
+exactly the application-package files content-addressed by that manifest. Do not modify a prior revision or combine two
+applications, revisions, maintenance files, workflows, Registry records, or policy changes.
+
+There is no project-type or capability allowlist. Complete no-market, tradable, hook, token, app, game, service, and
+hybrid projects use the same V3.1 contract. Keep novel evidence as additional content-addressed review records; do not
+mislabel it as a known capability to pass intake. When the project did not select legacy Fee V2, its Fee V2 identity,
+schema, and instance fields are `null` and its fee-policy review records are omitted.
+
+The applicant identity must match the authenticated pull-request author. Protected-base CI treats every applicant file
+as inert untrusted data and never executes candidate code. Passing intake establishes only a structurally valid draft
+for human or automated review. It does not establish review completion, acceptance, approval, audit, deployment,
+availability, launch, or funds authority.
+
+Read [`docs/builder/PUBLIC_GITHUB_PR_BETA.md`](docs/builder/PUBLIC_GITHUB_PR_BETA.md) for the exact public flow.
+
+### Legacy V2 compatibility
+
 > **Open legacy V2 intake.** While the checked-in intake state remains `open`, the receipt-bound Hookbuilder v0.5.1
 > tree may submit its frozen six-file transport. It cannot satisfy Workflow Canary or Website eligibility.
 

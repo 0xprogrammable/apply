@@ -57,9 +57,9 @@ test("candidate identity is exact, blobless, bounded, and never executed", () =>
   assert.doesNotMatch(publicJob, /working-directory:\s*candidate|npm\s+(?:ci|install|test)[\s\S]*candidate/u);
 });
 
-test("only a closed six-file application is hydrated and public source lookup has no token", () => {
+test("only a closed V2 or Application V3 package is hydrated and public source lookup has no token", () => {
   assert.match(publicJob, /--hydrate-candidate/u);
-  assert.match(publicJob, /if: steps\.classify\.outputs\.mode == 'application'/u);
+  assert.match(publicJob, /mode == 'application-v3'/u);
   assert.match(verificationStep, /GH_TOKEN: ""/u);
   assert.match(verificationStep, /GITHUB_TOKEN: ""/u);
   assert.match(verificationStep, /GIT_NO_LAZY_FETCH: "1"/u);
@@ -69,8 +69,8 @@ test("only a closed six-file application is hydrated and public source lookup ha
 });
 
 test("one-file workflow canary stays policy-bound, inert, authenticated, and non-authoritative", () => {
-  assert.match(publicJob, /application\|workflow-canary\|registry-maintenance\|no-op/u);
-  assert.match(publicJob, /mode == 'application' \|\| steps\.classify\.outputs\.mode == 'workflow-canary'/u);
+  assert.match(publicJob, /application\|application-v3\|workflow-canary\|registry-maintenance\|no-op/u);
+  assert.match(publicJob, /mode == 'application' \|\| steps\.classify\.outputs\.mode == 'application-v3' \|\| steps\.classify\.outputs\.mode == 'workflow-canary'/u);
   assert.match(publicJob, /- name: Verify policy-bound hidden workflow canary/u);
   assert.match(publicJob, /if: steps\.classify\.outputs\.mode == 'workflow-canary'/u);
   assert.match(publicJob, /scripts\/verify-workflow-canary\.mjs/u);
@@ -106,7 +106,7 @@ test("protected V2 intake resolves policy only from the exact trusted base", () 
 test("credentials are removed and maintenance is deferred to ordinary CI", () => {
   assert.match(publicJob, /- name: Remove candidate fetch credential\n\s+if: always\(\)/u);
   assert.match(publicJob, /--unset-all http\.https:\/\/github\.com\/\.extraheader/u);
-  assert.match(publicJob, /application\|workflow-canary\|registry-maintenance\|no-op/u);
+  assert.match(publicJob, /application\|application-v3\|workflow-canary\|registry-maintenance\|no-op/u);
   assert.match(publicJob, /mode == 'registry-maintenance'/u);
   assert.match(publicJob, /No maintenance blob is hydrated, parsed, or executed under pull_request_target/u);
 });
@@ -152,7 +152,8 @@ test("application-only pull requests get the existing required contexts from tru
     "submissions/*/TEST_PLAN.md",
     "submissions/*/THREAT_MODEL.md",
     "submissions/*/compatibility-report.json",
-    "submissions/*/evidence-index.json"
+    "submissions/*/evidence-index.json",
+    "submissions/*/v3/revisions/*/**"
   ];
   for (const source of [ordinary, codeql]) {
     assert.match(source, /pull_request:\n(?:\s+branches:\n\s+- main\n)?\s+paths-ignore:/u);

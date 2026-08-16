@@ -13,22 +13,36 @@ production facts as separate authorities.
    or indirect imported gates fail the repository check until explicitly classified and reviewed.
 4. The deterministic reviewer projects findings from those Rule IDs. Analyzer observations cannot add requirements,
    severity, enforcement, or approval authority.
-5. A one-file Workflow Canary may prove only the hidden, non-production GitHub handoff against that same binding.
-6. A signed audience-bound Website eligibility envelope may expose that exact Canary result only to the Website
+5. [`intake/schemas/public-pr-application-v3.schema.json`](../intake/schemas/public-pr-application-v3.schema.json) is
+   the central owner of the generic Application V3.1 draft contract. One immutable revision binds applicant identity,
+   exact public source, intent, evidence, policy selection, and security assessment without classifying the project by
+   a closed type or capability list.
+6. Protected-base intake validates one bounded V3.1 revision as inert untrusted data. It may emit only a valid or
+   invalid draft-for-review result; it cannot record review completion, acceptance, approval, deployment, or launch.
+7. A one-file Workflow Canary may prove only the hidden, non-production GitHub handoff against that same binding.
+8. A signed audience-bound Website eligibility envelope may expose that exact Canary result only to the Website
    environment named by protected deployment configuration. It grants no public, production, funds, audit, or launch
    authority.
-7. Registry promotion, deployment, runtime verification, provider support, and public availability remain later,
+9. Registry promotion, deployment, runtime verification, provider support, and public availability remain later,
    independently evidenced facts.
 
-The current flow is: policy → reviewer → Workflow Canary → signed audience-bound Website eligibility.
-Every step rechecks the exact policy, application, source, and prior-result identity before it can emit its narrower
-result. A changed policy fails closed as drift; it is never silently copied into a consumer.
+The public draft flow is: applicant source → immutable Application V3.1 revision → protected validation → independent
+review. The separate hidden path remains: policy → reviewer → Workflow Canary → signed audience-bound Website
+eligibility. Every step rechecks the exact policy, application, source, and prior-result identity before it can emit its
+narrower result. A changed policy fails closed as drift; it is never silently copied into a consumer.
 
 The source repository never moves into this repository. An application pull request never gains permission to edit
 policy, workflows, schemas, project records, or another application. The receipt-bound
 `vendor/programmable-v4-hook-builder/` tree is frozen validation data for the open legacy six-file V2 intake, not a
 current central-policy requirement source. New V2 applications remain accepted only while the checked-in intake state
 is `open`; V2 packages and frozen compatibility checks cannot satisfy Workflow Canary or Website eligibility.
+
+Application V3.1 does not replace or reinterpret legacy V2 or Canary bytes. New V3.1 revisions are add-only under
+`submissions/<application-id>/v3/revisions/<revision>/`. The manifest closes its own application-package file set while
+content-addressed source-repository records remain at the exact pinned source revision. Required semantic review kinds
+establish a common review floor; additional slug-named records preserve novel capabilities and evidence without making
+them new admission requirements. A project that did not select legacy Fee V2 uses the explicit `not-selected` state
+and an all-null Fee V2 binding tuple rather than fabricating fee artifacts.
 
 Strict JSON, path safety, size limits, Git identity, authentication, signatures, and key or audience pinning are
 implementation security controls. They protect the policy path but do not create separate semantic admission rules.
