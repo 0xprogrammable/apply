@@ -264,6 +264,32 @@ function validateMaterializedApplicationV3Package({ application, normalizedFiles
   const recordsByPath = new Map(application.reviewPackage.records
     .filter(({ source }) => source === "application-package")
     .map((record) => [record.path, { ...record, bytes: normalizedFiles.get(record.path) }]));
+  if (application.stage === "proposal") {
+    const compatibilityRecords = application.reviewPackage.records.filter((record) => (
+      record.kind === "compatibility-report"
+      && record.source === "application-package"
+      && record.repositoryRef === null
+    ));
+    if (compatibilityRecords.length !== 1) {
+      rejectApplicationV3("APPLICATION_V3_MATERIALIZATION_INVALID", "A proposal must bind exactly one application-package compatibility report.");
+    }
+    const compatibilityRecord = recordsByPath.get(compatibilityRecords[0].path);
+    const compatibility = parseCanonicalApplicationV3Json(
+      compatibilityRecord?.bytes,
+      "proposal compatibility report",
+      MAXIMUM_APPLICATION_V3_FILE_BYTES
+    );
+    if (
+      !isObject(compatibility)
+      || Object.keys(compatibility).length !== 2
+      || !Object.hasOwn(compatibility, "result")
+      || !Object.hasOwn(compatibility, "schemaVersion")
+      || compatibility.result !== "architecture-review-required"
+      || compatibility.schemaVersion !== 3
+    ) {
+      rejectApplicationV3("APPLICATION_V3_MATERIALIZATION_INVALID", "A proposal compatibility report must be the exact closed architecture-review-required schema v3 contract.");
+    }
+  }
   const securitySchemaPath = application.securityBindings?.securityAssessmentSchemaPath;
   const securitySchemaRecord = recordsByPath.get(securitySchemaPath);
   if (
@@ -624,6 +650,9 @@ function validateCompleteSubmissionV2Package({
   });
   if (report?.valid !== true) {
     rejectApplicationV3("APPLICATION_REMOTE_V2_PACKAGE_INVALID", "The complete exact Submission V2 source package failed its authoritative validator.");
+  }
+  if (application.stage === "prototype" && submission.tradeCapability?.applicability === "unresolved") {
+    rejectApplicationV3("APPLICATION_REMOTE_V2_PACKAGE_INVALID", "A prototype cannot reuse unresolved proposal trade capability as prototype evidence.");
   }
   const feeApplicability = deriveApplicationV3FeeApplicabilityFromSubmissionV2(submission);
   const schemaArtifact = boundArtifacts.find(({ kind }) => kind === "fee-policy-schema");
@@ -1002,6 +1031,14 @@ function validateReviewPackage(reviewPackage, policy, stage, intent, add) {
     add("blocker", "APPLICATION_REVIEW_REQUIRED_KINDS_INVALID", "$.reviewPackage.requiredKinds", "The semantic review-kind contract is missing, reordered, or expanded as if optional records were mandatory.", "Use the exact required-kind list; add novel evidence as extra open records.", "review-package");
   }
   const records = Array.isArray(reviewPackage.records) ? reviewPackage.records : [];
+  if (stage === "proposal") {
+    const fabricatedTradeRecord = records.find(({ kind }) => (
+      kind === "trade-capability-manifest" || kind === "trade-test-result"
+    ));
+    if (fabricatedTradeRecord !== undefined) {
+      add("blocker", "APPLICATION_PROPOSAL_TRADE_EVIDENCE_FORBIDDEN", "$.reviewPackage.records", "An unresolved proposal cannot carry a trade-capability manifest or trade-test result.", "Keep proposal trade capability unresolved with no selected route or fabricated execution evidence.", "trade-capability");
+    }
+  }
   const kinds = new Set(records.map((record) => record?.kind));
   for (const kind of requiredReviewKinds) {
     if (!kinds.has(kind)) {
@@ -1133,7 +1170,9 @@ function applicationReport(findings) {
     applicationContract: "public-pr-application-v3",
     ideaEligibility: "ELIGIBLE_FOR_REVIEW",
     publicApplicationEligibility: privacyHeld ? "HELD_FOR_PRIVACY_REDACTION" : "ELIGIBLE_FOR_REVIEW",
-    approvalGranted: false
+    approvalGranted: false,
+    deploymentAuthorizationGranted: false,
+    launchAuthorizationGranted: false
   });
   const statusReport = {
     ...report,

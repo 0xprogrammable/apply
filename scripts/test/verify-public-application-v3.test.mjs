@@ -5,11 +5,15 @@ import test from "node:test";
 
 import { canonicalJson } from "../../vendor/programmable-v4-hook-builder/scripts/submission-core.mjs";
 import {
+  architectureSnapshotSha256
+} from "../../vendor/programmable-v4-hook-builder/scripts/open-world-v2-core.mjs";
+import {
   PUBLIC_PR_APPLICATION_V3_BASE_REQUIRED_REVIEW_KINDS,
   validatePublicApplicationV3PackageFiles,
   validatePublicApplicationV3SubmissionV2Bytes,
   validatePublicPrApplicationV3
 } from "../verify-public-application-v3-core.mjs";
+import { generatePublicPrApplicationV3 } from "../verify-public-application-v3-generation.mjs";
 import { createApplicationV3TestPackage } from "./application-v3-package-fixture.mjs";
 
 const SCHEMA_PATH = new URL("../../intake/schemas/public-pr-application-v3.schema.json", import.meta.url);
@@ -38,6 +42,141 @@ test("complete fee-unselected Application V3.1 materializes without fabricated F
   const v2 = validateV2(fixture);
   assert.equal(v2.feeApplicability, "not-selected");
   assert.ok(v2.artifactCount >= 7);
+});
+
+test("policy-neutral custom-tradable proposal materializes only as an unreviewed architecture-review draft", () => {
+  const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+  const report = validatePublicPrApplicationV3(fixture.application);
+  assert.equal(report.valid, true, JSON.stringify(report.findings));
+  assert.equal(report.approvalGranted, false);
+  assert.equal(report.deploymentAuthorizationGranted, false);
+  assert.equal(report.launchAuthorizationGranted, false);
+
+  const v2 = validateV2(fixture);
+  assert.equal(v2.feeApplicability, "not-selected");
+  assert.equal(v2.submission.stage, "proposal");
+  assert.deepEqual(v2.submission.tradeCapability, {
+    applicability: "unresolved",
+    facetEntryRef: "routing-trade-capability",
+    markets: []
+  });
+
+  const generated = generateFixture(fixture);
+  assert.equal(generated.materializationAllowed, true, JSON.stringify(generated.report.findings));
+  assert.equal(generated.report.approvalGranted, false);
+  assert.equal(generated.report.deploymentAuthorizationGranted, false);
+  assert.equal(generated.report.launchAuthorizationGranted, false);
+  assert.equal(generated.report.implementationAuthorizationGranted, false);
+
+  const result = validatePackage(fixture);
+  assert.equal(result.application.stage, "proposal");
+  assert.equal(result.application.reviewState.status, "unreviewed");
+  assert.equal(result.application.reviewPackage.records.some(({ kind }) => (
+    kind === "trade-capability-manifest" || kind === "trade-test-result"
+  )), false);
+  assert.deepEqual(
+    JSON.parse(fixture.applicationPackageFiles.get("compatibility-report.json")),
+    { result: "architecture-review-required", schemaVersion: 3 }
+  );
+});
+
+test("generator stage policy remains closed to proposal and prototype", () => {
+  const proposal = generateFixture(createApplicationV3TestPackage({ stage: "proposal" }));
+  const prototype = generateFixture(createApplicationV3TestPackage());
+  assert.equal(proposal.materializationAllowed, true, JSON.stringify(proposal.report.findings));
+  assert.equal(prototype.materializationAllowed, true, JSON.stringify(prototype.report.findings));
+
+  const invalid = createApplicationV3TestPackage({ stage: "proposal" });
+  invalid.application.stage = "idea";
+  invalid.securityAssessment.subject.stage = "idea";
+  const rejected = generateFixture(invalid);
+  assert.equal(rejected.materializationAllowed, false);
+  assert.ok(rejected.report.findings.some(({ code }) => code === "APPLICATION_GENERATOR_STAGE_INVALID"));
+});
+
+test("proposal rejects forged readiness, fabricated trade or Fee evidence, and stage substitution", async (t) => {
+  await t.test("forged prototype", () => {
+    const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+    fixture.application.stage = "prototype";
+    fixture.sourcePackage.submission.stage = "prototype";
+    const fidelityPath = fixture.sourcePackage.submission.intentPackage.intentFidelity.path;
+    const fidelity = JSON.parse(fixture.sourceFiles.get(`submissions/${fixture.application.applicationId}/${fidelityPath}`));
+    fidelity.inputDigests.architectureSnapshotSha256 = architectureSnapshotSha256(fixture.sourcePackage.submission);
+    rebindSourceArtifact(fixture, "intent-fidelity", fidelityPath, fidelity);
+    rebindSourceSubmission(fixture, jsonBytes(fixture.sourcePackage.submission));
+    fixture.securityAssessment.subject.stage = "prototype";
+    rebindApplicationArtifact(fixture, "security-assessment", jsonBytes(fixture.securityAssessment));
+    fixture.applicationPackageFiles.set("application.v3.json", jsonBytes(fixture.application));
+    assert.throws(
+      () => validateV2(fixture),
+      (error) => error?.code === "APPLICATION_REMOTE_V2_PACKAGE_INVALID"
+    );
+  });
+
+  for (const kind of ["trade-capability-manifest", "trade-test-result"]) {
+    await t.test(`fabricated ${kind}`, () => {
+      const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+      const bytes = jsonBytes({ fabricated: true });
+      fixture.application.reviewPackage.records.push({
+        kind,
+        path: `${kind}.json`,
+        mediaType: "application/json",
+        byteLength: bytes.length,
+        sha256: sha256(bytes),
+        source: "application-package",
+        repositoryRef: null
+      });
+      fixture.applicationPackageFiles.set(`${kind}.json`, bytes);
+      fixture.applicationPackageFiles.set("application.v3.json", jsonBytes(fixture.application));
+      const report = validatePublicPrApplicationV3(fixture.application);
+      assert.equal(report.valid, false);
+      assert.ok(report.findings.some(({ code }) => code === "APPLICATION_PROPOSAL_TRADE_EVIDENCE_FORBIDDEN"));
+    });
+  }
+
+  await t.test("fabricated Fee V2 tuple", () => {
+    const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+    fixture.application.policyBindings.programmableFeePolicyId = "programmable-volume-fee-v2";
+    const report = validatePublicPrApplicationV3(fixture.application);
+    assert.equal(report.valid, false);
+    assert.ok(report.findings.some(({ code }) => code === "APPLICATION_FEE_NOT_SELECTED_BINDING_INVALID"));
+  });
+
+  await t.test("prototype-ready compatibility", () => {
+    const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+    rebindApplicationArtifact(
+      fixture,
+      "compatibility-report",
+      jsonBytes({ result: "prototype-ready", schemaVersion: 3 })
+    );
+    assert.throws(
+      () => validatePackage(fixture),
+      (error) => error?.code === "APPLICATION_V3_MATERIALIZATION_INVALID"
+    );
+  });
+
+  for (const [label, compatibility] of [
+    ["wrong compatibility schema version", { result: "architecture-review-required", schemaVersion: 999 }],
+    ["extra compatibility authority field", { approvalGranted: true, result: "architecture-review-required", schemaVersion: 3 }]
+  ]) {
+    await t.test(label, () => {
+      const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+      rebindApplicationArtifact(fixture, "compatibility-report", jsonBytes(compatibility));
+      assert.throws(
+        () => validatePackage(fixture),
+        (error) => error?.code === "APPLICATION_V3_MATERIALIZATION_INVALID"
+      );
+    });
+  }
+
+  await t.test("application and Submission V2 stage mismatch", () => {
+    const fixture = createApplicationV3TestPackage({ stage: "proposal" });
+    fixture.application.stage = "prototype";
+    assert.throws(
+      () => validateV2(fixture),
+      (error) => error?.code === "APPLICATION_V3_SUBMISSION_INVALID"
+    );
+  });
 });
 
 test("not-selected rejects fabricated Fee V2 fields and fee-policy review records", () => {
@@ -198,11 +337,59 @@ function validateV2(fixture) {
   });
 }
 
+function generateFixture(fixture) {
+  const sourceCoverage = fixture.application.source.verificationReports.map((binding) => ({
+    repositoryRef: binding.repositoryRef,
+    revisionObjectId: binding.revisionObjectId,
+    treeObjectId: binding.treeObjectId,
+    sourceClosureMode: binding.sourceClosureMode,
+    sourcePaths: binding.sourcePaths,
+    sourcePathsSha256: binding.sourcePathsSha256,
+    manifestPath: binding.manifestPath,
+    manifestSha256: binding.manifestSha256,
+    manifestByteLength: binding.manifestByteLength,
+    closureSha256: binding.closureSha256,
+    verificationReportPath: binding.reportPath,
+    verificationReportSha256: binding.reportSha256,
+    verificationReportByteLength: binding.reportByteLength,
+    verificationReport: fixture.verificationReport
+  }));
+  const securityEvidenceBindings = fixture.securityAssessment.assessment.evidenceRefs.map((evidenceRef) => {
+    const record = fixture.application.reviewPackage.records.find(({ path }) => path === evidenceRef);
+    return {
+      evidenceRef,
+      kind: record.kind,
+      path: record.path,
+      repositoryRef: record.repositoryRef,
+      sha256: record.sha256,
+      source: record.source
+    };
+  });
+  return generatePublicPrApplicationV3({
+    application: fixture.application,
+    securityAssessment: fixture.securityAssessment,
+    sourceCoverage,
+    securityEvidenceBindings
+  });
+}
+
 function rebindSourceSubmission(fixture, bytes) {
   const submissionPath = fixture.application.policyBindings.submissionPath;
   fixture.sourceFiles.set(submissionPath, bytes);
   fixture.application.policyBindings.submissionSha256 = sha256(bytes);
   const record = fixture.application.reviewPackage.records.find(({ kind }) => kind === "submission");
+  record.sha256 = sha256(bytes);
+  record.byteLength = bytes.length;
+}
+
+function rebindSourceArtifact(fixture, kind, relativePath, document) {
+  const bytes = jsonBytes(document);
+  const sourcePath = `submissions/${fixture.application.applicationId}/${relativePath}`;
+  fixture.sourceFiles.set(sourcePath, bytes);
+  const binding = fixture.sourcePackage.submission.intentPackage.intentFidelity;
+  binding.sha256 = sha256(bytes);
+  binding.byteLength = bytes.length;
+  const record = fixture.application.reviewPackage.records.find((candidate) => candidate.kind === kind);
   record.sha256 = sha256(bytes);
   record.byteLength = bytes.length;
 }
@@ -215,7 +402,7 @@ function rebindApplicationArtifact(fixture, kind, bytes) {
   if (kind === "security-assessment-schema") {
     fixture.application.securityBindings.securityAssessmentSchemaSha256 = record.sha256;
     fixture.application.securityBindings.securityAssessmentSchemaByteLength = bytes.length;
-  } else {
+  } else if (kind === "security-assessment") {
     fixture.application.securityBindings.securityAssessmentSha256 = record.sha256;
     fixture.application.securityBindings.securityAssessmentByteLength = bytes.length;
   }
