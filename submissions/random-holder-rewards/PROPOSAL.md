@@ -22,7 +22,7 @@ Ordinary ERC-20 transfers carry no tax. Alternative pools do not inherit this be
 - These values are contract constants, are absent from the constructor, and cannot change after launch.
 - Round interval: 1,800 seconds. Reward threshold: 0.42 ETH.
 - Eligibility: the address has at least `0.005 ETH` of retained gross ETH cost basis from actual canonical-buy PoolManager ERC-20 settlement, that cost basis is at least 30 minutes old at the snapshot, and the address is not zero, the hook, the token, PoolManager, or a burn address. Weight is `floor((mature retained cost basis / 0.005 ETH)^(2/3))`; one wallet can win at most once per round. The ETH floor is fixed and is not a USD peg.
-- The Chainlink VRF v2.5 Direct Funding wrapper, confirmation count, and callback gas limit are constructor-bound. Each request pays the wrapper's quoted native price from the isolated reserve with `nativePayment: true`; no subscription or consumer registration exists. Block data is never fallback randomness.
+- The Chainlink VRF v2.5 Direct Funding wrapper, confirmation count, and callback gas limit are constructor-bound. Each request pays the wrapper's quoted native price from the isolated reserve with `nativePayment: true`, but the fixed per-request maximum is `0.01 ETH`. A higher gas-price-dependent quote pauses new requests without changing round state or reserve accounting; no subscription or consumer registration exists. Block data is never fallback randomness.
 
 ## Four swap quadrants
 

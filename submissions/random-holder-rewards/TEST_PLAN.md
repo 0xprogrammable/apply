@@ -29,7 +29,7 @@ LUCK Buyer Rewards
 - Prove buyer-count prefix, snapshot block, and snapshot timestamp cannot change after request. Prove 0 and batches above 256 revert, the default call advances 32 entries, phase/cursor/weight state persists across calls, and a sparse 70-buyer prefix completes one full sum pass plus up to three full selection passes.
 - Grow the buyer index beyond 1,024 wallets and prove new threshold-crossing canonical buys remain usable. Prove 512-wallet groups rotate in fixed circular order, wrap to fill unused places, reach newly waiting wallets before processed wallets repeat, and advance after success, visible failure, and timed-out recovery. At maximum batch size, normal round work is bounded to 8 calls.
 - Test Sybil-style cost-basis splitting as disclosed behavior, not person-level resistance.
-- Test a zero quote, insufficient reserve, wrapper request revert with atomic reserve/state restoration, delayed callback, and failed allocation without pot loss.
+- Test a zero quote, insufficient reserve, exact acceptance at the fixed `0.01 ETH` ceiling, rejection one wei above it with no reserve/state/payment change, wrapper request revert with atomic reserve/state restoration, delayed callback, and failed allocation without pot loss.
 
 ## Claims and custody
 
@@ -52,7 +52,7 @@ LUCK Buyer Rewards
 - Run `npm run test:fork:current` without a block pin: repeat both dependency checks, VRF request compatibility, CREATE2 reproduction, and the complete four-quadrant zero-settlement lifecycle; record the observed block and hash without calling it deployment evidence.
 - Run `npm run test:fork:sepolia:pinned` at block 11,353,915 using the PoolManager snapshot pinned on Programmable `production` and Chainlink's official Sepolia Direct Funding wrapper. Reach the 0.42 ETH reward threshold through real swaps, pay the deployed wrapper's native quote without subscription or consumer registration, simulate the minimal wrapper callback, finalize three winners, and complete a pull claim.
 - Run `npm run test:fork:sepolia:current` as a separate current-head compatibility smoke. Preserve the exact observed block and distinguish both Sepolia fork suites from signed public-testnet evidence.
-- Before regenerating the corrected launch package, run `npm run verify:vrf-direct-funding` with `VRF_EVIDENCE_BLOCK`. Require the exact wrapper runtime and a nonzero quote for one native-paid 150,000-gas callback at the script's declared 1 gwei simulation gas price; production requests use their real transaction gas price.
+- Before regenerating the corrected launch package, run `npm run verify:vrf-direct-funding` with `VRF_EVIDENCE_BLOCK`. Require the exact wrapper runtime and a nonzero quote for one native-paid 150,000-gas callback at the script's declared 1 gwei simulation gas price; production requests use their real transaction gas price and reject quotes above `0.01 ETH`.
 - Continue to mock unavailable, reverting, duplicate, delayed, and unauthorized VRF responses in deterministic unit tests.
 - Gas bounds: beforeSwap, afterSwap, requestRound including Direct Funding payment, the 150,000-gas seed-only callback, 32-entry default and 256-entry maximum finalization calls in every phase, platform claim, and winner claim. Normal completion is at most four passes over a 512-wallet group (8 maximum-size calls); timed-out recovery is at most two passes (4 calls).
 - Run Slither and record every finding disposition. If unavailable, report the gate blocked rather than passed.

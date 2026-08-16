@@ -11,6 +11,7 @@ LUCK Buyer Rewards
 - Returned deltas are matched by ETH taken in the same callback and all PoolManager deltas finish at zero. Both specified-quote before-swap paths reject partial execution inside the callback flow, while both unspecified-quote after-swap paths derive fees from the executed PoolManager delta.
 - Platform, pot, winner liabilities, and the unfunded VRF reserve never exceed raw ETH backing and are never netted across pools.
 - Only the immutable VRF Direct Funding wrapper may enter the authenticated callback for the one pending request; request data binds the snapshot block and buyer-index prefix before randomness exists.
+- A permissionless round request may spend at most `0.01 ETH` from the VRF reserve, regardless of the wrapper quote or transaction gas price.
 - Ordinary transfers cannot create buyer credit. Only the bound hook may open transaction-scoped credit, and only actual LUCK transfers from the immutable PoolManager may assign it to a recipient.
 - Eligibility and weight use gross ETH cost basis from canonical buys, reduced proportionally with outgoing purchased-token balance and delayed for 30 minutes before it can affect a snapshot.
 - Only the platform owner or the entitlement-owning winner initiates its own claim.
@@ -38,7 +39,7 @@ There is no mutable recipient, rescue, sweep, arbitrary call, proxy, or upgrade.
 
 ### Timing manipulation and liveness
 
-Timestamp controls earliest request eligibility, cost-basis maturity, and the seven-day terminal deadline; modest proposer skew cannot choose randomness. Requests are bounded to one pending id and one per 1,800 seconds. Neither an accepted request nor a stored seed can be cancelled, replaced, or retried. At the deadline, both a wrapper callback and a permissionless recovery call converge on the same terminal state: the request id is permanently expired and the committed group's snapshotted pot is paid pro rata by that group's original mature weights. This removes a permanent liveness lock without granting anyone a reroll option. A block producer can briefly affect which transaction starts recovery but cannot change its outcome. Insufficient reserve or an unavailable wrapper prevents a new request but cannot affect swaps or existing claims. Monitoring alerts on old pending requests, recovery progress, unfinalized seeds, reserve accrual, wrapper price, and Direct Funding runway.
+Timestamp controls earliest request eligibility, cost-basis maturity, and the seven-day terminal deadline; modest proposer skew cannot choose randomness. Requests are bounded to one pending id and one per 1,800 seconds. Neither an accepted request nor a stored seed can be cancelled, replaced, or retried. At the deadline, both a wrapper callback and a permissionless recovery call converge on the same terminal state: the request id is permanently expired and the committed group's snapshotted pot is paid pro rata by that group's original mature weights. This removes a permanent liveness lock without granting anyone a reroll option. A block producer can briefly affect which transaction starts recovery but cannot change its outcome. Insufficient reserve, a quote above `0.01 ETH`, or an unavailable wrapper prevents a new request but cannot affect swaps or existing claims. Monitoring alerts on old pending requests, recovery progress, unfinalized seeds, reserve accrual, wrapper price, and Direct Funding runway.
 
 ### Buyer-index growth and finalization liveness
 
@@ -68,11 +69,11 @@ Programmable's current launch UI exposes no model-specific token-creation settin
 
 ### Forced ETH and accounting drift
 
-Raw balance is not entitlement. Swap callbacks accrue liabilities plus a separate operating reserve; only successful finalization creates winner liabilities. A request quotes its native price, decrements the reserve, and sends exactly that price to the immutable wrapper atomically. Forced ETH remains surplus. Invariants reconcile events, getters, and balance after swaps, rounds, requests, claims, failed recipients, and forced transfers.
+Raw balance is not entitlement. Swap callbacks accrue liabilities plus a separate operating reserve; only successful finalization creates winner liabilities. A request accepts only a positive native quote that fits both the reserve and the fixed `0.01 ETH` ceiling, then decrements the reserve and sends exactly that price to the immutable wrapper atomically. Forced ETH remains surplus. Invariants reconcile events, getters, and balance after swaps, rounds, requests, claims, failed recipients, and forced transfers.
 
 ### Direct Funding reserve theft
 
-There is no subscription, owner transfer, consumer list, or withdrawal path. The hook sends only the wrapper-quoted native request price from the isolated reserve to the immutable wrapper in the same transaction that creates the request. A failed call reverts the reserve debit and all pending-round state.
+There is no subscription, owner transfer, consumer list, or withdrawal path. The hook sends only the wrapper-quoted native request price from the isolated reserve to the immutable wrapper in the same transaction that creates the request, and never more than `0.01 ETH`. A zero, underfunded, or above-ceiling quote reverts before any pending-round state or reserve debit; a failed wrapper call reverts the complete transaction. Because the wrapper quote depends on transaction gas price, unusually expensive gas can pause new requests rather than letting an arbitrary caller drain the reserve. Swaps, existing claims, and an already accepted request remain live.
 
 ### Dependency drift
 
