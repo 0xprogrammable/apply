@@ -1,30 +1,18 @@
 # Threat model
 
-## Assets and boundaries
+Assets at risk are trader MIZU/ETH settlement, PoolManager liquidity, permanent protocol principal, unmatched protocol balances, project treasury allocations and hook claim backing. Untrusted actors include traders, routers, LPs, JIT providers, witness producers, orderers and arbitrary factory/compound callers.
 
-Assets at risk are trader MIZU/ETH settlement, PoolManager liquidity, the hook's claim backing, and the separately recorded project and Programmable liabilities. Untrusted parties include traders, routers, liquidity providers, exact-output witness producers, transaction orderers, and arbitrary factory callers. Trusted protocol boundaries are the immutable PoolManager address, one exact PoolId, and the fixed fee-owner addresses.
+Required properties:
 
-## Security properties
+1. Buys remain exactly 1%; only sells create fast pressure; sells never exceed 30% total.
+2. Every successful swap updates 24-hour gross volume once; failed calls update nothing.
+3. Current sell size is integrated and same-block fragmentation cannot reset pressure or capacity.
+4. Only exact-code POL recorded by the factory's immutable child deployer counts as safe depth; getter-compatible arbitrary contracts and concentrated/JIT liquidity cannot inflate it.
+5. Protocol liquidity can increase only through the immutable treasury with token, price and deadline bounds; it cannot decrease and has no transfer, rescue, upgrade or redemption surface.
+6. Fee liabilities conserve backing; base allocations are 50/50 and punishment allocations 80/20.
+7. Exact-output witnesses, partial fills and both currency orientations fail closed.
+8. Neither component performs a same-pool swap.
 
-1. Only PoolManager enters hook callbacks, and only the registered PoolId is accepted.
-2. Every successful supported swap charges executed gross quote volume once; reverted calls charge nothing.
-3. Project fee plus Programmable fee equals total hook fee, and aggregate liabilities equal PoolManager claim backing.
-4. Each immutable owner claims only its liability; neither owner can redirect the other's balance.
-5. Stale witnesses, partial specified-quote fills, invalid hook data, and failed claims revert all state changes.
-6. Same-timestamp splitting cannot materially reduce the integrated surcharge beyond bounded rate rounding.
-7. Decay is monotone and depends on elapsed time, not the number of state-writing calls.
-8. Liquidity changes never update Mizu activity or liabilities.
-9. The hook never initiates a same-pool swap.
-10. CREATE2 prediction and receipts bind the full registration configuration.
+Principal review targets are the rational-atan fixed-point primitive, spot-price manipulation of quote depth, treasury bound selection and transaction ordering, exact-code CREATE2 provenance, tick crossing, `modifyLiquidity` delta settlement, MIZU/quote imbalance, native ETH behavior, external-pool bypass and permanent-loss consequences of the deliberate no-exit design.
 
-## Principal attacks
-
-- A trader fragments or time-slices orders to reduce tax. Integration of the marginal curve neutralizes same-timestamp splitting; waiting for decay remains an intentional strategy with execution and information risk.
-- A searcher races an exact-output witness after activity changes. The stale transaction reverts, creating ordering and gas griefing but no undercollection.
-- A swap reaches a price limit before consuming the specified quote amount. The after-swap consistency check reverts the whole transaction.
-- A malicious caller invokes callbacks or claim unlocks directly. PoolManager authentication, PoolId checks, non-reentrancy, and claim-in-progress state reject the call.
-- Fee math or rounding underfunds an owner. Independent cumulative remainders and liability conservation are required invariants.
-- An interface hides the LP fee, protocol fee, or hook tax. Public disclosure and quote-to-execution parity remain required external review items.
-- A deployment owner selects harmful initial economics. The initial holder, price, liquidity, volume scale, and project beneficiary are material one-shot decisions and must be disclosed before deployment.
-
-The contracts have no pause or upgrade path. Incident response therefore occurs at interfaces and monitoring: stop presenting affected routes, publish the exact PoolId and revision, preserve direct exits, and require a separately reviewed migration for any replacement pool.
+There is no pause or upgrade path. Interfaces may stop routing and publish the affected PoolId/revision, but protocol principal cannot be recovered or migrated by an administrator.
