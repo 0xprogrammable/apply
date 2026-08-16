@@ -2418,6 +2418,8 @@ async function verifyTrustedLegacyV2PredecessorSource({
 
 function projectApplicationV3RepositoryRequest(repository) {
   const inline = repository.sourceClosureMode === "inline";
+  const contractPaths = inline ? repository.contractPaths : [];
+  const contractPathSet = new Set(contractPaths);
   return {
     schemaVersion: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.schemaVersion,
     primary: {
@@ -2425,8 +2427,14 @@ function projectApplicationV3RepositoryRequest(repository) {
       numericRepositoryId: repository.numericRepositoryId,
       revisionObjectId: repository.revisionObjectId,
       treeObjectId: repository.treeObjectId,
-      sourcePaths: inline ? repository.sourcePaths : [],
-      contractPaths: inline ? repository.contractPaths : [],
+      // Application V3 records the complete source closure and an explicit
+      // contract subset. GitHubPublicSourceContractV1 expects its two path
+      // classes to be disjoint, so project the subset only once without
+      // changing the exact union of paths that is remotely verified.
+      sourcePaths: inline
+        ? repository.sourcePaths.filter((sourcePath) => !contractPathSet.has(sourcePath))
+        : [],
+      contractPaths,
       githubActionsRunIds: repository.githubActionsRunIds
     },
     companions: []

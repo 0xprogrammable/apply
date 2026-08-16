@@ -26,6 +26,7 @@ import {
   buildLaunchPolicyBinding,
   readTrustedLaunchPolicyFromGit
 } from "../launch-policy-core.mjs";
+import { validateGitHubPublicSourceRequestV1 } from "../../vendor/programmable-v4-hook-builder/scripts/github-public-source-request.mjs";
 import { createApplicationV3TestPackage } from "./application-v3-package-fixture.mjs";
 
 const PULL_REQUEST_NUMBER = "7";
@@ -253,6 +254,103 @@ test("protected dispatch validates no-fee proposal and prototype Application V3 
       assert.equal(report.realUserFundsAllowed, false);
     });
   }
+});
+
+test("protected dispatch resolves inline Application V3 contract paths once when they are also in the source closure", async (t) => {
+  const fixture = createRevisionPair(t);
+  const { application, packageFiles, sourceFiles } = makeApplicationV3Package({ stage: "proposal" });
+  const contractPath = application.source.primary.sourcePaths.find((sourcePath) => sourcePath.endsWith("submission.v2.json"));
+  assert.equal(typeof contractPath, "string");
+  application.source.primary.contractPaths = [contractPath];
+  packageFiles.set("application.v3.json", jsonBytes(application));
+
+  const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+  for (const [relativePath, bytes] of packageFiles) {
+    writeFile(fixture.candidate, `${packageDirectory}/${relativePath}`, bytes);
+  }
+  const candidateCommit = commitAll(fixture.candidate, "Application V3 source and contract path overlap");
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+  await hydratePublicApplicationCandidate({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    repository: "central/repository",
+    readToken: "test-read-token"
+  }, localHydrationDependencies(fixture, packageDirectory));
+
+  let observedRequest = null;
+  const report = await verifyPublicHookApplication({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    expectedBuilderLogin: application.builder.githubLogin,
+    expectedBuilderUserId: application.builder.githubUserId,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    resolveSource: async (request) => {
+      observedRequest = validateGitHubPublicSourceRequestV1(request);
+      return exactApplicationV3SourceResolver(observedRequest);
+    },
+    resolveExactObjects: exactApplicationV3ObjectResolver(sourceFiles)
+  });
+
+  assert.equal(report.result, "valid-public-application-v3-package");
+  assert.deepEqual(observedRequest.primary.contractPaths, [contractPath]);
+  assert.equal(observedRequest.primary.sourcePaths.includes(contractPath), false);
+  assert.deepEqual(
+    [...new Set([...observedRequest.primary.sourcePaths, ...observedRequest.primary.contractPaths])].sort(
+      (left, right) => Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
+    ),
+    application.source.primary.sourcePaths
+  );
+});
+
+test("protected dispatch rejects an inline Application V3 contract path outside the source closure before resolution", async (t) => {
+  const fixture = createRevisionPair(t);
+  const { application, packageFiles, sourceFiles } = makeApplicationV3Package({ stage: "proposal" });
+  application.source.primary.contractPaths = ["src/OutsideClosure.sol"];
+  packageFiles.set("application.v3.json", jsonBytes(application));
+
+  const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+  for (const [relativePath, bytes] of packageFiles) {
+    writeFile(fixture.candidate, `${packageDirectory}/${relativePath}`, bytes);
+  }
+  const candidateCommit = commitAll(fixture.candidate, "Application V3 contract path outside source closure");
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+  await hydratePublicApplicationCandidate({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    repository: "central/repository",
+    readToken: "test-read-token"
+  }, localHydrationDependencies(fixture, packageDirectory));
+
+  let resolverCalls = 0;
+  await assert.rejects(
+    () => verifyPublicHookApplication({
+      baseRoot: fixture.base,
+      candidateRoot: candidateData,
+      expectedBaseCommit: fixture.baseCommit,
+      pullRequestNumber: PULL_REQUEST_NUMBER,
+      expectedBuilderLogin: application.builder.githubLogin,
+      expectedBuilderUserId: application.builder.githubUserId,
+      expectedCandidateCommit: candidateCommit,
+      expectedMergeCommit: mergeCommit,
+      resolveSource: async () => { resolverCalls += 1; },
+      resolveExactObjects: exactApplicationV3ObjectResolver(sourceFiles)
+    }),
+    (error) => error?.code === "APPLICATION_CONTRACT_PATH_OUTSIDE_CLOSURE" && error?.kind === "candidate"
+  );
+  assert.equal(resolverCalls, 0);
 });
 
 test("protected dispatch independently rederives an exact legacy V2 schema-migration predecessor", async (t) => {
