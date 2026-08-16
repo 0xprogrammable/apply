@@ -8,11 +8,15 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 test("the public landing page states the checker and intake boundaries", () => {
   const readme = read("README.md");
-  assert.match(readme, /Public application intake is open/u);
+  assert.match(readme, /Three intake transports are open/u);
+  assert.match(readme, /Generic Application V3\.1/u);
+  assert.match(readme, /Hidden Workflow Canary/u);
+  assert.match(readme, /Open legacy V2/u);
+  assert.match(readme, /existing V2 applications use that bounded compatibility validator/u);
   assert.match(readme, /does not fetch\nproject repositories, reproduce evidence, perform an audit/u);
   assert.match(readme, /checkerOnly: true/u);
   assert.match(readme, /launchAuthorized: false/u);
-  assert.ok(readme.indexOf("Public application intake is open") < readme.indexOf("## How it works"));
+  assert.ok(readme.indexOf("Three intake transports are open") < readme.indexOf("## How it works"));
   assert.doesNotMatch(readme, /programmable-registry|programmable-v4-builder/u);
 });
 
@@ -36,9 +40,19 @@ test("the security policy separates private reports, testing limits, and rewards
 
 test("contribution paths and the pull request template stay in sync", () => {
   const contributing = read("CONTRIBUTING.md");
+  const maturity = read("docs/CODE_MATURITY.md");
+  const migration = read("docs/MIGRATION.md");
   const template = read(".github/PULL_REQUEST_TEMPLATE.md");
-  assert.match(contributing, /three intentionally separate contribution paths/u);
+  assert.match(contributing, /four intentionally separate contribution paths/u);
+  assert.match(contributing, /Open legacy V2 intake/u);
+  assert.match(contributing, /separate lightweight one-file intake path/u);
+  assert.match(maturity, /receipt-bound Hookbuilder v0\.5\.1 tree also remains open/u);
+  assert.match(maturity, /cannot satisfy Canary or Website eligibility/u);
+  assert.match(migration, /activated the Hookbuilder 0\.5\.1 bridge/u);
+  assert.match(migration, /bridge remains the open legacy V2 transport/u);
+  assert.match(migration, /separate lightweight one-file Workflow Canary/u);
   assert.match(template, /Generated six-file application package/u);
+  assert.match(template, /Hidden workflow-canary application/u);
   assert.match(template, /Submit a Launch repository maintenance/u);
   assert.match(template, /Open Review Standard maintenance/u);
 });

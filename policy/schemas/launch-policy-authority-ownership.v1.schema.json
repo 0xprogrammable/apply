@@ -1,0 +1,421 @@
+{
+  "$defs": {
+    "path": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!\\.git(?:/|$))[^\\\\\\u0000\\r\\n]+$",
+      "type": "string"
+    },
+    "pathArray": {
+      "items": {
+        "$ref": "#/$defs/path"
+      },
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "$id": "https://programmable.market/schemas/launch-policy-authority-ownership-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "boundedApplicantData": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "contract": {
+                "enum": [
+                  "workflow-canary-application-v1",
+                  "public-pr-application-v2-six-file-v1"
+                ]
+              },
+              "files": {
+                "items": {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "rootPath": {
+                "$ref": "#/$defs/path"
+              }
+            },
+            "required": [
+              "contract",
+              "files",
+              "rootPath"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "contract": {
+                "const": "public-pr-application-v3.1-immutable-revision-v1"
+              },
+              "layout": {
+                "const": "application-v3-revision-tree"
+              },
+              "maximumFileBytes": {
+                "const": 4194304
+              },
+              "maximumFiles": {
+                "const": 100
+              },
+              "maximumPackageBytes": {
+                "const": 12582912
+              },
+              "rootFile": {
+                "const": "application.v3.json"
+              },
+              "rootMaximumBytes": {
+                "const": 262144
+              },
+              "rootPath": {
+                "const": "submissions"
+              }
+            },
+            "required": [
+              "contract",
+              "layout",
+              "maximumFileBytes",
+              "maximumFiles",
+              "maximumPackageBytes",
+              "rootFile",
+              "rootMaximumBytes",
+              "rootPath"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+    },
+    "canonicalPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "const": "policy/launch-policy.v1.json"
+        },
+        "schemaPath": {
+          "const": "policy/schemas/launch-policy.v1.schema.json"
+        }
+      },
+      "required": [
+        "path",
+        "schemaPath"
+      ],
+      "type": "object"
+    },
+    "entrypoints": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "frozenVendorImports": {
+            "$ref": "#/$defs/pathArray"
+          },
+          "id": {
+            "pattern": "^[a-z0-9][a-z0-9.-]{1,79}$",
+            "type": "string"
+          },
+          "moduleClosure": {
+            "$ref": "#/$defs/pathArray"
+          },
+          "path": {
+            "$ref": "#/$defs/path"
+          },
+          "role": {
+            "enum": [
+              "current-policy-read",
+              "current-review",
+              "frozen-legacy-review",
+              "public-intake",
+              "workflow-canary",
+              "website-canary-eligibility",
+              "disabled-legacy-entitlement",
+              "policy-projection",
+              "repository-integrity"
+            ]
+          }
+        },
+        "required": [
+          "frozenVendorImports",
+          "id",
+          "moduleClosure",
+          "path",
+          "role"
+        ],
+        "type": "object"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+    },
+    "fileClasses": {
+      "additionalProperties": false,
+      "properties": {
+        "admission-entrypoint": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "authority-ownership-control": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "authority-ownership-manifest": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "canonical-admission-policy": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "current-admission-implementation": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "current-admission-support": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "frozen-legacy-compatibility": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "generated-public-projection": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "historical-design-record": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "repository-support": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "test-evidence": {
+          "$ref": "#/$defs/pathArray"
+        }
+      },
+      "required": [
+        "admission-entrypoint",
+        "authority-ownership-control",
+        "authority-ownership-manifest",
+        "canonical-admission-policy",
+        "current-admission-implementation",
+        "current-admission-support",
+        "frozen-legacy-compatibility",
+        "generated-public-projection",
+        "historical-design-record",
+        "repository-support",
+        "test-evidence"
+      ],
+      "type": "object"
+    },
+    "fileSha256": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!\\.git(?:/|$))[^\\\\\\u0000\\r\\n]+$": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "frozenVendor": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "const": "547482adf6ed0ed19e9cd4d0e884abd70e143229"
+        },
+        "receiptPath": {
+          "const": "vendor/receipt.json"
+        },
+        "release": {
+          "const": "v0.5.1"
+        },
+        "repository": {
+          "const": "0xprogrammable/hookbuilder"
+        },
+        "rootPath": {
+          "const": "vendor/programmable-v4-hook-builder"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "skillTree": {
+          "const": "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec"
+        },
+        "source": {
+          "const": "https://github.com/0xprogrammable/hookbuilder/tree/547482adf6ed0ed19e9cd4d0e884abd70e143229/skills/programmable-v4-hook-builder"
+        }
+      },
+      "required": [
+        "commit",
+        "receiptPath",
+        "release",
+        "repository",
+        "rootPath",
+        "schemaVersion",
+        "skillTree",
+        "source"
+      ],
+      "type": "object"
+    },
+    "moduleOwnership": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/path"
+          },
+          "role": {
+            "enum": [
+              "pure-support",
+              "runtime-control",
+              "semantic-consumer"
+            ]
+          },
+          "semanticRuleIds": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]*(?:\\.[A-Z][A-Z0-9_]*)+$",
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "path",
+          "role",
+          "semanticRuleIds"
+        ],
+        "type": "object"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "orchestrationEntrypoints": {
+      "$ref": "#/$defs/pathArray"
+    },
+    "publicProjections": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "generated-discovery",
+              "generated-policy-document",
+              "public-contract",
+              "public-documentation",
+              "public-schema",
+              "trusted-workflow"
+            ]
+          },
+          "path": {
+            "$ref": "#/$defs/path"
+          },
+          "sourcePaths": {
+            "$ref": "#/$defs/pathArray"
+          }
+        },
+        "required": [
+          "kind",
+          "path",
+          "sourcePaths"
+        ],
+        "type": "object"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "repository": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "const": "main"
+        },
+        "name": {
+          "const": "0xprogrammable/submit-launch"
+        },
+        "numericRepositoryId": {
+          "const": "1320171831"
+        }
+      },
+      "required": [
+        "branch",
+        "name",
+        "numericRepositoryId"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": "programmable.launch-policy-authority-ownership.v1"
+    },
+    "semanticRuleMap": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "consumers": {
+            "$ref": "#/$defs/pathArray"
+          },
+          "handlerId": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9.-]{1,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profiles": {
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "ruleId": {
+            "pattern": "^[A-Z][A-Z0-9_]*(?:\\.[A-Z][A-Z0-9_]*)+$",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          }
+        },
+        "required": [
+          "consumers",
+          "handlerId",
+          "profiles",
+          "ruleId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "boundedApplicantData",
+    "canonicalPolicy",
+    "entrypoints",
+    "fileClasses",
+    "fileSha256",
+    "frozenVendor",
+    "moduleOwnership",
+    "orchestrationEntrypoints",
+    "publicProjections",
+    "repository",
+    "schemaVersion",
+    "semanticRuleMap"
+  ],
+  "title": "Programmable launch-policy authority ownership v1",
+  "type": "object"
+}

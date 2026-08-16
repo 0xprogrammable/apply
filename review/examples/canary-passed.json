@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "programmable.launch-policy-review-input.v1",
+  "profileId": "workflow-canary",
+  "expectedPolicyBinding": {
+    "schemaVersion": "programmable.launch-policy-binding.v1",
+    "repository": "0xprogrammable/submit-launch",
+    "numericRepositoryId": "1320171831",
+    "baseCommit": "599cbb7f9e6c6daf8a1aeca85340429db5a4f134",
+    "baseTree": "3a3ffe028ff3e528bbdfb49d10f287a5d6f23b5a",
+    "path": "policy/launch-policy.v1.json",
+    "gitBlobOid": "9310a2a83b13430686aadc07a726cca754f2dc70",
+    "policyId": "programmable-central-launch-policy",
+    "policyVersion": "1.1.0",
+    "profileId": "workflow-canary",
+    "sha256": "sha256:e157665625b2a8cf9e62ed33ba62b087d7a7b7c4027da83b74b9476a355d1fe4"
+  },
+  "expectedSubject": {
+    "numericRepositoryId": "1001",
+    "repository": "example/canary-hook",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "usesUniswapV4": true
+  },
+  "currentSubject": {
+    "numericRepositoryId": "1001",
+    "repository": "example/canary-hook",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "usesUniswapV4": true
+  },
+  "evaluations": [
+    { "ruleId": "CANARY.APPLICATION_IDENTITY", "state": "passed", "evidenceRefs": ["sha256:0000000000000000000000000000000000000000000000000000000000000001"], "analyzer": { "kind": "deterministic", "id": "authenticated-application-v1" } },
+    { "ruleId": "CANARY.EXACT_PUBLIC_SOURCE", "state": "passed", "evidenceRefs": ["sha256:0000000000000000000000000000000000000000000000000000000000000002"], "analyzer": { "kind": "deterministic", "id": "exact-public-source-v1" } },
+    { "ruleId": "CANARY.HIDDEN_NAMESPACE", "state": "passed", "evidenceRefs": ["sha256:0000000000000000000000000000000000000000000000000000000000000003"], "analyzer": { "kind": "deterministic", "id": "hidden-namespace-v1" } },
+    { "ruleId": "CANARY.NO_PUBLIC_ROUTING", "state": "passed", "evidenceRefs": ["sha256:0000000000000000000000000000000000000000000000000000000000000004"], "analyzer": { "kind": "deterministic", "id": "no-public-routing-v1" } },
+    { "ruleId": "CANARY.NO_REAL_USER_FUNDS", "state": "passed", "evidenceRefs": ["sha256:0000000000000000000000000000000000000000000000000000000000000005"], "analyzer": { "kind": "deterministic", "id": "no-real-user-funds-v1" } },
+    { "ruleId": "CANARY.REPRODUCIBLE_INERT_APPLICATION_RECORD", "state": "passed", "evidenceRefs": ["sha256:0000000000000000000000000000000000000000000000000000000000000006"], "analyzer": { "kind": "deterministic", "id": "reproducible-inert-application-record-v1" } }
+  ],
+  "observations": []
+}

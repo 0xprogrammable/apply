@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="#launch-policy">Read the launch policy</a> ·
   <a href="#open-review-standard">Read the standard</a> ·
   <a href="#run-the-checker">Run the checker</a> ·
   <a href="#report-a-finding">Report a finding</a>
@@ -26,33 +27,80 @@ the public application ledger, and a versioned discovery registry. Complete proj
 public repository.
 
 > [!IMPORTANT]
-> **Public application intake is open.** Use the current stable
-> [Hookbuilder](https://github.com/0xprogrammable/hookbuilder/releases/latest) to build, validate, and submit one exact
-> six-file application. Existing applications keep their original GitHub review threads.
+> **Three intake transports are open.** Generic Application V3.1 accepts one immutable revision of any complete
+> no-market, tradable, hook, token, app, game, service, or hybrid project as an official protected draft for review.
+> The hidden Workflow Canary remains a separate one-file handoff test. The receipt-bound Hookbuilder v0.5.1 tree may
+> still submit its frozen six-file legacy V2 package while the checked-in intake state remains `open`. A valid draft is
+> not reviewed, accepted, audited, deployed, available, or launched, and no intake transport grants funds authority.
+
+The [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
+creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
+An exact passing result can be compiled into a short-lived
+[Hidden Canary eligibility envelope](docs/CANARY_ELIGIBILITY_V1.md) for a Website test surface. Every public,
+production, funds, audit, and launch authority flag remains false.
 
 A local checker result, passing pull request, merged application, registry match, deployment, or indexer observation is
 never presented as a safety guarantee or launch right.
 
+## Launch policy
+
+The canonical source for Programmable launch requirements is
+[`policy/launch-policy.v1.json`](policy/launch-policy.v1.json). Its
+[`JSON Schema`](policy/schemas/launch-policy.v1.schema.json) closes the authored format, and
+[`docs/LAUNCH_POLICY.md`](docs/LAUNCH_POLICY.md) is a generated, digest-bound human projection. Edit the JSON only;
+the generated Markdown is never independent authority.
+
+> **A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury.**
+
+That is the complete current Programmable launch requirement. Workflow transport, canonical JSON, Git identity,
+signature, path, and size checks protect the process; they are not additional launch-policy requirements.
+
+[`policy/launch-policy-authority-ownership.v1.json`](policy/launch-policy-authority-ownership.v1.json) is the separate
+machine-readable ownership proof. It carries no requirement text or parameter values. It binds the closed repository
+file set and hashes, admission entrypoints and import closures, Rule-ID-to-handler mapping, public projections, and the
+exact frozen Hookbuilder receipt. `npm run authority:check` rejects unclassified files, changed modules, or private
+imported gates until maintainers explicitly review and refresh that ownership record.
+
+Third-party developers and agents can inspect the requirements without installing or using Hookbuilder:
+
+```bash
+npm run policy -- requirements --profile build
+npm run policy -- requirements --profile workflow-canary
+npm run policy -- validate-policy
+npm run policy -- render
+```
+
+`build` returns the one launch requirement. `workflow-canary` intentionally returns no semantic launch requirements;
+it tests transport only. The disabled `production-launch` profile carries the same one requirement for future use but
+cannot authorize a launch. `binding` is available for an enabled profile and binds the policy at the exact committed
+repository `HEAD`; it refuses a dirty policy projection.
+Every command reads the fixed repository-owned policy path, emits canonical JSON, and never imports or executes
+applicant code.
+
+The generated [active-contract manifest](.programmable/active-contract.json) provides digest-bound discovery for the
+current workflow, validators, the [generic Application V3.1 schema](intake/schemas/public-pr-application-v3.schema.json),
+the [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json), the
+[workflow-canary schemas](canary/schemas/), and policy. It is a same-tree discovery record, not approval or proof that
+the tree is protected or live.
+
 ## Open Review Standard
 
-The standard defines evidence requirements across five decision-critical areas: artifact identity, functionality,
-disclosure, integrity, and launch compatibility. It does not rank ideas or reject a project because its mechanics, fees,
-losses, architecture, or tokenomics are unusual.
+The policy-bound reviewer consumes the same canonical
+[`policy/launch-policy.v1.json`](policy/launch-policy.v1.json) as every other launch-policy consumer. Analyzer input can
+name only a Rule ID, state, evidence references and analyzer identity. Requirement text, severity, enforcement and
+outcome come from the exact trusted policy. Missing rules remain `analysis_pending`; unknown Rule IDs and LLM
+observations are advisory only.
 
-Unknown platform-owned evidence remains `platform_analysis_pending`. A hard block requires a complete, revision-bound,
-independently replayed witness supported by the current policy. A model opinion, scanner score, label, or incomplete
-witness cannot hard-block a project.
+The protected evaluator compares the complete recorded policy binding and exact subject identity before semantic
+findings. The public compatibility checker does not fetch
+project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, route traffic,
+handle real funds or issue launch permission. Every result remains `checkerOnly: true` and `launchAuthorized: false`.
 
-The public checker validates a closed review input and applies the published policy deterministically. It does not fetch
-project repositories, reproduce evidence, perform an audit, sign a platform decision, deploy contracts, or issue a
-launch permit.
+The historical [six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md) is fail-closed while the
+central `production-launch` profile is disabled. Its old opaque policy digest cannot enable production. A new
+policy-bound command version is required before that path can issue any entitlement.
 
-After review, maintainers can compile a signed, exact-revision acceptance into the versioned
-[six-file launch-entitlement bridge](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md). The bridge does not treat a GitHub
-label, green check, merge, or editable review state as launch authority, and it never issues the wallet-bound permit.
-
-Read the complete [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md) and the machine-readable
-[policy](review/policy.v1.json).
+Read the complete [Policy-Bound Review Standard](docs/OPEN_REVIEW_STANDARD.md). There is no separate reviewer policy.
 
 ## Run the checker
 
@@ -64,10 +112,11 @@ cd submit-launch
 npm run review -- review/examples/disclosed-high-fee.json
 ```
 
-The bundled example returns `launch_ready` together with `checkerOnly: true`, `launchAuthorized: false`, and
-`independentAudit: false`. Inspect the [examples](review/examples),
-[input schema](review/schemas/open-review-input.v1.schema.json), and
-[decision schema](review/schemas/open-review-decision.v1.schema.json).
+The bundled legacy example returns `profile_disabled` because production launch is currently disabled. Old obligations
+and witnesses survive only as bounded advisories. Inspect the [bundled snapshot examples](review/examples),
+[policy-bound input schema](review/schemas/launch-policy-review-input.v1.schema.json), and
+[policy-bound decision schema](review/schemas/launch-policy-review-decision.v1.schema.json). The old
+[`open-review-input.v1`](review/schemas/open-review-input.v1.schema.json) grammar remains only as a compatibility input.
 
 Run the complete repository gate with:
 
@@ -78,30 +127,38 @@ npm test
 ## How it works
 
 1. **Build.** Project source stays in its own public GitHub repository.
-2. **Prepare.** [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) prepares six generated
-   application files bound to one repository id, commit, tree, configuration, and evidence set.
-3. **Review.** Submit a Launch validates the bounded application. Review evidence and any later decision remain
-   bound to the exact submitted revision.
-4. **Promote.** Application intake, acceptance, deployment, availability, and launch authorization remain separate
-   facts.
-5. **Discover.** Agents and the Programmable Explorer read digest-bound records from the discovery registry.
+2. **Bind.** Application V3.1 records the exact source revision, owner intent, evidence, and selected policy artifacts.
+3. **Submit.** One pull request adds one immutable revision under
+   `submissions/<application-id>/v3/revisions/<revision>/`.
+4. **Validate.** Protected-base code checks bounded inert data without executing applicant code. A pass means only that
+   the draft is valid for review.
+5. **Review separately.** Reviewers evaluate the exact bound revision; intake never records acceptance or approval.
+6. **Promote later.** Registry, deployment, public availability, funds, and launch authorization remain separate facts.
 
 Application content is untrusted data. The trusted intake workflow uses protected base code, read-only permissions,
 bounded files, and no candidate execution.
 
 ## Application intake
 
-**Status: open.** Start with Hookbuilder. Do not hand-write the application package.
+**Generic Application V3.1.** Submit one new immutable revision at
+`submissions/<application-id>/v3/revisions/<revision>/application.v3.json` together with exactly the application-package
+records bound by that manifest. Project kind is not allowlisted: complete no-market, tradable, hook, token, app, game,
+service, and hybrid projects use the same contract. Novel capabilities and evidence remain bound source or additional
+review records instead of being discarded because the validator does not recognize a project category. A green check
+means `ELIGIBLE_FOR_REVIEW` only. Read the [public GitHub intake contract](docs/builder/PUBLIC_GITHUB_PR_BETA.md).
 
-Hookbuilder opens a draft pull request containing exactly six generated files under
-`submissions/<application-id>/`. Existing applications remain on their original review threads. Read the
-[migration contract](docs/MIGRATION.md) for the exact compatibility boundary.
+**Hidden Workflow Canary.** Submit exactly one canonical
+`canary-submissions/<application-id>/application.json` file that binds the central policy and exact public source.
+
+**Open legacy V2.** While [`docs/builder/intake-status.json`](docs/builder/intake-status.json) reports `open`, the pinned
+Hookbuilder v0.5.1 package may also submit exactly six frozen files under `submissions/<application-id>/`. New and
+existing V2 applications use that bounded compatibility validator, but their bytes are never reinterpreted as Canary
+or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the exact boundary.
 
 ## Fee terms
 
-Fee terms apply only to a verified, activated market path. Official Classic and verified Native Custom market policies allocate **10 bps (0.10%) to Programmable**. That share may be part of a wider configured trading fee, so the active market profile and onchain fee path remain the source of truth.
-
-Reusable public templates use a separate planned policy of 20 bps total, split 10 bps to the template creator and 10 bps to Programmable. That policy is not active through this repository. Read [Submit a Template](https://github.com/0xprogrammable/submit-template) for its current status and requirements.
+The current launch policy requires **10 bps (0.10%) of trading volume to the Programmable treasury** on Ethereum. A
+verified onchain fee path is still required before a real market can satisfy that rule.
 
 ## Discovery registry
 
@@ -129,9 +186,11 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 
 ## Documentation
 
+- [Generated launch policy](docs/LAUNCH_POLICY.md)
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
 - [Review and promotion lifecycle](docs/REVIEW_LIFECYCLE.md)
+- [Hidden Canary eligibility v1](docs/CANARY_ELIGIBILITY_V1.md)
 - [Acceptance entitlement bridge v1](docs/ACCEPTANCE_ENTITLEMENT_BRIDGE_V1.md)
 - [Discovery contract](docs/DISCOVERY_CONTRACT.md)
 - [Code maturity assessment](docs/CODE_MATURITY.md)

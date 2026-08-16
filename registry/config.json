@@ -5,7 +5,7 @@
     "repository": "0xprogrammable/submit-launch",
     "state": "open"
   },
-  "historyVersion": "1.4.0",
+  "historyVersion": "1.6.0",
   "legacyIntake": [
     {
       "baseBranch": "main",
@@ -23,5 +23,5 @@
     "registry/projects/stock-paired/project.json"
   ],
   "schemaVersion": "1.0.0",
-  "updatedAt": "2026-08-12T22:37:49Z"
+  "updatedAt": "2026-08-14T00:04:27Z"
 }

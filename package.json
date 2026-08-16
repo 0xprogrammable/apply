@@ -1,18 +1,24 @@
 {
   "name": "@programmable/submit-launch",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
+    "authority:check": "node scripts/launch-policy-authority-ownership.mjs --check",
+    "authority:write": "node scripts/launch-policy-authority-ownership.mjs --write",
+    "compile:canary-eligibility": "node scripts/compile-canary-eligibility.mjs",
     "compile:entitlement": "node scripts/compile-launch-entitlement.mjs",
     "generate": "node scripts/generate-registry.mjs --write",
     "check": "node scripts/verify-repository.mjs",
+    "policy": "node scripts/launch-policy.mjs",
+    "policy:check": "node scripts/generate-launch-policy-artifacts.mjs --check",
+    "policy:generate": "node scripts/generate-launch-policy-artifacts.mjs --write",
     "review": "node review/cli.mjs",
     "test": "node scripts/verify-repository.mjs",
-    "test:acceptance": "node --test test/acceptance-entitlement.test.mjs",
+    "test:acceptance": "node --test test/canary-eligibility.test.mjs test/acceptance-entitlement.test.mjs",
     "test:intake": "node --test --test-concurrency=1 scripts/test/verify-public-hook-application*.test.mjs",
     "test:registry": "node --test test/*.test.mjs"
   },

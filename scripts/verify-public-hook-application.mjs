@@ -24,15 +24,16 @@ const usage = `Usage:
   verify-public-hook-application.mjs --verify-maintained --repository-root <path>
 
 Inspect one pull request with trusted base code. Candidate Git objects are treated only as data.
+V2 verification binds the exact protected-base policy snapshot and uses only its frozen non-authoritative transport adapter.
 
 Options:
-  --classify                    Print application, registry-maintenance, or no-op without network access
+  --classify                    Print application, application-v3, workflow-canary, registry-maintenance, or no-op
   --fetch-candidate             Fetch and identify the exact base-repository PR merge in bounded blobless storage
-  --hydrate-candidate           Preflight sizes and hydrate only the closed six-file candidate package
+  --hydrate-candidate           Hydrate only one closed V2, immutable V3, or canary package
   --verify-bounded-application-paths Prove from trusted metadata that only bounded application data changed
   --repository <owner/name>     Authenticated central GitHub repository for candidate tree metadata
   --pull-request-number <n>     Exact central pull-request number for fetch, hydration, and final application verification
-  --verify-maintained           Inspect all closed applications and validate bounded legacy packages
+  --verify-maintained           Inspect maintained V2, Application V3, and bounded legacy packages
   --repository-root <path>      Trusted post-merge repository root for maintained verification
   --base-root <path>            Trusted base-revision checkout
   --candidate-root <path>       GitHub PR merge checkout treated as untrusted data

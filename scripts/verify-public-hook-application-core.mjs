@@ -24,6 +24,20 @@ import {
 } from "../vendor/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 import { normalizeBuilderTemplate } from "../vendor/programmable-v4-hook-builder/scripts/builder-template-contract.mjs";
 import { hasForbiddenInvisibleOrBidi } from "../vendor/programmable-v4-hook-builder/scripts/metadata-core.mjs";
+import {
+  buildLaunchPolicyBinding,
+  compareLaunchPolicyBindings,
+  parseLaunchPolicyBytes,
+  readTrustedLaunchPolicyFromGit
+} from "./launch-policy-core.mjs";
+import { parseWorkflowCanaryApplicationBytes } from "./workflow-canary-core.mjs";
+import {
+  PublicApplicationV3IntakeError,
+  deriveApplicationV3FeeApplicabilityFromSubmissionV2,
+  derivePublicPrApplicationV3PreviousBinding,
+  validatePublicApplicationV3PackageFiles,
+  validatePublicApplicationV3SubmissionV2Bytes
+} from "./verify-public-application-v3-core.mjs";
 
 export const VALIDATOR_VERSION = "2.0.0";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v2.json";
@@ -86,13 +100,16 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   "acceptance/",
   "assets/",
   "docs/",
+  "intake/schemas/",
   "registry/",
   "review/",
+  "scripts/test/fixtures/",
   "scripts/test/schema-validator/",
   "test/",
   EXECUTABLE_BUILDER_VENDOR_PREFIX
 ]);
 const REGISTRY_MAINTENANCE_FILES = new Set([
+  ".programmable/active-contract.json",
   ".github/CODEOWNERS",
   ".github/ISSUE_TEMPLATE/config.yml",
   ".github/ISSUE_TEMPLATE/documentation.yml",
@@ -112,24 +129,65 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "SUPPORT.md",
   "package-lock.json",
   "package.json",
-  "scripts/generate-registry.mjs",
+  "policy/launch-policy-authority-ownership.v1.json",
+  "policy/launch-policy.v1.json",
+  "policy/schemas/launch-policy-authority-ownership.v1.schema.json",
+  "policy/schemas/launch-policy-binding.v1.schema.json",
+  "policy/schemas/launch-policy.v1.schema.json",
+  "canary/schemas/workflow-canary-application-v1.schema.json",
+  "canary/schemas/workflow-canary-result-v1.schema.json",
   "scripts/acceptance-entitlement-core.mjs",
+  "scripts/canary-eligibility-core.mjs",
+  "scripts/compile-canary-eligibility.mjs",
   "scripts/compile-launch-entitlement.mjs",
+  "scripts/generate-launch-policy-artifacts.mjs",
+  "scripts/generate-registry.mjs",
+  "scripts/launch-policy-authority-ownership.mjs",
+  "scripts/launch-policy-core.mjs",
+  "scripts/launch-policy-handlers.mjs",
+  "scripts/launch-policy.mjs",
   "scripts/registry-core.mjs",
+  "scripts/release-version-core.mjs",
+  "scripts/test/application-v3-package-fixture.mjs",
+  "scripts/test/verify-public-application-v3.test.mjs",
+  "scripts/verify-open-world-v2-contracts.mjs",
+  "scripts/verify-open-world-v2-package.mjs",
+  "scripts/verify-open-world-v2-validation-fee.mjs",
+  "scripts/verify-open-world-v2-validation-intake.mjs",
+  "scripts/verify-open-world-v2-validation-intent.mjs",
+  "scripts/verify-public-application-v3-core.mjs",
+  "scripts/verify-public-application-v3-generation.mjs",
+  "scripts/verify-public-application-v3-shared.mjs",
   "scripts/verify-repository.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-public-hook-application.mjs",
+  "scripts/verify-workflow-canary.mjs",
+  "scripts/workflow-canary-core.mjs",
+  "canary-submissions/README.md",
   "submissions/README.md",
   "vendor/receipt.json"
 ]);
 const RESERVED_MAINTENANCE_PREFIXES = Object.freeze([
   ".github/",
+  ".programmable/",
+  "canary-submissions/",
+  "canary/",
+  "intake/",
+  "policy/",
   "scripts/",
   "submissions/",
   "vendor/"
 ]);
 const SHARED_REGISTRY_DOCUMENTATION_FILES = new Set([]);
 const APPLICATION_PATH_PATTERN = /^submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([^/]+)$/;
+const APPLICATION_V3_PATH_PATTERN = /^submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/v3\/revisions\/([1-9][0-9]*)\/(.+)$/u;
+const APPLICATION_V3_ROOT_FILE = "application.v3.json";
+const MAXIMUM_APPLICATION_V3_PACKAGE_FILES = 100;
+const MAXIMUM_APPLICATION_V3_FILE_BYTES = 4 * 1024 * 1024;
+const MAXIMUM_APPLICATION_V3_MANIFEST_BYTES = 256 * 1024;
+const MAXIMUM_APPLICATION_V3_PACKAGE_BYTES = 12 * 1024 * 1024;
+const CANARY_APPLICATION_PREFIX = "canary-submissions/";
+const CANARY_APPLICATION_PATH_PATTERN = /^canary-submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/application\.json$/;
 const SHA1_PATTERN = /^[a-f0-9]{40}$/;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const OPAQUE_ID_PATTERN = /^[1-9][0-9]{0,63}$/;
@@ -147,8 +205,10 @@ const TRUSTED_GIT_TIMEOUT_MS = 30_000;
 const CANDIDATE_PREFLIGHT_API_RESPONSE_BYTES = 4 * 1024 * 1024;
 const CANDIDATE_PREFLIGHT_FILES_PER_PAGE = 100;
 const HYDRATION_API_RESPONSE_BYTES = 1 * 1024 * 1024;
-const HYDRATION_ADDITIONAL_REPOSITORY_BYTES = 4 * 1024 * 1024;
-const HYDRATION_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const HYDRATION_ADDITIONAL_REPOSITORY_BYTES = 24 * 1024 * 1024;
+const HYDRATION_FILE_SIZE_BYTES = 16 * 1024 * 1024;
+const LEGACY_HYDRATION_ADDITIONAL_REPOSITORY_BYTES = 4 * 1024 * 1024;
+const LEGACY_HYDRATION_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 const HYDRATION_OUTPUT_BYTES = 64 * 1024;
 const HYDRATION_POLL_MS = 25;
 const HYDRATION_KILL_GRACE_MS = 250;
@@ -159,14 +219,28 @@ const CANDIDATE_FETCH_FILE_SIZE_BYTES = 32 * 1024 * 1024;
 const CANDIDATE_FETCH_REPOSITORY_BYTES = 64 * 1024 * 1024;
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const PULL_REQUEST_NUMBER_PATTERN = /^[1-9][0-9]{0,19}$/u;
-const PROGRAMMABLE_FEE_OWNER = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
-const PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP = 1000;
-const PROGRAMMABLE_FEE_SWAP_MODES = Object.freeze([
-  "zeroForOne-exactInput",
-  "zeroForOne-exactOutput",
-  "oneForZero-exactInput",
-  "oneForZero-exactOutput"
-]);
+const LEGACY_V2_TRANSPORT_RULE_ID = "FROZEN_LEGACY_V2.FEE_PROJECTION";
+const LEGACY_V2_POLICY_PROFILE = "legacy-v2-transport";
+const LEGACY_V2_POLICY_ADAPTER_SCHEMA = "programmable.legacy-v2-policy-adapter.v1";
+const TRUSTED_POLICY_SNAPSHOT_BINDING_SCHEMA = "programmable.trusted-policy-snapshot-binding.v1";
+// These values are frozen into the historical six-file V2 transport. They are
+// compatibility grammar, not current launch-policy requirements or authority.
+const LEGACY_V2_TRANSPORT_EVIDENCE_ID = "zz-programmable-fee-submission";
+const LEGACY_V2_EVIDENCE_ID = "legacy-v2-fee-projection";
+const LEGACY_V2_FEE = Object.freeze({
+  owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  platformHundredthsOfBip: 1000,
+  policyId: "programmable-volume-fee-v1",
+  policyVersion: "1.1.0",
+  swapModes: Object.freeze([
+    "zeroForOne-exactInput",
+    "zeroForOne-exactOutput",
+    "oneForZero-exactInput",
+    "oneForZero-exactOutput"
+  ])
+});
+const legacyPolicyAdapters = new WeakSet();
+const trustedLegacyPolicyAdapters = new WeakSet();
 
 const DEFAULT_LIMITS = Object.freeze({
   maximumChangedFiles: 700,
@@ -208,6 +282,116 @@ function systemBlocked(code, message) {
   throw new PublicIntakeError(code, message, { kind: "system" });
 }
 
+/**
+ * Construct the explicit non-authoritative adapter used by local historical
+ * V2 package inspection. Protected pull-request intake never calls this
+ * function and never accepts caller-supplied policy bytes.
+ */
+export function createHistoricalLegacyV2PolicyAdapterForLocalInspection(options) {
+  if (
+    !isPlainObject(options)
+    || !arraysEqual(Object.keys(options).sort(compareUtf8), ["policyBytes"])
+    || !(options.policyBytes instanceof Uint8Array)
+  ) {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_INPUT_INVALID",
+      "Historical local inspection requires only explicit canonical policy bytes."
+    );
+  }
+  let policyRecord;
+  try {
+    policyRecord = parseLaunchPolicyBytes(Buffer.from(options.policyBytes));
+  } catch {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_INPUT_INVALID",
+      "Historical local inspection received invalid canonical policy bytes."
+    );
+  }
+  return createLegacyV2PolicyAdapter({
+    authority: "non-authoritative-local-inspection",
+    policyBinding: null,
+    policyRecord
+  });
+}
+
+function readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit }) {
+  let policyRecord;
+  try {
+    policyRecord = readTrustedLaunchPolicyFromGit({
+      repositoryRoot: path.resolve(baseRoot ?? ""),
+      expectedBaseCommit
+    });
+  } catch {
+    systemBlocked(
+      "TRUSTED_LAUNCH_POLICY_INVALID",
+      "The exact protected-base launch policy is missing, malformed, or unavailable."
+    );
+  }
+  // Legacy V2 is historical transport, not an enabled review profile. This
+  // closed snapshot identity therefore intentionally has no profileId and is
+  // distinct from programmable.launch-policy-binding.v1. Callers cannot
+  // provide or override any of these fields.
+  const policyBinding = Object.freeze({
+    schemaVersion: TRUSTED_POLICY_SNAPSHOT_BINDING_SCHEMA,
+    repository: policyRecord.repository,
+    numericRepositoryId: policyRecord.numericRepositoryId,
+    baseCommit: policyRecord.baseCommit,
+    baseTree: policyRecord.baseTree,
+    path: policyRecord.path,
+    gitBlobOid: policyRecord.gitBlobOid,
+    policyId: policyRecord.policy.policyId,
+    policyVersion: policyRecord.policy.policyVersion,
+    sha256: policyRecord.sha256
+  });
+  const adapter = createLegacyV2PolicyAdapter({
+    authority: "trusted-protected-base",
+    policyBinding,
+    policyRecord
+  });
+  trustedLegacyPolicyAdapters.add(adapter);
+  return adapter;
+}
+
+function createLegacyV2PolicyAdapter({ authority, policyBinding, policyRecord }) {
+  if (
+    !policyRecord?.policy
+    || !new Set(["non-authoritative-local-inspection", "trusted-protected-base"]).has(authority)
+    || (authority === "trusted-protected-base") !== (policyBinding !== null)
+  ) {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_INVALID",
+      "The frozen historical V2 transport adapter cannot be constructed."
+    );
+  }
+  const adapter = Object.freeze({
+    schemaVersion: LEGACY_V2_POLICY_ADAPTER_SCHEMA,
+    authority,
+    ruleId: LEGACY_V2_TRANSPORT_RULE_ID,
+    evidenceId: LEGACY_V2_EVIDENCE_ID,
+    transportEvidenceId: LEGACY_V2_TRANSPORT_EVIDENCE_ID,
+    fee: LEGACY_V2_FEE,
+    policyBinding
+  });
+  legacyPolicyAdapters.add(adapter);
+  return adapter;
+}
+
+function requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted = false } = {}) {
+  if (
+    !isPlainObject(legacyPolicyAdapter)
+    || !legacyPolicyAdapters.has(legacyPolicyAdapter)
+    || (trusted && !trustedLegacyPolicyAdapters.has(legacyPolicyAdapter))
+  ) {
+    systemBlocked(
+      "LEGACY_V2_POLICY_ADAPTER_REQUIRED",
+      trusted
+        ? "Protected V2 intake requires the adapter derived internally from exact trusted policy bytes."
+        : "V2 package validation requires an explicit central-policy legacy adapter."
+    );
+  }
+  return legacyPolicyAdapter;
+}
+
 export function canonicalJson(value) {
   return JSON.stringify(sortJson(value));
 }
@@ -241,10 +425,48 @@ export function classifyPublicIntakePullRequest({
 
   const submissionChanges = changes.filter((change) => change.path.startsWith("submissions/"));
   const applicationDirectoryChanges = submissionChanges.filter((change) => change.path !== "submissions/README.md");
+  const applicationV3Changes = applicationDirectoryChanges.filter((change) => APPLICATION_V3_PATH_PATTERN.test(change.path));
+  if (applicationV3Changes.length > 0) {
+    rejectUnsafeChangedEntries(changes);
+    const classifiedV3 = classifyBoundedApplicationPathChanges(changes.map((change) => ({
+      path: change.path,
+      previousPath: null,
+      status: change.status === "deleted" ? "removed" : change.status
+    })));
+    if (classifiedV3.contract !== "public-pr-application-v3") {
+      reject("APPLICATION_PATH_INVALID", "An Application V3 pull request must add exactly one immutable revision directory.");
+    }
+    return { mode: "application-v3", applicationV3: classifiedV3, ...comparison };
+  }
+  const canaryApplicationChanges = changes.filter((change) => (
+    change.path.startsWith(CANARY_APPLICATION_PREFIX)
+    && change.path !== "canary-submissions/README.md"
+  ));
+  if (canaryApplicationChanges.length > 0) {
+    rejectUnsafeChangedEntries(changes);
+    if (
+      changes.length !== 1
+      || canaryApplicationChanges.length !== 1
+      || canaryApplicationChanges[0].status === "deleted"
+      || !CANARY_APPLICATION_PATH_PATTERN.test(canaryApplicationChanges[0].path)
+    ) {
+      reject(
+        "APPLICATION_PATH_INVALID",
+        "A workflow-canary pull request must add or modify exactly one canary-submissions/<application-id>/application.json blob and no other path."
+      );
+    }
+    return { mode: "workflow-canary", ...comparison };
+  }
   if (applicationDirectoryChanges.length > 0) {
     rejectUnsafeChangedEntries(changes);
     if (changes.every((change) => isAllowlistedApplicationPath(change.path))) {
       return { mode: "application", ...comparison };
+    }
+    if (changes.some((change) => isPolicyMaintenancePath(change.path))) {
+      reject(
+        "APPLICATION_PATH_INVALID",
+        "Applicant V2 data cannot be mixed with trusted policy or active-contract maintenance."
+      );
     }
     reject(
       "CHANGED_PATH_NOT_ALLOWED",
@@ -275,6 +497,10 @@ export function classifyPublicIntakePullRequest({
     "CHANGED_PATH_NOT_ALLOWED",
     "A registry-maintenance pull request may change only first-party registry infrastructure and documentation."
   );
+}
+
+function isPolicyMaintenancePath(entryPath) {
+  return entryPath === ".programmable/active-contract.json" || entryPath.startsWith("policy/");
 }
 
 /**
@@ -338,6 +564,32 @@ export async function preflightPublicApplicationCandidateFetch({
     enforceTrustedIntakeStatus({ intakeStatus, isUpdate: false, pullRequestNumber, applicationId: null });
   }
 
+  if (applicationPaths.some((entryPath) => APPLICATION_V3_PATH_PATTERN.test(entryPath))) {
+    const classifiedV3 = classifyBoundedApplicationPathChanges(changedFiles);
+    if (classifiedV3.contract !== "public-pr-application-v3") {
+      reject(
+        "CHANGED_PATH_NOT_ALLOWED",
+        "A paused-new Application V3 pull request must add one exact immutable revision package."
+      );
+    }
+    const isUpdate = inspectTrustedBaseApplicationV3History(base, classifiedV3.applicationId).length > 0
+      || hasTrustedLegacyV2Application(base, classifiedV3.applicationId);
+    const continuation = enforceTrustedIntakeStatus({
+      intakeStatus,
+      isUpdate,
+      pullRequestNumber,
+      applicationId: classifiedV3.applicationId
+    });
+    return {
+      schemaVersion: 1,
+      result: "candidate-fetch-allowed",
+      intakeState: intakeStatus.state,
+      modeHint: isUpdate ? "application-v3-update" : "application-v3-continuation",
+      pullRequestNumber,
+      continuationAuthorized: continuation !== null
+    };
+  }
+
   const applicationIds = new Set();
   for (const entryPath of applicationPaths) {
     const match = APPLICATION_PATH_PATTERN.exec(entryPath);
@@ -398,7 +650,7 @@ export async function verifyBoundedApplicationPullRequestPaths({
     expectedBaseCommit,
     expectedCandidateCommit,
     readToken,
-    maximumChangedFiles: APPLICATION_FILES.length,
+    maximumChangedFiles: MAXIMUM_APPLICATION_V3_PACKAGE_FILES,
     fetchImplementation: dependencies.fetchImplementation ?? globalThis.fetch,
     timeoutMs: dependencies.timeoutMs ?? TRUSTED_GIT_TIMEOUT_MS
   });
@@ -409,15 +661,72 @@ export async function verifyBoundedApplicationPullRequestPaths({
     pullRequestNumber,
     applicationId: classified.applicationId,
     fileCount: classified.paths.length,
-    paths: classified.paths
+    paths: classified.paths,
+    ...(classified.contract === "public-pr-application-v3" ? {
+      applicationRevision: classified.applicationRevision,
+      contract: classified.contract
+    } : {})
   };
 }
 
 export function classifyBoundedApplicationPathChanges(changes) {
-  if (!Array.isArray(changes) || changes.length < 1 || changes.length > APPLICATION_FILES.length) {
+  if (!Array.isArray(changes) || changes.length < 1 || changes.length > MAXIMUM_APPLICATION_V3_PACKAGE_FILES) {
     reject(
       "CHANGED_PATH_NOT_ALLOWED",
-      "A bounded public-application pull request must change between one and six allowlisted files."
+      "A bounded public-application pull request must stay within the trusted file-count limit."
+    );
+  }
+  const v3Matches = changes.map((change) => (
+    isPlainObject(change) && typeof change.path === "string"
+      ? APPLICATION_V3_PATH_PATTERN.exec(change.path)
+      : null
+  ));
+  if (v3Matches.some(Boolean)) {
+    const applicationIds = new Set();
+    const revisions = new Set();
+    const relativePaths = new Set();
+    const paths = new Set();
+    for (const [index, change] of changes.entries()) {
+      const match = v3Matches[index];
+      const relativePath = match?.[3] ?? null;
+      if (
+        !match
+        || change.previousPath !== null
+        || change.status !== "added"
+        || !isSafeApplicationV3PackagePath(relativePath)
+        || paths.has(change.path)
+      ) {
+        reject(
+          "CHANGED_PATH_NOT_ALLOWED",
+          "An Application V3 pull request may only add regular files in one immutable revision directory."
+        );
+      }
+      applicationIds.add(match[1]);
+      revisions.add(match[2]);
+      relativePaths.add(relativePath);
+      paths.add(change.path);
+    }
+    if (
+      applicationIds.size !== 1
+      || revisions.size !== 1
+      || !relativePaths.has(APPLICATION_V3_ROOT_FILE)
+    ) {
+      reject(
+        "CHANGED_PATH_NOT_ALLOWED",
+        "An Application V3 pull request must add exactly one revision directory containing application.v3.json."
+      );
+    }
+    return {
+      applicationId: [...applicationIds][0],
+      applicationRevision: [...revisions][0],
+      contract: "public-pr-application-v3",
+      paths: [...paths].sort(compareUtf8)
+    };
+  }
+  if (changes.length > APPLICATION_FILES.length) {
+    reject(
+      "TOO_MANY_CHANGED_FILES",
+      "A bounded V2 public-application pull request must change at most six allowlisted files."
     );
   }
   const applicationIds = new Set();
@@ -450,6 +759,21 @@ export function classifyBoundedApplicationPathChanges(changes) {
     applicationId: [...applicationIds][0],
     paths: [...paths].sort(compareUtf8)
   };
+}
+
+function isSafeApplicationV3PackagePath(value) {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 1024
+    && !value.startsWith("/")
+    && !value.includes("\\")
+    && !hasUnsafeSerializedText(value)
+    && value.split("/").every((segment) => (
+      segment.length > 0
+      && segment !== "."
+      && segment !== ".."
+      && segment.toLowerCase() !== ".git"
+    ));
 }
 
 /**
@@ -560,9 +884,10 @@ export async function fetchPublicApplicationCandidate({
 }
 
 /**
- * Hydrate only the already-classified six-file application package. GitHub's
- * exact tree metadata is checked before any candidate blob is requested, and
- * the bounded Git process is prevented from lazily fetching anything else.
+ * Hydrate only the already-classified V2 package, immutable Application V3
+ * revision, or one-file workflow canary.
+ * GitHub's exact tree metadata is checked before any candidate blob is
+ * requested, and the bounded Git process cannot lazily fetch anything else.
  */
 export async function hydratePublicApplicationCandidate({
   baseRoot,
@@ -591,15 +916,35 @@ export async function hydratePublicApplicationCandidate({
     expectedMergeCommit,
     limits
   });
-  const plan = planApplicationHydration(classified, limits);
-  const intakeStatus = readTrustedIntakeStatus(classified.base);
-  const isUpdate = classifyTrustedBaseApplication(classified.base, plan.applicationId);
-  const continuation = enforceTrustedIntakeStatus({
-    intakeStatus,
-    isUpdate,
-    pullRequestNumber,
-    applicationId: plan.applicationId
-  });
+  const isLegacyV2 = classified.mode === "application";
+  const isApplicationV3 = classified.mode === "application-v3";
+  const legacyPolicyAdapter = isLegacyV2
+    ? readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit })
+    : null;
+  if (isLegacyV2) requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted: true });
+  const workflowCanaryPolicy = !isLegacyV2 && !isApplicationV3
+    ? readTrustedWorkflowCanaryPolicy({ baseRoot, expectedBaseCommit })
+    : null;
+  const plan = isLegacyV2
+    ? planApplicationHydration(classified, limits)
+    : isApplicationV3
+      ? planApplicationV3Hydration(classified)
+      : planWorkflowCanaryHydration(classified, limits);
+  const intakeStatus = isLegacyV2 || isApplicationV3 ? readTrustedIntakeStatus(classified.base) : null;
+  const isUpdate = isLegacyV2
+    ? classifyTrustedBaseApplication(classified.base, plan.applicationId)
+    : isApplicationV3
+      ? inspectTrustedBaseApplicationV3History(classified.base, plan.applicationId).length > 0
+        || hasTrustedLegacyV2Application(classified.base, plan.applicationId)
+      : false;
+  const continuation = isLegacyV2 || isApplicationV3
+    ? enforceTrustedIntakeStatus({
+      intakeStatus,
+      isUpdate,
+      pullRequestNumber,
+      applicationId: plan.applicationId
+    })
+    : null;
   const gitDirectory = path.resolve(candidateRoot ?? "");
   requireHydrationRemote(
     gitDirectory,
@@ -611,14 +956,18 @@ export async function hydratePublicApplicationCandidate({
     readToken,
     packageTreeObjectId,
     fetchImplementation: dependencies.fetchImplementation ?? globalThis.fetch,
-    timeoutMs: dependencies.metadataTimeoutMs ?? TRUSTED_GIT_TIMEOUT_MS
+    timeoutMs: dependencies.metadataTimeoutMs ?? TRUSTED_GIT_TIMEOUT_MS,
+    recursive: plan.recursive === true
   });
   const boundedMetadata = enforceHydrationMetadata(plan, metadata, limits);
 
   const baselineBytes = measureHydrationDirectory(gitDirectory);
   const maximumAdditionalRepositoryBytes = dependencies.maximumAdditionalRepositoryBytes
-    ?? HYDRATION_ADDITIONAL_REPOSITORY_BYTES;
-  const maximumFileSizeBytes = dependencies.maximumFileSizeBytes ?? HYDRATION_FILE_SIZE_BYTES;
+    ?? (isApplicationV3
+      ? HYDRATION_ADDITIONAL_REPOSITORY_BYTES
+      : LEGACY_HYDRATION_ADDITIONAL_REPOSITORY_BYTES);
+  const maximumFileSizeBytes = dependencies.maximumFileSizeBytes
+    ?? (isApplicationV3 ? HYDRATION_FILE_SIZE_BYTES : LEGACY_HYDRATION_FILE_SIZE_BYTES);
   validateHydrationProcessLimits(maximumAdditionalRepositoryBytes, maximumFileSizeBytes);
   if (baselineBytes > Number.MAX_SAFE_INTEGER - maximumAdditionalRepositoryBytes) {
     systemBlocked("HYDRATION_STORAGE_INVALID", "Candidate object-store size could not be bounded safely.");
@@ -673,26 +1022,85 @@ export async function hydratePublicApplicationCandidate({
     }
   }
 
-  const applicationEntry = plan.entries.find((entry) => path.posix.basename(entry.path) === APPLICATION_FILE);
+  const rootFileName = isApplicationV3 ? APPLICATION_V3_ROOT_FILE : APPLICATION_FILE;
+  const applicationEntry = plan.entries.find((entry) => path.posix.basename(entry.path) === rootFileName);
+  if (!applicationEntry) {
+    systemBlocked("APPLICATION_ROOT_MISSING", "The bounded application root blob was unavailable after hydration.");
+  }
   const applicationBytes = readGitBlob(
     path.resolve(candidateRoot ?? ""),
     applicationEntry,
-    limits.maximumFileBytes[APPLICATION_FILE]
+    maximumHydrationEntryBytes(plan, applicationEntry, limits)
   );
-  const application = parseCanonicalJson(applicationBytes, APPLICATION_FILE, limits);
-  validateApplicationManifest(application, plan.applicationId, limits);
-  enforceTrustedContinuationIdentity({ continuation, application });
+  if (isLegacyV2) {
+    const application = parseCanonicalJson(applicationBytes, APPLICATION_FILE, limits);
+    validateApplicationManifest(application, plan.applicationId, limits, legacyPolicyAdapter);
+    enforceTrustedContinuationIdentity({ continuation, application });
+  } else if (!isApplicationV3) {
+    let application;
+    try {
+      application = parseWorkflowCanaryApplicationBytes(applicationBytes, {
+        expectedApplicationId: plan.applicationId
+      });
+    } catch (error) {
+      if (error?.kind === "candidate") reject(error.code, error.message);
+      systemBlocked(error?.code ?? "CANARY_APPLICATION_INVALID", "The bounded canary application could not be validated.");
+    }
+    if (!compareLaunchPolicyBindings(application.expectedPolicyBinding, workflowCanaryPolicy.binding)) {
+      reject("POLICY_DRIFT", "The canary application expected a different protected-base launch policy.");
+    }
+  }
 
-  return {
-    schemaVersion: 1,
-    result: "bounded-application-blobs-hydrated",
-    intakeState: intakeStatus.state,
-    applicationId: plan.applicationId,
-    pullRequestNumber,
-    continuationAuthorized: continuation !== null,
-    fileCount: plan.entries.length,
-    totalBytes: boundedMetadata.totalBytes
-  };
+  return isLegacyV2
+    ? {
+      schemaVersion: 1,
+      result: "bounded-application-blobs-hydrated",
+      intakeState: intakeStatus.state,
+      applicationId: plan.applicationId,
+      pullRequestNumber,
+      continuationAuthorized: continuation !== null,
+      fileCount: plan.entries.length,
+      totalBytes: boundedMetadata.totalBytes
+    }
+    : isApplicationV3
+      ? {
+        schemaVersion: 1,
+        result: "bounded-application-v3-blobs-hydrated",
+        intakeState: intakeStatus.state,
+        applicationId: plan.applicationId,
+        applicationRevision: plan.applicationRevision,
+        pullRequestNumber,
+        continuationAuthorized: continuation !== null,
+        fileCount: plan.entries.length,
+        totalBytes: boundedMetadata.totalBytes
+      }
+      : {
+      schemaVersion: 1,
+      result: "bounded-workflow-canary-blob-hydrated",
+      applicationId: plan.applicationId,
+      pullRequestNumber,
+      policyBinding: workflowCanaryPolicy.binding,
+      fileCount: 1,
+      totalBytes: boundedMetadata.totalBytes
+      };
+}
+
+function readTrustedWorkflowCanaryPolicy({ baseRoot, expectedBaseCommit }) {
+  try {
+    const record = readTrustedLaunchPolicyFromGit({
+      repositoryRoot: path.resolve(baseRoot ?? ""),
+      expectedBaseCommit
+    });
+    return Object.freeze({
+      binding: buildLaunchPolicyBinding(record, "workflow-canary"),
+      record
+    });
+  } catch {
+    systemBlocked(
+      "TRUSTED_LAUNCH_POLICY_INVALID",
+      "The exact protected-base workflow-canary launch policy is missing, malformed, disabled, or unavailable."
+    );
+  }
 }
 
 function validateHydrationAuthority({ repository, readToken }) {
@@ -994,7 +1402,75 @@ function planApplicationHydration(classified, limits) {
       systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for an allowlisted package file.");
     }
   }
-  return { applicationId, packageDirectory, entries };
+  return { applicationId, packageDirectory, entries, recursive: false };
+}
+
+function planApplicationV3Hydration(classified) {
+  if (classified.mode !== "application-v3" || !isPlainObject(classified.applicationV3)) {
+    reject("APPLICATION_CHANGE_REQUIRED", "Only one immutable Application V3 revision may hydrate candidate blobs.");
+  }
+  const { applicationId, applicationRevision, paths } = classified.applicationV3;
+  if (
+    !APPLICATION_ID_PATTERN.test(applicationId)
+    || !/^[1-9][0-9]*$/u.test(applicationRevision)
+    || !Array.isArray(paths)
+    || paths.length < 1
+    || paths.length > MAXIMUM_APPLICATION_V3_PACKAGE_FILES
+  ) {
+    systemBlocked("APPLICATION_V3_CLASSIFICATION_INVALID", "The trusted Application V3 classification was malformed.");
+  }
+  const packageDirectory = `submissions/${applicationId}/v3/revisions/${applicationRevision}`;
+  const packagePrefix = `${packageDirectory}/`;
+  const entries = [...classified.candidate.entries.values()]
+    .filter((entry) => entry.path.startsWith(packagePrefix))
+    .sort((left, right) => compareUtf8(left.path, right.path));
+  if (!arraysEqual(entries.map((entry) => entry.path), paths)) {
+    reject(
+      "APPLICATION_PACKAGE_NOT_CLOSED",
+      "The immutable Application V3 revision directory must contain exactly the changed bounded package files."
+    );
+  }
+  if (classified.changes.length !== entries.length || classified.changes.some((change) => change.status !== "added")) {
+    reject("APPLICATION_REVISION_NOT_IMMUTABLE", "An Application V3 revision must be new and add-only against the protected base.");
+  }
+  const rootPath = `${packagePrefix}${APPLICATION_V3_ROOT_FILE}`;
+  if (!entries.some((entry) => entry.path === rootPath)) {
+    reject("APPLICATION_ROOT_MISSING", "An Application V3 revision must contain application.v3.json at its root.");
+  }
+  for (const entry of entries) assertRegularBlob(entry);
+  return {
+    applicationId,
+    applicationRevision,
+    packageDirectory,
+    entries,
+    recursive: true,
+    maximumPackageBytes: MAXIMUM_APPLICATION_V3_PACKAGE_BYTES
+  };
+}
+
+function planWorkflowCanaryHydration(classified, limits) {
+  if (classified.mode !== "workflow-canary" || classified.changes.length !== 1) {
+    reject("APPLICATION_CHANGE_REQUIRED", "Only one closed workflow-canary application may hydrate candidate bytes.");
+  }
+  const [change] = classified.changes;
+  if (change.status === "deleted") {
+    reject("APPLICATION_FILE_DELETED", "Workflow-canary application data cannot be deleted through protected intake.");
+  }
+  const match = CANARY_APPLICATION_PATH_PATTERN.exec(change.path);
+  if (!match) reject("APPLICATION_PATH_INVALID", "The workflow-canary path is outside its closed one-file layout.");
+  const applicationId = match[1];
+  const packageDirectory = `canary-submissions/${applicationId}`;
+  const entries = [...classified.candidate.entries.values()]
+    .filter((entry) => entry.path.startsWith(`${packageDirectory}/`))
+    .sort((left, right) => compareUtf8(left.path, right.path));
+  if (entries.length !== 1 || entries[0].path !== `${packageDirectory}/${APPLICATION_FILE}`) {
+    reject("APPLICATION_PACKAGE_NOT_CLOSED", "The workflow-canary directory must contain exactly one application.json blob.");
+  }
+  assertRegularBlob(entries[0]);
+  if (!Number.isInteger(limits.maximumFileBytes[APPLICATION_FILE])) {
+    systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for workflow-canary application.json.");
+  }
+  return { applicationId, packageDirectory, entries, recursive: false };
 }
 
 function readPackageTreeObjectId(gitDirectory, packageDirectory) {
@@ -1033,7 +1509,8 @@ async function resolveCandidateTreeMetadata({
   readToken,
   packageTreeObjectId,
   fetchImplementation,
-  timeoutMs
+  timeoutMs,
+  recursive = false
 }) {
   if (typeof fetchImplementation !== "function") {
     systemBlocked("HYDRATION_METADATA_UNAVAILABLE", "The trusted GitHub metadata transport is unavailable.");
@@ -1041,7 +1518,10 @@ async function resolveCandidateTreeMetadata({
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > TRUSTED_GIT_TIMEOUT_MS) {
     systemBlocked("HYDRATION_TIMEOUT_INVALID", "The trusted metadata timeout is outside its closed bound.");
   }
-  const requestUrl = `https://api.github.com/repos/${repository}/git/trees/${packageTreeObjectId}`;
+  if (typeof recursive !== "boolean") {
+    systemBlocked("HYDRATION_METADATA_INVALID", "The trusted tree metadata recursion mode was malformed.");
+  }
+  const requestUrl = `https://api.github.com/repos/${repository}/git/trees/${packageTreeObjectId}${recursive ? "?recursive=1" : ""}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   timeout.unref?.();
@@ -1126,11 +1606,16 @@ function enforceHydrationMetadata(plan, metadata, limits) {
     || document.sha !== metadata.packageTreeObjectId
     || document.truncated !== false
     || !Array.isArray(document.tree)
-    || document.tree.length !== plan.entries.length
   ) {
     systemBlocked("HYDRATION_METADATA_INVALID", "GitHub tree-size metadata did not match the exact closed package tree.");
   }
-  const expected = new Map(plan.entries.map((entry) => [path.posix.basename(entry.path), entry]));
+  const expected = new Map(plan.entries.map((entry) => [
+    plan.recursive === true
+      ? entry.path.slice(`${plan.packageDirectory}/`.length)
+      : path.posix.basename(entry.path),
+    entry
+  ]));
+  const blobRecords = [];
   const observed = new Set();
   let totalBytes = 0;
   for (const record of document.tree) {
@@ -1138,6 +1623,19 @@ function enforceHydrationMetadata(plan, metadata, limits) {
       systemBlocked("HYDRATION_METADATA_INVALID", "GitHub tree-size metadata contained an invalid or duplicate entry.");
     }
     observed.add(record.path);
+    if (record.type === "tree") {
+      if (
+        plan.recursive !== true
+        || record.mode !== "040000"
+        || !SHA1_PATTERN.test(record.sha)
+        || !isSafeApplicationV3PackagePath(record.path)
+        || ![...expected.keys()].some((expectedPath) => expectedPath.startsWith(`${record.path}/`))
+      ) {
+        systemBlocked("HYDRATION_METADATA_INVALID", "GitHub recursive metadata contained an unexpected tree entry.");
+      }
+      continue;
+    }
+    blobRecords.push(record);
     const entry = expected.get(record.path);
     if (
       !entry
@@ -1149,19 +1647,39 @@ function enforceHydrationMetadata(plan, metadata, limits) {
     ) {
       systemBlocked("HYDRATION_METADATA_MISMATCH", "GitHub tree-size metadata did not match the fetched exact Git tree.");
     }
-    const maximumBytes = limits.maximumFileBytes[record.path];
+    const maximumBytes = maximumHydrationEntryBytes(plan, entry, limits);
     if (record.size > maximumBytes) {
       reject("APPLICATION_FILE_TOO_LARGE", "An application package file exceeds its trusted byte limit before hydration.");
     }
     totalBytes += record.size;
-    if (totalBytes > limits.maximumPackageBytes) {
+    if (totalBytes > maximumHydrationPackageBytes(plan, limits)) {
       reject("APPLICATION_PACKAGE_TOO_LARGE", "The application review package exceeds its trusted byte limit before hydration.");
     }
   }
+  if (blobRecords.length !== plan.entries.length || blobRecords.length !== expected.size) {
+    systemBlocked("HYDRATION_METADATA_INVALID", "GitHub tree-size metadata did not match the exact bounded blob set.");
+  }
   return {
-    entries: new Map(document.tree.map((record) => [record.sha, { path: record.path, size: record.size }])),
+    entries: new Map(blobRecords.map((record) => [record.sha, { path: record.path, size: record.size }])),
     totalBytes
   };
+}
+
+function maximumHydrationEntryBytes(plan, entry, limits) {
+  if (plan.recursive === true) {
+    return path.posix.basename(entry.path) === APPLICATION_V3_ROOT_FILE
+      ? MAXIMUM_APPLICATION_V3_MANIFEST_BYTES
+      : MAXIMUM_APPLICATION_V3_FILE_BYTES;
+  }
+  const maximumBytes = limits.maximumFileBytes[path.posix.basename(entry.path)];
+  if (!Number.isInteger(maximumBytes)) {
+    systemBlocked("FILE_LIMIT_MISSING", "The trusted validator has no size policy for a bounded package file.");
+  }
+  return maximumBytes;
+}
+
+function maximumHydrationPackageBytes(plan, limits) {
+  return plan.recursive === true ? plan.maximumPackageBytes : limits.maximumPackageBytes;
 }
 
 function validateHydrationProcessLimits(maximumAdditionalRepositoryBytes, maximumFileSizeBytes) {
@@ -1207,12 +1725,12 @@ function verifyHydratedObjects(gitDirectory, plan, metadata, limits) {
     }
     const size = Number(sizeText);
     const expected = metadata.entries.get(entry.oid);
-    if (!Number.isSafeInteger(size) || expected?.size !== size || size > limits.maximumFileBytes[expected.path]) {
+    if (!Number.isSafeInteger(size) || expected?.size !== size || size > maximumHydrationEntryBytes(plan, entry, limits)) {
       systemBlocked("HYDRATION_OBJECT_MISMATCH", "A hydrated blob did not match preflighted GitHub size metadata.");
     }
     totalBytes += size;
   }
-  if (totalBytes !== metadata.totalBytes || totalBytes > limits.maximumPackageBytes) {
+  if (totalBytes !== metadata.totalBytes || totalBytes > maximumHydrationPackageBytes(plan, limits)) {
     systemBlocked("HYDRATION_OBJECT_MISMATCH", "Hydrated application bytes did not match the bounded package metadata.");
   }
 }
@@ -1488,6 +2006,555 @@ export function measureHydrationDirectory(directory) {
   return totalBytes;
 }
 
+async function verifyPublicApplicationV3({
+  classified,
+  expectedBuilderLogin,
+  expectedBuilderUserId,
+  pullRequestNumber,
+  resolveSource,
+  resolveExactObjects
+}) {
+  const plan = planApplicationV3Hydration(classified);
+  const baseHistory = inspectTrustedBaseApplicationV3History(classified.base, plan.applicationId);
+  const hasLegacyV2 = hasTrustedLegacyV2Application(classified.base, plan.applicationId);
+  const isUpdate = baseHistory.length > 0 || hasLegacyV2;
+  const intakeStatus = readTrustedIntakeStatus(classified.base);
+  const continuation = enforceTrustedIntakeStatus({
+    intakeStatus,
+    isUpdate,
+    pullRequestNumber,
+    applicationId: plan.applicationId
+  });
+  const packageFiles = readApplicationV3PackageFiles(classified.candidate.root, plan);
+  let validated;
+  try {
+    validated = validatePublicApplicationV3PackageFiles({
+      applicationId: plan.applicationId,
+      applicationRevision: plan.applicationRevision,
+      packageFiles,
+      expectedBuilderLogin: normalizeExpectedBuilderLogin(expectedBuilderLogin),
+      expectedBuilderUserId: normalizeExpectedBuilderUserId(expectedBuilderUserId)
+    });
+  } catch (error) {
+    if (error instanceof PublicApplicationV3IntakeError) reject(error.code, error.message);
+    throw error;
+  }
+  const { application } = validated;
+  const legacyPredecessor = hasLegacyV2
+    ? readTrustedLegacyV2Predecessor({
+      application,
+      base: classified.base,
+      limits: mergeLimits({})
+    })
+    : null;
+  enforceTrustedContinuationIdentity({ continuation, application });
+  validateApplicationV3Lineage({
+    application,
+    base: classified.base,
+    baseHistory,
+    legacyPredecessor,
+    expectedBuilderLogin: application.builder.githubLogin,
+    expectedBuilderUserId: application.builder.githubUserId
+  });
+
+  const repositories = [application.source.primary, ...application.source.companions];
+  const sourceResolver = resolveSource ?? resolvePublicGitHubSource;
+  if (typeof sourceResolver !== "function") {
+    systemBlocked("RESOLVER_UNAVAILABLE", "The trusted Application V3 source resolver is unavailable.");
+  }
+  for (const repository of repositories) {
+    const request = projectApplicationV3RepositoryRequest(repository);
+    let observation;
+    try {
+      observation = await sourceResolver(request);
+    } catch (error) {
+      translateSourceResolutionError(error);
+    }
+    validateSourceObservation(request, observation);
+  }
+
+  const exactResolver = resolveExactObjects ?? createAnonymousGitHubExactObjectResolverV1();
+  if (typeof exactResolver !== "function") {
+    systemBlocked("EVIDENCE_RESOLVER_UNAVAILABLE", "The trusted Application V3 exact-object resolver is unavailable.");
+  }
+  if (legacyPredecessor !== null) {
+    await verifyTrustedLegacyV2PredecessorSource({
+      application,
+      predecessor: legacyPredecessor,
+      sourceResolver,
+      exactResolver,
+      limits: mergeLimits({})
+    });
+  }
+  const sourceArtifacts = await resolveApplicationV3SourceArtifacts({ application, repositories, exactResolver });
+  const policy = application.policyBindings;
+  const submissionBytes = sourceArtifacts.get(`${policy.submissionRepositoryRef}\0${policy.submissionPath}`);
+  try {
+    validatePublicApplicationV3SubmissionV2Bytes({
+      application,
+      submissionBytes,
+      sourceArtifacts,
+      packageFiles
+    });
+  } catch (error) {
+    if (error instanceof PublicApplicationV3IntakeError) reject(error.code, error.message);
+    throw error;
+  }
+
+  return {
+    schemaVersion: 1,
+    validatorVersion: "3.1.0",
+    result: "valid-public-application-v3-package",
+    mode: "application-v3",
+    intakeState: intakeStatus.state,
+    applicationId: plan.applicationId,
+    applicationRevision: plan.applicationRevision,
+    pullRequestNumber,
+    continuationAuthorized: continuation !== null,
+    sourceRepositoryCount: repositories.length,
+    fileCount: plan.entries.length,
+    totalBytes: validated.totalBytes,
+    reviewState: "unreviewed",
+    approvalGranted: false,
+    acceptanceGranted: false,
+    productionDiscoveryAllowed: false,
+    publicRoutingAllowed: false,
+    realUserFundsAllowed: false
+  };
+}
+
+function readApplicationV3PackageFiles(gitRoot, plan) {
+  const prefix = `${plan.packageDirectory}/`;
+  const files = new Map();
+  let totalBytes = 0;
+  for (const entry of plan.entries) {
+    const relativePath = entry.path.slice(prefix.length);
+    const bytes = readGitBlob(gitRoot, entry, maximumHydrationEntryBytes(plan, entry, mergeLimits({})));
+    totalBytes += bytes.length;
+    if (totalBytes > MAXIMUM_APPLICATION_V3_PACKAGE_BYTES) {
+      reject("APPLICATION_PACKAGE_TOO_LARGE", "The Application V3 package exceeds its trusted byte limit.");
+    }
+    files.set(relativePath, bytes);
+  }
+  return files;
+}
+
+function inspectTrustedBaseApplicationV3History(base, applicationId) {
+  const prefix = `submissions/${applicationId}/v3/revisions/`;
+  const revisions = new Map();
+  for (const entry of base.entries.values()) {
+    if (!entry.path.startsWith(prefix)) continue;
+    const match = APPLICATION_V3_PATH_PATTERN.exec(entry.path);
+    if (!match || match[1] !== applicationId || !isSafeApplicationV3PackagePath(match[3])) {
+      systemBlocked("INTAKE_BASE_APPLICATION_V3_INVALID", "The trusted base contains an invalid Application V3 revision path.");
+    }
+    assertTrustedRegularBlob(entry, "INTAKE_BASE_APPLICATION_V3_INVALID");
+    const records = revisions.get(match[2]) ?? [];
+    records.push(entry);
+    revisions.set(match[2], records);
+  }
+  const history = [...revisions].map(([revision, entries]) => {
+    const sortedEntries = entries.sort((left, right) => compareUtf8(left.path, right.path));
+    const rootPath = `submissions/${applicationId}/v3/revisions/${revision}/${APPLICATION_V3_ROOT_FILE}`;
+    if (!sortedEntries.some(({ path: entryPath }) => entryPath === rootPath)) {
+      systemBlocked("INTAKE_BASE_APPLICATION_V3_INVALID", "A trusted base Application V3 revision is missing its root manifest.");
+    }
+    return { revision, entries: sortedEntries };
+  });
+  history.sort((left, right) => compareCanonicalDecimal(left.revision, right.revision));
+  return history;
+}
+
+function hasTrustedLegacyV2Application(base, applicationId) {
+  const prefix = `submissions/${applicationId}/`;
+  const expected = APPLICATION_FILES.map((fileName) => `${prefix}${fileName}`).sort(compareUtf8);
+  const directEntries = [...base.entries.values()]
+    .filter((entry) => entry.path.startsWith(prefix) && APPLICATION_PATH_PATTERN.test(entry.path))
+    .sort((left, right) => compareUtf8(left.path, right.path));
+  if (directEntries.length === 0) return false;
+  if (!arraysEqual(directEntries.map(({ path: entryPath }) => entryPath), expected)) {
+    systemBlocked("INTAKE_BASE_APPLICATION_INVALID", "The trusted base contains an incomplete legacy V2 application package.");
+  }
+  directEntries.forEach((entry) => assertTrustedRegularBlob(entry, "INTAKE_BASE_APPLICATION_INVALID"));
+  return true;
+}
+
+function assertTrustedRegularBlob(entry, code) {
+  if (entry.mode !== "100644" || entry.type !== "blob" || !SHA1_PATTERN.test(entry.oid)) {
+    systemBlocked(code, "The trusted base application package contains a non-regular entry.");
+  }
+}
+
+function validateApplicationV3Lineage({
+  application,
+  base,
+  baseHistory,
+  legacyPredecessor,
+  expectedBuilderLogin,
+  expectedBuilderUserId
+}) {
+  if (baseHistory.length === 0) {
+    if (legacyPredecessor !== null) {
+      if (
+        application.lineage.kind !== "schema-migration"
+        || application.applicationRevision !== incrementCanonicalDecimal(String(legacyPredecessor.application.applicationRevision))
+        || application.lineage.previous?.applicationContract !== "public-pr-application-v2"
+      ) {
+        reject(
+          "APPLICATION_V2_BASE_LINEAGE_MISMATCH",
+          "A first V3 revision over a legacy V2 application must increment its revision and declare exact schema-migration lineage."
+        );
+      }
+      return;
+    }
+    if (application.applicationRevision !== "1" || application.lineage.kind !== "new" || application.lineage.previous !== null) {
+      reject("APPLICATION_V3_LINEAGE_MISMATCH", "A new Application V3 history must start at revision 1 with null previous lineage.");
+    }
+    return;
+  }
+  const previous = baseHistory.at(-1);
+  if (application.applicationRevision !== incrementCanonicalDecimal(previous.revision)) {
+    reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 revision must increment the latest protected-base revision exactly once.");
+  }
+  const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${previous.revision}`;
+  const plan = {
+    applicationId: application.applicationId,
+    applicationRevision: previous.revision,
+    packageDirectory,
+    entries: previous.entries,
+    recursive: true,
+    maximumPackageBytes: MAXIMUM_APPLICATION_V3_PACKAGE_BYTES
+  };
+  const packageFiles = readApplicationV3PackageFiles(base.root, plan);
+  let validated;
+  try {
+    validated = validatePublicApplicationV3PackageFiles({
+      applicationId: application.applicationId,
+      applicationRevision: previous.revision,
+      packageFiles,
+      expectedBuilderLogin,
+      expectedBuilderUserId
+    });
+  } catch (error) {
+    if (error instanceof PublicApplicationV3IntakeError) {
+      systemBlocked("INTAKE_BASE_APPLICATION_V3_INVALID", "The latest trusted Application V3 predecessor package is invalid.");
+    }
+    throw error;
+  }
+  const targetDirectory = packageDirectory;
+  const applicationBytes = packageFiles.get(APPLICATION_V3_ROOT_FILE);
+  const files = [{
+    path: `${targetDirectory}/${APPLICATION_V3_ROOT_FILE}`,
+    mediaType: "application/json",
+    byteLength: applicationBytes.length,
+    sha256: sha256BytesV3(applicationBytes)
+  }, ...validated.applicationRecords.map((record) => ({
+    ...record,
+    path: `${targetDirectory}/${record.path}`
+  }))].sort((left, right) => compareUtf8(left.path, right.path));
+  const expectedPrevious = derivePublicPrApplicationV3PreviousBinding({
+    application: validated.application,
+    applicationSha256: sha256BytesV3(applicationBytes),
+    packageSha256: sha256CanonicalV3({
+      contract: "public-pr-application-v3-package",
+      applicationId: application.applicationId,
+      applicationRevision: previous.revision,
+      targetDirectory,
+      files
+    })
+  });
+  if (canonicalJson(application.lineage.previous) !== canonicalJson(expectedPrevious)) {
+    reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 lineage does not bind the exact latest protected-base predecessor package.");
+  }
+}
+
+function readTrustedLegacyV2Predecessor({ application, base, limits }) {
+  const applicationDirectory = `submissions/${application.applicationId}`;
+  const packageFiles = new Map();
+  try {
+    for (const fileName of APPLICATION_FILES) {
+      const entry = base.entries.get(`${applicationDirectory}/${fileName}`);
+      assertTrustedRegularBlob(entry, "INTAKE_BASE_APPLICATION_INVALID");
+      packageFiles.set(fileName, readGitBlob(base.root, entry, limits.maximumFileBytes[fileName]));
+    }
+  } catch (error) {
+    if (error instanceof PublicIntakeError) {
+      systemBlocked("INTAKE_BASE_APPLICATION_INVALID", "The protected base legacy V2 predecessor package cannot be read exactly.");
+    }
+    throw error;
+  }
+  const legacyPolicyAdapter = readTrustedLegacyV2PolicyAdapter({
+    baseRoot: base.root,
+    expectedBaseCommit: base.commit
+  });
+  let validated;
+  try {
+    validated = validatePublicApplicationPackageFiles({
+      applicationId: application.applicationId,
+      packageFiles,
+      legacyPolicyAdapter,
+      limits
+    });
+  } catch (error) {
+    if (error instanceof PublicIntakeError) {
+      systemBlocked("INTAKE_BASE_APPLICATION_INVALID", "The protected base legacy V2 predecessor package fails its frozen contract.");
+    }
+    throw error;
+  }
+  if (validated.application.builder.githubUserId !== application.builder.githubUserId) {
+    reject("APPLICATION_V2_BASE_LINEAGE_MISMATCH", "A V3 schema migration cannot replace the immutable legacy V2 builder identity.");
+  }
+  const records = APPLICATION_FILES.map((fileName) => {
+    const bytes = packageFiles.get(fileName);
+    return {
+      path: fileName,
+      byteLength: bytes.length,
+      sha256: sha256BytesV3(bytes)
+    };
+  });
+  return Object.freeze({
+    application: validated.application,
+    applicationBytes: packageFiles.get(APPLICATION_FILE),
+    packageSha256: sha256CanonicalV3({
+      applicationDirectory,
+      applicationRevision: validated.application.applicationRevision,
+      files: records
+    })
+  });
+}
+
+async function verifyTrustedLegacyV2PredecessorSource({
+  application,
+  predecessor,
+  sourceResolver,
+  exactResolver,
+  limits
+}) {
+  const previousApplication = predecessor.application;
+  const source = previousApplication.source.primary;
+  const fee = previousApplication.programmableFee;
+  const request = projectApplicationV3RepositoryRequest({
+    ...source,
+    githubActionsRunIds: [],
+    sourceClosureMode: "manifest"
+  });
+  let observation;
+  try {
+    observation = await sourceResolver(request);
+  } catch (error) {
+    translateSourceResolutionError(error);
+  }
+  validateSourceObservation(request, observation);
+
+  let result;
+  try {
+    result = await exactResolver({
+      repositoryUri: source.repositoryUri,
+      revisionObjectId: source.revisionObjectId,
+      treeObjectId: source.treeObjectId,
+      paths: [fee.submissionBinding.path],
+      timeoutMs: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTimeoutMs,
+      maximumFileBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumFileBytes,
+      maximumTotalBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTotalBytes
+    });
+  } catch (error) {
+    translateEvidenceResolutionError(error);
+  }
+  const records = result instanceof Map ? result : result?.records;
+  const record = records instanceof Map ? records.get(fee.submissionBinding.path) : null;
+  if (!(records instanceof Map) || records.size !== 1 || !isEvidenceExactObjectRecord(record) || record.mode !== "100644") {
+    systemBlocked("INTAKE_BASE_APPLICATION_V2_SOURCE_INVALID", "The protected legacy V2 predecessor submission is not one exact regular Git blob.");
+  }
+  const submissionBytes = Buffer.from(record.bytes);
+  if (
+    submissionBytes.length < 1
+    || submissionBytes.length > limits.maximumEvidenceBlobBytes
+    || sha256BytesV3(submissionBytes) !== fee.submissionBinding.sha256
+  ) {
+    systemBlocked("INTAKE_BASE_APPLICATION_V2_SOURCE_INVALID", "The protected legacy V2 predecessor submission differs from its exact source binding.");
+  }
+  let submission;
+  try {
+    submission = parseCanonicalJson(submissionBytes, "legacy-v2:submission.json", limits);
+  } catch (error) {
+    if (error instanceof PublicIntakeError) {
+      systemBlocked("INTAKE_BASE_APPLICATION_V2_SOURCE_INVALID", "The protected legacy V2 predecessor submission is not bounded canonical JSON.");
+    }
+    throw error;
+  }
+  if (
+    (submission?.$schema !== undefined && submission.$schema !== "urn:programmable:v4-hook-submission:1.6.0")
+    || submission?.standardVersion !== "1.6.0"
+    || submission?.schemaVersion !== 1
+    || submission?.model?.id !== application.applicationId
+  ) {
+    systemBlocked("INTAKE_BASE_APPLICATION_V2_SOURCE_INVALID", "The protected legacy V2 predecessor source artifact is not its fixed Submission 1.6.0 contract.");
+  }
+  const expectedPrevious = {
+    applicationContract: "public-pr-application-v2",
+    applicationSchemaVersion: 2,
+    applicationRevision: String(previousApplication.applicationRevision),
+    applicationSha256: sha256BytesV3(predecessor.applicationBytes),
+    packageSha256: predecessor.packageSha256,
+    sourceNumericRepositoryId: source.numericRepositoryId,
+    sourceCommit: source.revisionObjectId,
+    sourceTree: source.treeObjectId,
+    submissionSchemaId: typeof submission.$schema === "string" ? submission.$schema : null,
+    submissionStandard: submission.standardVersion,
+    submissionPath: fee.submissionBinding.path,
+    submissionSha256: fee.submissionBinding.sha256,
+    feePolicyId: fee.policyId,
+    feePolicyVersion: fee.policyVersion,
+    feeApplicability: deriveApplicationV3FeeApplicabilityFromSubmissionV2(submission),
+    feePolicyInstanceSha256: null
+  };
+  if (canonicalJson(application.lineage.previous) !== canonicalJson(expectedPrevious)) {
+    reject(
+      "APPLICATION_V2_BASE_LINEAGE_MISMATCH",
+      "Application V3 schema-migration lineage differs from the exact protected V2 package, source, Submission 1.6.0, or fee projection."
+    );
+  }
+}
+
+function projectApplicationV3RepositoryRequest(repository) {
+  const inline = repository.sourceClosureMode === "inline";
+  return {
+    schemaVersion: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.schemaVersion,
+    primary: {
+      repositoryUri: repository.repositoryUri,
+      numericRepositoryId: repository.numericRepositoryId,
+      revisionObjectId: repository.revisionObjectId,
+      treeObjectId: repository.treeObjectId,
+      sourcePaths: inline ? repository.sourcePaths : [],
+      contractPaths: inline ? repository.contractPaths : [],
+      githubActionsRunIds: repository.githubActionsRunIds
+    },
+    companions: []
+  };
+}
+
+async function resolveApplicationV3SourceArtifacts({ application, repositories, exactResolver }) {
+  const repositoriesById = new Map(repositories.map((repository) => [repository.id, repository]));
+  const expectedByRepository = new Map(repositories.map((repository) => [repository.id, new Map()]));
+  for (const record of application.reviewPackage.records.filter(({ source }) => source === "source-repository")) {
+    addExpectedApplicationV3Artifact(expectedByRepository, record.repositoryRef, {
+      path: record.path,
+      sha256: record.sha256,
+      byteLength: record.byteLength,
+      objectId: null
+    });
+  }
+  const policy = application.policyBindings;
+  addExpectedApplicationV3Artifact(expectedByRepository, policy.submissionRepositoryRef, {
+    path: policy.submissionPath,
+    sha256: policy.submissionSha256,
+    byteLength: null,
+    objectId: null
+  });
+  for (const repository of repositories) {
+    if (repository.sourceClosureMode === "manifest") {
+      addExpectedApplicationV3Artifact(expectedByRepository, repository.id, {
+        path: repository.sourceManifest.path,
+        sha256: repository.sourceManifest.sha256,
+        byteLength: repository.sourceManifest.byteLength,
+        objectId: repository.sourceManifest.blobObjectId
+      });
+    }
+  }
+
+  const resolved = new Map();
+  for (const [repositoryRef, expected] of expectedByRepository) {
+    const repository = repositoriesById.get(repositoryRef);
+    if (!repository) {
+      reject("APPLICATION_ARTIFACT_REPOSITORY_REF_MISSING", "An Application V3 artifact references no declared source repository.");
+    }
+    let result;
+    try {
+      result = await exactResolver({
+        repositoryUri: repository.repositoryUri,
+        revisionObjectId: repository.revisionObjectId,
+        treeObjectId: repository.treeObjectId,
+        paths: [...expected.keys()].sort(compareUtf8),
+        timeoutMs: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTimeoutMs,
+        maximumFileBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumFileBytes,
+        maximumTotalBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTotalBytes
+      });
+    } catch (error) {
+      translateEvidenceResolutionError(error);
+    }
+    const records = result instanceof Map ? result : result?.records;
+    if (!(records instanceof Map) || records.size !== expected.size) {
+      systemBlocked("APPLICATION_V3_SOURCE_OBSERVATION_INVALID", "The trusted exact-object resolver returned the wrong Application V3 artifact set.");
+    }
+    for (const [artifactPath, binding] of expected) {
+      const record = records.get(artifactPath);
+      if (!isEvidenceExactObjectRecord(record) || record.mode !== "100644") {
+        reject("APPLICATION_V3_SOURCE_ARTIFACT_INVALID", "A bound Application V3 source artifact is not one regular non-executable Git blob.");
+      }
+      const bytes = Buffer.from(record.bytes);
+      if (
+        sha256BytesV3(bytes) !== binding.sha256
+        || (binding.byteLength !== null && bytes.length !== binding.byteLength)
+        || (binding.objectId !== null && record.objectId !== binding.objectId)
+      ) {
+        reject("APPLICATION_V3_SOURCE_ARTIFACT_MISMATCH", "A bound Application V3 source artifact differs from its exact commit, digest, size, or blob identity.");
+      }
+      resolved.set(`${repositoryRef}\0${artifactPath}`, bytes);
+    }
+  }
+  return resolved;
+}
+
+function addExpectedApplicationV3Artifact(expectedByRepository, repositoryRef, binding) {
+  const records = expectedByRepository.get(repositoryRef);
+  if (!records || typeof binding.path !== "string") {
+    reject("APPLICATION_ARTIFACT_REPOSITORY_REF_MISSING", "An Application V3 artifact binding is incomplete.");
+  }
+  const previous = records.get(binding.path);
+  if (
+    previous
+    && (
+      previous.sha256 !== binding.sha256
+      || (previous.byteLength !== null && binding.byteLength !== null && previous.byteLength !== binding.byteLength)
+      || (previous.objectId !== null && binding.objectId !== null && previous.objectId !== binding.objectId)
+    )
+  ) {
+    reject("APPLICATION_V3_SOURCE_ARTIFACT_CONFLICT", "An Application V3 source path has conflicting byte bindings.");
+  }
+  records.set(binding.path, {
+    path: binding.path,
+    sha256: binding.sha256,
+    byteLength: previous?.byteLength ?? binding.byteLength,
+    objectId: previous?.objectId ?? binding.objectId
+  });
+}
+
+function sha256BytesV3(bytes) {
+  return `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function sha256CanonicalV3(value) {
+  return sha256BytesV3(Buffer.from(canonicalJson(value), "utf8"));
+}
+
+function compareCanonicalDecimal(left, right) {
+  return left.length - right.length || compareUtf8(left, right);
+}
+
+function incrementCanonicalDecimal(value) {
+  const digits = [...value];
+  let carry = 1;
+  for (let index = digits.length - 1; index >= 0 && carry === 1; index -= 1) {
+    if (digits[index] === "9") digits[index] = "0";
+    else {
+      digits[index] = String(Number(digits[index]) + 1);
+      carry = 0;
+    }
+  }
+  if (carry === 1) digits.unshift("1");
+  return digits.join("");
+}
+
 export async function verifyPublicHookApplication({
   baseRoot,
   candidateRoot,
@@ -1500,6 +2567,7 @@ export async function verifyPublicHookApplication({
   resolveSource,
   resolveEvidence,
   resolveCompanionClosure,
+  resolveExactObjects,
   limits: limitOverrides = {}
 }) {
   const limits = mergeLimits(limitOverrides);
@@ -1517,6 +2585,18 @@ export async function verifyPublicHookApplication({
     expectedMergeCommit,
     limits
   });
+  if (classified.mode === "application-v3") {
+    return verifyPublicApplicationV3({
+      classified,
+      expectedBuilderLogin,
+      expectedBuilderUserId,
+      pullRequestNumber,
+      resolveSource,
+      resolveExactObjects
+    });
+  }
+  const legacyPolicyAdapter = readTrustedLegacyV2PolicyAdapter({ baseRoot, expectedBaseCommit });
+  requireLegacyV2PolicyAdapter(legacyPolicyAdapter, { trusted: true });
   if (classified.mode !== "application") {
     reject("APPLICATION_CHANGE_REQUIRED", "This validator accepts exactly one closed public application package.");
   }
@@ -1587,6 +2667,7 @@ export async function verifyPublicHookApplication({
   const { application, compatibility, evidenceIndex } = validatePublicApplicationPackageFiles({
     applicationId,
     packageFiles,
+    legacyPolicyAdapter,
     limits
   });
   enforceTrustedContinuationIdentity({ continuation, application });
@@ -1604,7 +2685,14 @@ export async function verifyPublicHookApplication({
       "application.builder.githubLogin must identify the authenticated author of this pull request."
     );
   }
-  validateRevisionChange({ application, applicationId, packagePrefix, classified, limits });
+  validateRevisionChange({
+    application,
+    applicationId,
+    packagePrefix,
+    classified,
+    legacyPolicyAdapter,
+    limits
+  });
 
   const blobEvidence = evidenceIndex.evidence.filter((record) =>
     validateGitHubEvidenceUrl(record.url, "evidence.url", application.source.primary) === "blob"
@@ -1678,6 +2766,7 @@ export async function verifyPublicHookApplication({
     application,
     evidenceIndex,
     blobObservations,
+    legacyPolicyAdapter,
     limits
   });
 
@@ -1703,7 +2792,20 @@ export async function verifyPublicHookApplication({
     candidateCommit: classified.candidate.commit,
     mergeCommit: classified.candidate.mergeCommit,
     sourceBinding: sourceAuthorityProjection(application.source),
-    evidenceBindings
+    evidenceBindings,
+    policyBinding: legacyPolicyAdapter.policyBinding,
+    policyProfile: LEGACY_V2_POLICY_PROFILE,
+    evaluatedRuleIds: [legacyPolicyAdapter.ruleId],
+    evaluatedEvidenceIds: [legacyPolicyAdapter.evidenceId],
+    authority: {
+      checkerOnly: true,
+      independentAudit: false,
+      launchAuthorized: false,
+      productionDiscoveryAllowed: false,
+      publicRoutingAllowed: false,
+      realUserFundsAllowed: false,
+      workflowCanaryPassed: false
+    }
   };
 }
 
@@ -1919,7 +3021,13 @@ function normalizeExpectedBuilderUserId(value) {
   return value;
 }
 
-export function validatePublicApplicationPackageFiles({ applicationId, packageFiles, limits: limitOverrides = {} }) {
+export function validatePublicApplicationPackageFiles({
+  applicationId,
+  packageFiles,
+  legacyPolicyAdapter,
+  limits: limitOverrides = {}
+}) {
+  requireLegacyV2PolicyAdapter(legacyPolicyAdapter);
   const limits = mergeLimits(limitOverrides);
   if (
     !(packageFiles instanceof Map)
@@ -1937,7 +3045,7 @@ export function validatePublicApplicationPackageFiles({ applicationId, packageFi
     reject("APPLICATION_PACKAGE_TOO_LARGE", "The application review package exceeds the trusted byte limit.");
   }
   const application = parseCanonicalJson(packageFiles.get(APPLICATION_FILE), APPLICATION_FILE, limits);
-  validateApplicationManifest(application, applicationId, limits);
+  validateApplicationManifest(application, applicationId, limits, legacyPolicyAdapter);
   const compatibility = parseCanonicalJson(
     packageFiles.get("compatibility-report.json"),
     "compatibility-report.json",
@@ -1945,7 +3053,7 @@ export function validatePublicApplicationPackageFiles({ applicationId, packageFi
   );
   const evidenceIndex = parseCanonicalJson(packageFiles.get("evidence-index.json"), "evidence-index.json", limits);
   const evidenceIds = validateEvidenceIndex(evidenceIndex, application, limits);
-  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application);
+  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application, legacyPolicyAdapter);
   validateCompatibilityReport(compatibility, application, evidenceIndex, evidenceIds, limits);
   validateProgrammableFeeCompatibility(application, compatibility);
   validateReviewPackageHashes(application, packageFiles);
@@ -1986,6 +3094,7 @@ export function inspectMaintainedSubmissions({
   }
 
   const applications = [];
+  const applicationV3Revisions = [];
   const legacyPackages = [];
   const entries = fs.readdirSync(submissionRoot, { withFileTypes: true })
     .sort((left, right) => compareUtf8(left.name, right.name));
@@ -2011,18 +3120,29 @@ export function inspectMaintainedSubmissions({
 
     const applicationManifest = path.join(entryPath, APPLICATION_FILE);
     const manifestStatus = lstatIfPresent(applicationManifest);
-    if (!manifestStatus) {
+    const v3Root = path.join(entryPath, "v3");
+    const v3Status = lstatIfPresent(v3Root);
+    if (!manifestStatus && !v3Status) {
       legacyPackages.push({ name: entry.name, path: entryPath });
       continue;
     }
-    if (manifestStatus.isSymbolicLink() || !manifestStatus.isFile()) {
+    if (manifestStatus && (manifestStatus.isSymbolicLink() || !manifestStatus.isFile())) {
       systemBlocked(
         "MAINTAINED_APPLICATION_FILE_INVALID",
         `Maintained application ${entry.name} has a non-regular application.json.`
       );
     }
-    assertClosedMaintainedApplication(entryPath, entry.name);
-    applications.push({ name: entry.name, path: entryPath });
+    if (manifestStatus) {
+      assertClosedMaintainedApplication(entryPath, entry.name, { allowV3: Boolean(v3Status) });
+      applications.push({ name: entry.name, path: entryPath });
+    }
+    if (v3Status) {
+      applicationV3Revisions.push(...inspectMaintainedApplicationV3Revisions({
+        applicationId: entry.name,
+        applicationRoot: entryPath,
+        allowLegacyV2: Boolean(manifestStatus)
+      }));
+    }
   }
 
   if (legacyPackages.length > maximumLegacyPackages) {
@@ -2036,6 +3156,7 @@ export function inspectMaintainedSubmissions({
     repositoryRoot: resolvedRepositoryRoot,
     submissionRoot,
     applications,
+    applicationV3Revisions,
     legacyPackages
   };
 }
@@ -2059,27 +3180,37 @@ export async function verifyMaintainedSubmissions({
       packageRoot: legacyPackage.path
     });
   }
+  const histories = new Map();
+  for (const revision of inventory.applicationV3Revisions) {
+    const history = histories.get(revision.applicationId) ?? [];
+    history.push(revision);
+    histories.set(revision.applicationId, history);
+  }
+  for (const revisions of histories.values()) {
+    validateMaintainedApplicationV3History(revisions);
+  }
   return {
     schemaVersion: 1,
     result: "valid-maintained-submissions",
     applicationCount: inventory.applications.length,
+    applicationV3RevisionCount: inventory.applicationV3Revisions.length,
     legacyPackageCount: inventory.legacyPackages.length,
     validatedLegacyPackages: inventory.legacyPackages.map((entry) => entry.name)
   };
 }
 
-function assertClosedMaintainedApplication(packageRoot, applicationId) {
+function assertClosedMaintainedApplication(packageRoot, applicationId, { allowV3 = false } = {}) {
   const entries = fs.readdirSync(packageRoot, { withFileTypes: true })
     .sort((left, right) => compareUtf8(left.name, right.name));
   const observedNames = entries.map((entry) => entry.name);
-  const expectedNames = [...APPLICATION_FILES].sort(compareUtf8);
+  const expectedNames = [...APPLICATION_FILES, ...(allowV3 ? ["v3"] : [])].sort(compareUtf8);
   if (!arraysEqual(observedNames, expectedNames)) {
     systemBlocked(
       "MAINTAINED_APPLICATION_PACKAGE_NOT_CLOSED",
       `Maintained application ${applicationId} must contain exactly the six public application files.`
     );
   }
-  for (const entry of entries) {
+  for (const entry of entries.filter(({ name }) => name !== "v3")) {
     const fileStatus = lstatIfPresent(path.join(packageRoot, entry.name));
     if (!fileStatus || fileStatus.isSymbolicLink() || !fileStatus.isFile()) {
       systemBlocked(
@@ -2088,6 +3219,250 @@ function assertClosedMaintainedApplication(packageRoot, applicationId) {
       );
     }
   }
+}
+
+function inspectMaintainedApplicationV3Revisions({ applicationId, applicationRoot, allowLegacyV2 }) {
+  const observedApplicationEntries = fs.readdirSync(applicationRoot, { withFileTypes: true })
+    .map(({ name }) => name)
+    .sort(compareUtf8);
+  const expectedApplicationEntries = [...(allowLegacyV2 ? APPLICATION_FILES : []), "v3"].sort(compareUtf8);
+  if (!arraysEqual(observedApplicationEntries, expectedApplicationEntries)) {
+    systemBlocked(
+      "MAINTAINED_APPLICATION_V3_HIERARCHY_INVALID",
+      `Maintained Application V3 ${applicationId} contains an unexpected sibling outside its immutable history.`
+    );
+  }
+  const v3Root = path.join(applicationRoot, "v3");
+  const v3Status = lstatIfPresent(v3Root);
+  const revisionsRoot = path.join(v3Root, "revisions");
+  const revisionsStatus = lstatIfPresent(revisionsRoot);
+  if (
+    !v3Status || v3Status.isSymbolicLink() || !v3Status.isDirectory()
+    || !revisionsStatus || revisionsStatus.isSymbolicLink() || !revisionsStatus.isDirectory()
+    || !arraysEqual(fs.readdirSync(v3Root).sort(compareUtf8), ["revisions"])
+  ) {
+    systemBlocked("MAINTAINED_APPLICATION_V3_HIERARCHY_INVALID", "Maintained Application V3 history must use only v3/revisions.");
+  }
+  const revisions = fs.readdirSync(revisionsRoot, { withFileTypes: true })
+    .sort((left, right) => compareCanonicalDecimal(left.name, right.name));
+  if (revisions.length < 1 || revisions.length > 10_000) {
+    systemBlocked("MAINTAINED_APPLICATION_V3_REVISION_LIMIT", "Maintained Application V3 history has an invalid revision count.");
+  }
+  return revisions.map((entry) => {
+    const revisionRoot = path.join(revisionsRoot, entry.name);
+    if (!positiveDecimalString(entry.name) || entry.isSymbolicLink() || !entry.isDirectory()) {
+      systemBlocked("MAINTAINED_APPLICATION_V3_HIERARCHY_INVALID", "Maintained Application V3 revision names must be canonical positive decimals.");
+    }
+    return {
+      applicationId,
+      applicationRevision: entry.name,
+      revisionRoot,
+      legacyPackageRoot: allowLegacyV2 ? applicationRoot : null
+    };
+  });
+}
+
+function validateMaintainedApplicationV3History(revisions) {
+  if (!Array.isArray(revisions) || revisions.length < 1) {
+    systemBlocked("MAINTAINED_APPLICATION_V3_HISTORY_INVALID", "Maintained Application V3 history is unavailable.");
+  }
+  revisions.sort((left, right) => compareCanonicalDecimal(left.applicationRevision, right.applicationRevision));
+  const legacyPackageRoot = revisions[0].legacyPackageRoot;
+  let expectedRevision = legacyPackageRoot === null
+    ? "1"
+    : incrementCanonicalDecimal(String(readMaintainedLegacyV2Application(legacyPackageRoot).applicationRevision));
+  let previous = null;
+  for (const revision of revisions) {
+    if (revision.applicationRevision !== expectedRevision) {
+      systemBlocked(
+        "MAINTAINED_APPLICATION_V3_HISTORY_GAP",
+        "Maintained Application V3 history must contain every canonical revision exactly once."
+      );
+    }
+    const current = validateMaintainedApplicationV3Revision(revision);
+    if (previous === null && legacyPackageRoot === null) {
+      if (
+        current.application.lineage.kind !== "new"
+        || current.application.lineage.previous !== null
+        || current.application.applicationRevision !== "1"
+      ) {
+        systemBlocked("MAINTAINED_APPLICATION_V3_LINEAGE_INVALID", "A maintained V3-only history must start at revision 1 with null new lineage.");
+      }
+    } else if (previous === null) {
+      const legacyPrevious = deriveMaintainedLegacyV2PreviousBinding({
+        applicationId: current.application.applicationId,
+        packageRoot: legacyPackageRoot,
+        claimedSubmissionSchemaId: current.application.lineage.previous?.submissionSchemaId
+      });
+      if (
+        current.application.lineage.kind !== "schema-migration"
+        || canonicalJson(current.application.lineage.previous) !== canonicalJson(legacyPrevious.binding)
+        || String(current.application.builder.githubUserId) !== String(legacyPrevious.builderGithubUserId)
+      ) {
+        systemBlocked("MAINTAINED_APPLICATION_V3_LINEAGE_INVALID", "Maintained Application V3 migration lineage differs from the exact legacy V2 package.");
+      }
+    } else {
+      const expectedPrevious = derivePublicPrApplicationV3PreviousBinding({
+        application: previous.application,
+        applicationSha256: previous.applicationSha256,
+        packageSha256: previous.packageSha256
+      });
+      if (
+        canonicalJson(current.application.lineage.previous) !== canonicalJson(expectedPrevious)
+        || String(current.application.builder.githubUserId) !== String(previous.application.builder.githubUserId)
+      ) {
+        systemBlocked("MAINTAINED_APPLICATION_V3_LINEAGE_INVALID", "Maintained Application V3 lineage differs from the exact immediately preceding V3 package.");
+      }
+    }
+    previous = current;
+    expectedRevision = incrementCanonicalDecimal(expectedRevision);
+  }
+}
+
+function validateMaintainedApplicationV3Revision({ applicationId, applicationRevision, revisionRoot }) {
+  const packageFiles = new Map();
+  const pending = [{ absolute: revisionRoot, relative: "" }];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    const entries = fs.readdirSync(current.absolute, { withFileTypes: true }).sort((left, right) => compareUtf8(left.name, right.name));
+    for (const entry of entries) {
+      const absolute = path.join(current.absolute, entry.name);
+      const relative = current.relative === "" ? entry.name : `${current.relative}/${entry.name}`;
+      const status = lstatIfPresent(absolute);
+      if (!status || status.isSymbolicLink()) {
+        systemBlocked("MAINTAINED_APPLICATION_V3_FILE_INVALID", "Maintained Application V3 packages cannot contain symlinks.");
+      }
+      if (status.isDirectory()) {
+        pending.push({ absolute, relative });
+      } else if (status.isFile() && isSafeApplicationV3PackagePath(relative)) {
+        const maximumBytes = relative === APPLICATION_V3_ROOT_FILE
+          ? MAXIMUM_APPLICATION_V3_MANIFEST_BYTES
+          : MAXIMUM_APPLICATION_V3_FILE_BYTES;
+        if (status.size < 1 || status.size > maximumBytes) {
+          systemBlocked("MAINTAINED_APPLICATION_V3_FILE_INVALID", "A maintained Application V3 file exceeds its trusted byte limit.");
+        }
+        packageFiles.set(relative, fs.readFileSync(absolute));
+      } else {
+        systemBlocked("MAINTAINED_APPLICATION_V3_FILE_INVALID", "Maintained Application V3 packages contain only safe regular files and directories.");
+      }
+      if (packageFiles.size > MAXIMUM_APPLICATION_V3_PACKAGE_FILES) {
+        systemBlocked("MAINTAINED_APPLICATION_V3_FILE_LIMIT", "A maintained Application V3 revision exceeds the trusted file-count limit.");
+      }
+    }
+  }
+  const rootBytes = packageFiles.get(APPLICATION_V3_ROOT_FILE);
+  let builder;
+  try {
+    builder = JSON.parse(UTF8_DECODER.decode(rootBytes)).builder;
+  } catch {
+    systemBlocked("MAINTAINED_APPLICATION_V3_ROOT_INVALID", "A maintained Application V3 root is not valid UTF-8 JSON.");
+  }
+  try {
+    const validated = validatePublicApplicationV3PackageFiles({
+      applicationId,
+      applicationRevision,
+      packageFiles,
+      expectedBuilderLogin: builder?.githubLogin,
+      expectedBuilderUserId: builder?.githubUserId
+    });
+    const applicationBytes = packageFiles.get(APPLICATION_V3_ROOT_FILE);
+    const targetDirectory = `submissions/${applicationId}/v3/revisions/${applicationRevision}`;
+    const files = [{
+      path: `${targetDirectory}/${APPLICATION_V3_ROOT_FILE}`,
+      mediaType: "application/json",
+      byteLength: applicationBytes.length,
+      sha256: sha256BytesV3(applicationBytes)
+    }, ...validated.applicationRecords.map((record) => ({
+      ...record,
+      path: `${targetDirectory}/${record.path}`
+    }))].sort((left, right) => compareUtf8(left.path, right.path));
+    return Object.freeze({
+      application: validated.application,
+      applicationSha256: sha256BytesV3(applicationBytes),
+      packageSha256: sha256CanonicalV3({
+        contract: "public-pr-application-v3-package",
+        applicationId,
+        applicationRevision,
+        targetDirectory,
+        files
+      })
+    });
+  } catch (error) {
+    if (error instanceof PublicApplicationV3IntakeError) {
+      systemBlocked("MAINTAINED_APPLICATION_V3_INVALID", "A maintained Application V3 revision fails its accepted root or package contract.");
+    }
+    throw error;
+  }
+}
+
+function readMaintainedLegacyV2Application(packageRoot) {
+  const bytes = fs.readFileSync(path.join(packageRoot, APPLICATION_FILE));
+  try {
+    return parseCanonicalJson(bytes, "maintained legacy V2 application", mergeLimits({}));
+  } catch (error) {
+    if (error instanceof PublicIntakeError) {
+      systemBlocked("MAINTAINED_APPLICATION_V2_INVALID", "The maintained legacy V2 predecessor manifest is not bounded canonical JSON.");
+    }
+    throw error;
+  }
+}
+
+function deriveMaintainedLegacyV2PreviousBinding({
+  applicationId,
+  packageRoot,
+  claimedSubmissionSchemaId
+}) {
+  const application = readMaintainedLegacyV2Application(packageRoot);
+  const applicationDirectory = `submissions/${applicationId}`;
+  const packageFiles = new Map(APPLICATION_FILES.map((fileName) => [
+    fileName,
+    fs.readFileSync(path.join(packageRoot, fileName))
+  ]));
+  const source = application?.source?.primary;
+  const fee = application?.programmableFee;
+  if (
+    application?.schemaVersion !== 2
+    || application?.applicationId !== applicationId
+    || !Number.isSafeInteger(application?.applicationRevision)
+    || application.applicationRevision < 1
+    || !isPlainObject(source)
+    || !isPlainObject(fee)
+    || !isPlainObject(fee.submissionBinding)
+    || !new Set([null, "urn:programmable:v4-hook-submission:1.6.0"]).has(claimedSubmissionSchemaId)
+  ) {
+    systemBlocked("MAINTAINED_APPLICATION_V2_INVALID", "The maintained legacy V2 predecessor cannot derive the required V3 lineage binding.");
+  }
+  const records = APPLICATION_FILES.map((fileName) => {
+    const bytes = packageFiles.get(fileName);
+    return { path: fileName, byteLength: bytes.length, sha256: sha256BytesV3(bytes) };
+  });
+  const binding = Object.freeze({
+    applicationContract: "public-pr-application-v2",
+    applicationSchemaVersion: 2,
+    applicationRevision: String(application.applicationRevision),
+    applicationSha256: sha256BytesV3(packageFiles.get(APPLICATION_FILE)),
+    packageSha256: sha256CanonicalV3({
+      applicationDirectory,
+      applicationRevision: application.applicationRevision,
+      files: records
+    }),
+    sourceNumericRepositoryId: source.numericRepositoryId,
+    sourceCommit: source.revisionObjectId,
+    sourceTree: source.treeObjectId,
+    submissionSchemaId: claimedSubmissionSchemaId,
+    submissionStandard: "1.6.0",
+    submissionPath: fee.submissionBinding.path,
+    submissionSha256: fee.submissionBinding.sha256,
+    feePolicyId: fee.policyId,
+    feePolicyVersion: fee.policyVersion,
+    feeApplicability: "applicable",
+    feePolicyInstanceSha256: null
+  });
+  return Object.freeze({ binding, builderGithubUserId: application.builder?.githubUserId });
+}
+
+function positiveDecimalString(value) {
+  return /^[1-9][0-9]*$/u.test(value);
 }
 
 function lstatIfPresent(target) {
@@ -2416,7 +3791,8 @@ function validateJsonTree(root, limits) {
   visit(root, 0);
 }
 
-function validateApplicationManifest(application, expectedApplicationId, limits) {
+function validateApplicationManifest(application, expectedApplicationId, limits, legacyPolicyAdapter) {
+  requireLegacyV2PolicyAdapter(legacyPolicyAdapter);
   if (application?.schemaVersion !== 2) {
     reject(
       "PUBLIC_APPLICATION_CONTRACT_UNSUPPORTED",
@@ -2476,7 +3852,7 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   }
 
   validateApplicationSource(application.source);
-  validateProgrammableFeeProjection(application.programmableFee, application.source);
+  validateProgrammableFeeProjection(application.programmableFee, application.source, legacyPolicyAdapter);
   if (application.programmableFee.submissionBinding.path !== `submissions/${application.applicationId}/submission.json`) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_BINDING_INVALID",
@@ -2504,7 +3880,8 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   });
 }
 
-function validateProgrammableFeeProjection(fee, source) {
+function validateProgrammableFeeProjection(fee, source, legacyPolicyAdapter) {
+  const legacyFee = requireLegacyV2PolicyAdapter(legacyPolicyAdapter).fee;
   const invalidFee = (message) => reject("PROGRAMMABLE_FEE_PROJECTION_INVALID", message);
   const exact = (actual, expected, label) => {
     if (canonicalJson(actual) !== canonicalJson(expected)) {
@@ -2585,30 +3962,30 @@ function validateProgrammableFeeProjection(fee, source) {
     throw error;
   }
 
-  exact(fee.policyId, "programmable-volume-fee-v1", "Fee policy id");
-  exact(fee.policyVersion, "1.1.0", "Fee policy version");
+  exact(fee.policyId, legacyFee.policyId, "Fee policy id");
+  exact(fee.policyVersion, legacyFee.policyVersion, "Fee policy version");
   exact(fee.poolScope, "canonical-launch-pool-key", "PoolKey scope");
   exact(fee.rates.unit, "hundredths-of-bip", "Fee unit");
   exact(
     fee.rates.minimumEffectiveHundredthsOfBip,
-    PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP,
+    legacyFee.platformHundredthsOfBip,
     "Effective total fee floor"
   );
   exact(
     fee.rates.platformHundredthsOfBip,
-    PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP,
+    legacyFee.platformHundredthsOfBip,
     "Programmable fee rate"
   );
   exact(
     fee.rates.formula,
-    "per-side:effective=max(selected,1000);platform=1000;project=effective-1000",
+    `per-side:effective=max(selected,${legacyFee.platformHundredthsOfBip});platform=${legacyFee.platformHundredthsOfBip};project=effective-${legacyFee.platformHundredthsOfBip}`,
     "Fee allocation formula"
   );
   exact(fee.rates.lpFeeExcluded, true, "LP-fee exclusion");
   exact(fee.basis.volume, "gross-quote-side-swap-volume", "Fee volume basis");
   exact(fee.basis.quoteAsset, "canonical-pool-quote-asset", "Quote-asset basis");
   exact(fee.ownership, {
-    owner: PROGRAMMABLE_FEE_OWNER,
+    owner: legacyFee.owner,
     immutable: true,
     claimAuthority: "owner-only",
     claimAvailability: "anytime",
@@ -2658,9 +4035,9 @@ function validateProgrammableFeeProjection(fee, source) {
     if (!Number.isInteger(selected) || selected < 0 || selected > 999_999) {
       invalidFee(`The selected ${side.toLowerCase()} fee must be an integer in hundredths of a basis point.`);
     }
-    const expectedEffective = Math.max(selected, PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP);
-    if (effective !== expectedEffective || project !== expectedEffective - PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP) {
-      invalidFee(`Effective and project ${side.toLowerCase()} fees must be derived from max(selected, 1000) without adding the platform fee twice.`);
+    const expectedEffective = Math.max(selected, legacyFee.platformHundredthsOfBip);
+    if (effective !== expectedEffective || project !== expectedEffective - legacyFee.platformHundredthsOfBip) {
+      invalidFee(`Effective and project ${side.toLowerCase()} fees must be derived from the central legacy adapter rate without adding the platform fee twice.`);
     }
   }
 
@@ -2668,7 +4045,7 @@ function validateProgrammableFeeProjection(fee, source) {
     invalidFee("Collection status must identify a pending or implemented canonical PoolKey integration.");
   }
   const implemented = fee.collection.status === "implemented";
-  const expectedModes = implemented ? PROGRAMMABLE_FEE_SWAP_MODES : [];
+  const expectedModes = implemented ? legacyFee.swapModes : [];
   exact(fee.collection.supportedSwapModes, expectedModes, "Covered swap modes");
   const swapModePathValues = Object.values(fee.collection.swapModePaths);
   if (implemented) {
@@ -2737,8 +4114,9 @@ function validateProgrammableFeeCompatibility(application, compatibility) {
   }
 }
 
-function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application) {
-  const records = evidenceIndex.evidence.filter(({ id }) => id === "zz-programmable-fee-submission");
+function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application, legacyPolicyAdapter) {
+  const { transportEvidenceId } = requireLegacyV2PolicyAdapter(legacyPolicyAdapter);
+  const records = evidenceIndex.evidence.filter(({ id }) => id === transportEvidenceId);
   if (records.length !== 1) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_BINDING_MISSING",
@@ -2763,9 +4141,15 @@ function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application) {
   }
 }
 
-function validateProgrammableFeeSubmissionObservation({ application, evidenceIndex, blobObservations, limits }) {
-  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application);
-  const observation = blobObservations.find(({ id }) => id === "zz-programmable-fee-submission");
+function validateProgrammableFeeSubmissionObservation({
+  application,
+  evidenceIndex,
+  blobObservations,
+  legacyPolicyAdapter,
+  limits
+}) {
+  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application, legacyPolicyAdapter);
+  const observation = blobObservations.find(({ id }) => id === legacyPolicyAdapter.transportEvidenceId);
   if (!observation || !Buffer.isBuffer(observation.bytes)) {
     systemBlocked(
       "PROGRAMMABLE_FEE_SOURCE_OBSERVATION_MISSING",
@@ -2840,7 +4224,7 @@ function validateProgrammableFeeSubmissionObservation({ application, evidenceInd
     ...submission.programmableFee,
     submissionBinding: application.programmableFee.submissionBinding
   };
-  validateProgrammableFeeProjection(recomputed, application.source);
+  validateProgrammableFeeProjection(recomputed, application.source, legacyPolicyAdapter);
   if (canonicalJson(recomputed) !== canonicalJson(application.programmableFee)) {
     reject(
       "PROGRAMMABLE_FEE_SOURCE_PROJECTION_MISMATCH",
@@ -3046,7 +4430,14 @@ function validatePublicClaims({ application, compatibility, evidenceIndex, markd
   }
 }
 
-function validateRevisionChange({ application, applicationId, packagePrefix, classified, limits }) {
+function validateRevisionChange({
+  application,
+  applicationId,
+  packagePrefix,
+  classified,
+  legacyPolicyAdapter,
+  limits
+}) {
   const manifestPath = `${packagePrefix}${APPLICATION_FILE}`;
   const baseEntry = classified.base.entries.get(manifestPath);
   if (!baseEntry) {
@@ -3061,7 +4452,7 @@ function validateRevisionChange({ application, applicationId, packagePrefix, cla
     `base:${manifestPath}`,
     limits
   );
-  validateApplicationManifest(prior, applicationId, limits);
+  validateApplicationManifest(prior, applicationId, limits, legacyPolicyAdapter);
   if (application.applicationRevision !== prior.applicationRevision + 1) {
     reject("APPLICATION_REVISION_NOT_INCREMENTED", "An updated application must increment its revision by exactly one.");
   }
