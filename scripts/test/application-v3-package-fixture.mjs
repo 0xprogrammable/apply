@@ -24,6 +24,7 @@ const SECURITY_SCHEMA_PATH = new URL(
 
 export function createApplicationV3TestPackage({
   feeMode = "not-selected",
+  stage = "prototype",
   applicationId = "legacy-open-world-example",
   applicationRevision = "1",
   lineage = { kind: "new", previous: null },
@@ -34,9 +35,13 @@ export function createApplicationV3TestPackage({
   sourceRevisionObjectId = "a".repeat(40),
   sourceTreeObjectId = "b".repeat(40)
 } = {}) {
+  if (!new Set(["proposal", "prototype"]).has(stage)) throw new TypeError("test fixture stage must be proposal or prototype");
+  if (stage === "proposal" && feeMode !== "not-selected") throw new TypeError("proposal test fixture supports only the policy-neutral not-selected path");
   const sourcePackage = feeMode === "selected"
     ? createApplicableOpenWorldV2PrototypeFixture(applicationId)
-    : createFeeUnselectedV2PrototypeFixture(applicationId);
+    : stage === "proposal"
+      ? createFeeUnselectedV2ProposalFixture(applicationId)
+      : createFeeUnselectedV2PrototypeFixture(applicationId);
   const application = JSON.parse(fs.readFileSync(EXAMPLE_PATH, "utf8"));
   const sourcePackageDirectory = `submissions/${applicationId}`;
   const submissionPath = `${sourcePackageDirectory}/submission.v2.json`;
@@ -60,7 +65,7 @@ export function createApplicationV3TestPackage({
   Object.assign(application, {
     applicationId,
     applicationRevision,
-    stage: "prototype",
+    stage,
     lineage: structuredClone(lineage)
   });
   Object.assign(application.builder, {
@@ -191,7 +196,7 @@ export function createApplicationV3TestPackage({
     subject: {
       id: applicationId,
       revision: sourceRevisionObjectId,
-      stage: "prototype"
+      stage
     },
     assessment: {
       state: "source-assessed",
@@ -228,7 +233,9 @@ export function createApplicationV3TestPackage({
     ["proposal", "PROPOSAL.md", "text/markdown", Buffer.from("# Proposal\n\nExact public review artifact.\n")],
     ["test-plan", "TEST_PLAN.md", "text/markdown", Buffer.from("# Test plan\n\nExact public review artifact.\n")],
     ["threat-model", "THREAT_MODEL.md", "text/markdown", Buffer.from("# Threat model\n\nExact public review artifact.\n")],
-    ["compatibility-report", "compatibility-report.json", "application/json", jsonBytes({})],
+    ["compatibility-report", "compatibility-report.json", "application/json", jsonBytes(stage === "proposal"
+      ? { result: "architecture-review-required", schemaVersion: 3 }
+      : {})],
     ["evidence-index", "evidence-index.json", "application/json", jsonBytes({})],
     ["security-assessment-schema", "security-assessment-v1.schema.json", "application/schema+json", securitySchemaBytes],
     ["security-assessment", "security-assessment.v1.json", "application/json", securityAssessmentBytes],
@@ -259,6 +266,29 @@ function createFeeUnselectedV2PrototypeFixture(applicationId) {
   submission.authorities = submission.authorities.filter(({ id }) => id !== "programmable-fee-owner");
   files.delete("fee-policy-v2.schema.json");
   files.delete("fee-policy.v2.json");
+  const intentFidelity = JSON.parse(files.get(OPEN_WORLD_V2_ARTIFACTS.intentFidelity.file));
+  intentFidelity.inputDigests.architectureSnapshotSha256 = architectureSnapshotSha256(submission);
+  const intentFidelityBytes = jsonBytes(intentFidelity);
+  files.set(OPEN_WORLD_V2_ARTIFACTS.intentFidelity.file, intentFidelityBytes);
+  submission.intentPackage.intentFidelity = artifactBinding(OPEN_WORLD_V2_ARTIFACTS.intentFidelity, intentFidelityBytes);
+  files.set("submission.v2.json", jsonBytes(submission));
+  return Object.freeze({ submission, files, feeApplicability: "not-selected" });
+}
+
+function createFeeUnselectedV2ProposalFixture(applicationId) {
+  const original = createFeeUnselectedV2PrototypeFixture(applicationId);
+  const submission = structuredClone(original.submission);
+  const files = new Map([...original.files].map(([filePath, bytes]) => [filePath, Buffer.from(bytes)]));
+  submission.stage = "proposal";
+  submission.project.summary = {
+    language: "en",
+    text: "A custom tradable project whose exact route architecture remains unresolved for review."
+  };
+  submission.tradeCapability = {
+    applicability: "unresolved",
+    facetEntryRef: "routing-trade-capability",
+    markets: []
+  };
   const intentFidelity = JSON.parse(files.get(OPEN_WORLD_V2_ARTIFACTS.intentFidelity.file));
   intentFidelity.inputDigests.architectureSnapshotSha256 = architectureSnapshotSha256(submission);
   const intentFidelityBytes = jsonBytes(intentFidelity);

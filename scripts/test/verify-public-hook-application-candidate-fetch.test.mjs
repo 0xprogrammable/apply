@@ -208,47 +208,51 @@ test("trusted intake hydrates only one immutable nested Application V3 revision"
   assert.equal(fs.existsSync(path.join(candidateData, "submissions")), false);
 });
 
-test("protected dispatch validates a complete no-fee Application V3 package without executing candidate code", async (t) => {
-  const fixture = createRevisionPair(t);
-  const { application, packageFiles, sourceFiles } = makeApplicationV3Package();
-  const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
-  for (const [relativePath, bytes] of packageFiles) {
-    writeFile(fixture.candidate, `${packageDirectory}/${relativePath}`, bytes);
+test("protected dispatch validates no-fee proposal and prototype Application V3 packages without executing candidate code", async (t) => {
+  for (const stage of ["proposal", "prototype"]) {
+    await t.test(stage, async (subtest) => {
+      const fixture = createRevisionPair(subtest);
+      const { application, packageFiles, sourceFiles } = makeApplicationV3Package({ stage });
+      const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+      for (const [relativePath, bytes] of packageFiles) {
+        writeFile(fixture.candidate, `${packageDirectory}/${relativePath}`, bytes);
+      }
+      const candidateCommit = commitAll(fixture.candidate, `complete no-fee ${stage} Application V3 package`);
+      const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+      const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+      await hydratePublicApplicationCandidate({
+        baseRoot: fixture.base,
+        candidateRoot: candidateData,
+        expectedBaseCommit: fixture.baseCommit,
+        expectedCandidateCommit: candidateCommit,
+        expectedMergeCommit: mergeCommit,
+        pullRequestNumber: PULL_REQUEST_NUMBER,
+        repository: "central/repository",
+        readToken: "test-read-token"
+      }, localHydrationDependencies(fixture, packageDirectory));
+
+      const report = await verifyPublicHookApplication({
+        baseRoot: fixture.base,
+        candidateRoot: candidateData,
+        expectedBaseCommit: fixture.baseCommit,
+        pullRequestNumber: PULL_REQUEST_NUMBER,
+        expectedBuilderLogin: application.builder.githubLogin,
+        expectedBuilderUserId: application.builder.githubUserId,
+        expectedCandidateCommit: candidateCommit,
+        expectedMergeCommit: mergeCommit,
+        resolveSource: exactApplicationV3SourceResolver,
+        resolveExactObjects: exactApplicationV3ObjectResolver(sourceFiles)
+      });
+
+      assert.equal(report.result, "valid-public-application-v3-package");
+      assert.equal(report.mode, "application-v3");
+      assert.equal(report.reviewState, "unreviewed");
+      assert.equal(report.approvalGranted, false);
+      assert.equal(report.productionDiscoveryAllowed, false);
+      assert.equal(report.publicRoutingAllowed, false);
+      assert.equal(report.realUserFundsAllowed, false);
+    });
   }
-  const candidateCommit = commitAll(fixture.candidate, "complete no-fee Application V3 package");
-  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
-  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
-  await hydratePublicApplicationCandidate({
-    baseRoot: fixture.base,
-    candidateRoot: candidateData,
-    expectedBaseCommit: fixture.baseCommit,
-    expectedCandidateCommit: candidateCommit,
-    expectedMergeCommit: mergeCommit,
-    pullRequestNumber: PULL_REQUEST_NUMBER,
-    repository: "central/repository",
-    readToken: "test-read-token"
-  }, localHydrationDependencies(fixture, packageDirectory));
-
-  const report = await verifyPublicHookApplication({
-    baseRoot: fixture.base,
-    candidateRoot: candidateData,
-    expectedBaseCommit: fixture.baseCommit,
-    pullRequestNumber: PULL_REQUEST_NUMBER,
-    expectedBuilderLogin: application.builder.githubLogin,
-    expectedBuilderUserId: application.builder.githubUserId,
-    expectedCandidateCommit: candidateCommit,
-    expectedMergeCommit: mergeCommit,
-    resolveSource: exactApplicationV3SourceResolver,
-    resolveExactObjects: exactApplicationV3ObjectResolver(sourceFiles)
-  });
-
-  assert.equal(report.result, "valid-public-application-v3-package");
-  assert.equal(report.mode, "application-v3");
-  assert.equal(report.reviewState, "unreviewed");
-  assert.equal(report.approvalGranted, false);
-  assert.equal(report.productionDiscoveryAllowed, false);
-  assert.equal(report.publicRoutingAllowed, false);
-  assert.equal(report.realUserFundsAllowed, false);
 });
 
 test("protected dispatch independently rederives an exact legacy V2 schema-migration predecessor", async (t) => {
