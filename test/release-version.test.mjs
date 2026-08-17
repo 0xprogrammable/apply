@@ -15,11 +15,11 @@ const root = path.resolve(".");
 test("release version is identical across package, lockfile, config, and current history", () => {
   const result = verifyReleaseVersion({ repositoryRoot: root });
   assert.deepEqual(result, {
-    historyFiles: 7,
+    historyFiles: 9,
     ok: true,
-    version: "1.6.0"
+    version: "1.6.2"
   });
-  assert.equal(RELEASE_VERSION, "1.6.0");
+  assert.equal(RELEASE_VERSION, "1.6.2");
 });
 
 test("the complete repository verifier invokes the release integrity gate", () => {
@@ -31,13 +31,13 @@ test("the complete repository verifier invokes the release integrity gate", () =
 
 test("every release version projection fails closed when changed independently", (t) => {
   const cases = [
-    ["package.json", (value) => { value.version = "1.6.1"; }, "RELEASE_VERSION_MISMATCH"],
-    ["package-lock.json", (value) => { value.version = "1.6.1"; }, "RELEASE_VERSION_MISMATCH"],
-    ["package-lock.json", (value) => { value.packages[""].version = "1.6.1"; }, "RELEASE_VERSION_MISMATCH"],
-    ["registry/config.json", (value) => { value.historyVersion = "1.6.1"; }, "RELEASE_VERSION_MISMATCH"],
+    ["package.json", (value) => { value.version = "1.6.3"; }, "RELEASE_VERSION_MISMATCH"],
+    ["package-lock.json", (value) => { value.version = "1.6.3"; }, "RELEASE_VERSION_MISMATCH"],
+    ["package-lock.json", (value) => { value.packages[""].version = "1.6.3"; }, "RELEASE_VERSION_MISMATCH"],
+    ["registry/config.json", (value) => { value.historyVersion = "1.6.3"; }, "RELEASE_VERSION_MISMATCH"],
     ["registry/config.json", (value) => { value.updatedAt = "2026-08-14T00:00:01Z"; }, "RELEASE_HISTORY_MISMATCH"],
-    ["registry/history/1.6.0.json", (value) => { value.version = "1.6.1"; }, "RELEASE_HISTORY_MISMATCH"],
-    ["registry/history/1.6.0.json", (value) => { value.generatedAt = "2026-08-14T00:00:01Z"; }, "RELEASE_HISTORY_MISMATCH"]
+    ["registry/history/1.6.2.json", (value) => { value.version = "1.6.3"; }, "RELEASE_HISTORY_MISMATCH"],
+    ["registry/history/1.6.2.json", (value) => { value.generatedAt = "2026-08-14T00:00:01Z"; }, "RELEASE_HISTORY_MISMATCH"]
   ];
 
   for (const [relativePath, mutate, code] of cases) {
@@ -66,7 +66,7 @@ test("released history snapshots are append-only and byte-immutable", (t) => {
   );
 
   const extra = copyFixture(t);
-  fs.writeFileSync(path.join(extra, "registry/history/1.6.1.json"), "{}\n");
+  fs.writeFileSync(path.join(extra, "registry/history/1.6.3.json"), "{}\n");
   assert.throws(
     () => verifyReleaseVersion({ repositoryRoot: extra }),
     hasCode("RELEASE_HISTORY_SET_INVALID")

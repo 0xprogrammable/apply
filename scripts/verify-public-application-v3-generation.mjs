@@ -102,8 +102,8 @@ export function generatePublicPrApplicationV3({
   if (!isObject(generatedApplication)) {
     add("blocker", "APPLICATION_GENERATOR_INPUT_INVALID", "$.application", "Application input must be one closed v3 object.", "Assemble the exact application contract before materialization.", "application-contract");
   }
-  if (generatedApplication?.stage !== "prototype") {
-    add("blocker", "APPLICATION_GENERATOR_PROTOTYPE_REQUIRED", "$.application.stage", "Only a source-backed prototype can be materialized as a public application; ideas, proposals, and migration previews remain editable and eligible.", "Complete the prototype evidence package without changing or narrowing the product idea.", "review-readiness");
+  if (!new Set(["proposal", "prototype"]).has(generatedApplication?.stage)) {
+    add("blocker", "APPLICATION_GENERATOR_STAGE_INVALID", "$.application.stage", "A public Application V3.1 draft must be an exact source-backed proposal or prototype.", "Use proposal for an unreviewed architecture-review draft or prototype for the complete prototype evidence path.", "review-readiness");
   }
 
   const securityIssues = validateOpenWorldSecurityInput(securityAssessment);
@@ -116,7 +116,7 @@ export function generatePublicPrApplicationV3({
     || securityAssessment?.subject?.revision !== primary?.revisionObjectId
     || securityAssessment?.subject?.stage !== generatedApplication?.stage
   ) {
-    add("blocker", "APPLICATION_SECURITY_SUBJECT_BINDING_MISMATCH", "$.securityAssessment.subject", "Security subject id, source revision, and stage must exactly match the application primary source.", "Analyze the exact bound prototype commit and stage.", "security-evidence");
+    add("blocker", "APPLICATION_SECURITY_SUBJECT_BINDING_MISMATCH", "$.securityAssessment.subject", "Security subject id, source revision, and stage must exactly match the application primary source.", "Analyze the exact bound source commit and application stage.", "security-evidence");
   }
   let dependencyDisposition = null;
   try {
@@ -214,6 +214,7 @@ export function generatePublicPrApplicationV3({
     ideaEligibility: "ELIGIBLE_FOR_REVIEW",
     publicApplicationEligibility: privacyHeld ? "HELD_FOR_PRIVACY_REDACTION" : "ELIGIBLE_FOR_REVIEW",
     approvalGranted: false,
+    deploymentAuthorizationGranted: false,
     launchAuthorizationGranted: false,
     implementationAuthorizationGranted: false,
     securityDisposition: confirmedIntentRedesign.length > 0

@@ -28,3 +28,7 @@ requests cannot edit Registry records, policy, workflows, documentation, tests, 
 A V3.1 validation result means only that the immutable draft is valid for review. A draft, passing check, merged review
 record, or maintainer comment is not automatically reviewed, accepted, approved, deployed, listed, available, safe,
 audited, launched, or authorized to handle funds.
+
+A `proposal` Draft remains unreviewed and unverified. It may preserve unresolved trade capability for architecture
+review, but it cannot carry trade manifests or results, claim prototype readiness, or grant approval, deployment, or
+launch authority.

@@ -162,9 +162,9 @@ test("maintained Application V3 revisions use the trusted V3 validator instead o
   assert.equal(legacyValidations, 0);
 });
 
-test("maintained Application V3 history validates every 1..N revision and exact predecessor binding", async (t) => {
+test("maintained Application V3 history validates proposal to prototype recheck lineage and exact predecessor binding", async (t) => {
   const repositoryRoot = createRepositoryFixture(t);
-  const first = createApplicationV3TestPackage({ applicationId: "history-example" });
+  const first = createApplicationV3TestPackage({ applicationId: "history-example", stage: "proposal" });
   writeApplicationV3Revision(repositoryRoot, first);
   const previous = deriveTestPreviousBinding(first);
   const second = createApplicationV3TestPackage({
