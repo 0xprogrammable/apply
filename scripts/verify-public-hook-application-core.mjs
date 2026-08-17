@@ -96,6 +96,7 @@ const REVIEW_FILES = Object.freeze([
   "evidence-index.json"
 ]);
 const EXECUTABLE_BUILDER_VENDOR_PREFIX = "vendor/programmable-v4-hook-builder/";
+const COMPACT_APPLICANT_VALIDATOR_PREFIX = "vendor/programmable-applicant-validator/";
 const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   "acceptance/",
   "assets/",
@@ -106,9 +107,11 @@ const REGISTRY_MAINTENANCE_PREFIXES = Object.freeze([
   "scripts/test/fixtures/",
   "scripts/test/schema-validator/",
   "test/",
+  COMPACT_APPLICANT_VALIDATOR_PREFIX,
   EXECUTABLE_BUILDER_VENDOR_PREFIX
 ]);
 const REGISTRY_MAINTENANCE_FILES = new Set([
+  ".programmable/applicant-compatibility.v1.json",
   ".programmable/active-contract.json",
   ".github/CODEOWNERS",
   ".github/ISSUE_TEMPLATE/config.yml",
@@ -137,6 +140,7 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "canary/schemas/workflow-canary-application-v1.schema.json",
   "canary/schemas/workflow-canary-result-v1.schema.json",
   "scripts/acceptance-entitlement-core.mjs",
+  "scripts/applicant-compatibility-core.mjs",
   "scripts/canary-eligibility-core.mjs",
   "scripts/compile-canary-eligibility.mjs",
   "scripts/compile-launch-entitlement.mjs",
