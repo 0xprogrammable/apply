@@ -11,19 +11,19 @@ import {
   parseBoundedLosslessJson,
   resolveGitHubPublicSourceV1,
   validateGitHubPublicSourceRequestV1
-} from "../vendor/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   createAnonymousGitHubExactObjectResolverV1,
   GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1
-} from "../vendor/programmable-v4-hook-builder/scripts/github-exact-object-resolver.mjs";
-import { findUnsupportedPublicClaims } from "../vendor/programmable-v4-hook-builder/scripts/public-claims-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { findUnsupportedPublicClaims } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   normalizeCompanionManifest,
   validateCompanionClosureReceipts,
   verifyCompanionManifestV2Closure
-} from "../vendor/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
-import { normalizeBuilderTemplate } from "../vendor/programmable-v4-hook-builder/scripts/builder-template-contract.mjs";
-import { hasForbiddenInvisibleOrBidi } from "../vendor/programmable-v4-hook-builder/scripts/metadata-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { normalizeBuilderTemplate } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { hasForbiddenInvisibleOrBidi } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   buildLaunchPolicyBinding,
   compareLaunchPolicyBindings,

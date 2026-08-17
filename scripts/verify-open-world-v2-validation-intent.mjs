@@ -1,17 +1,17 @@
-import { validateExtensionInstance } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-extension-schema-core.mjs";
-import { isPublicGitHubRepositoryTransport } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-package-io.mjs";
+import { validateExtensionInstance } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { isPublicGitHubRepositoryTransport } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   isObject,
   sha256Bytes,
   sha256Utf8,
   utf8ByteLength
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-primitives.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   byteBoundaries,
   hasLoneSurrogate,
   hasPublicChainIdentifierContext,
   sensitiveCandidates
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-privacy-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   EXTENSION_SPLIT_REVIEW_CODES,
   OPEN_WORLD_V2_STANDARD_VERSION,

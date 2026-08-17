@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "starter",
+  "id": "custom-token-standard-fee-hook",
+  "label": "Custom token with an explicit fee-hook boundary",
+  "summary": "Add explicitly reviewed token behavior while keeping any generic project fee-hook mechanics explicit and policy neutral.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "defaultPacks": [
+    "metadata-disclosures",
+    "test-evidence-threat-model"
+  ],
+  "conflictsWith": [
+    "custom-hook-behavior"
+  ],
+  "capabilities": [
+    "canonical-v4-pool",
+    "custom-token-behavior"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Exact token-side behavior across transfer, mint, burn, balance and allowance paths",
+    "Why the behavior belongs in the token rather than a PoolManager callback",
+    "Canonical PoolKey and exact generic hook or no-hook behavior selected by project intent",
+    "Gross and net token balance behavior across swaps, liquidity, claims, exits and integrations",
+    "Every token authority, parameter bound, exemption, rescue path and retirement rule"
+  ],
+  "requiredFiles": [
+    "Custom token source",
+    "Any explicitly selected generic hook source binding",
+    "Token and pool integration specification",
+    "Token authority and lifecycle policy",
+    "Cross-contract threat model and test plan"
+  ],
+  "requiredTests": [
+    "Token behavior matrix across ordinary transfers, swaps, liquidity, claims and exits",
+    "Any explicitly selected generic fee behavior is correct in every exposed swap quadrant",
+    "Pool settlement and router behavior use exact observed token balance deltas",
+    "Authority, parameter-bound, exemption, pause, rescue and retirement adversarial cases",
+    "Token liabilities and any project fee-hook liabilities remain isolated and solvent"
+  ],
+  "risks": [
+    "Token-side behavior can break pool settlement or integrations regardless of hook selection",
+    "Mutable token controls can create hidden confiscation, transfer blocking or economic changes",
+    "Blurring token and hook responsibilities can hide value flows or double charge users"
+  ]
+}

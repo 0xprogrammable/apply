@@ -6,6 +6,10 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import {
+  ApplicantCompatibilityError,
+  verifyApplicantCompatibilityContract
+} from "./applicant-compatibility-core.mjs";
 import { LaunchPolicyArtifactError, verifyLaunchPolicyArtifacts } from "./generate-launch-policy-artifacts.mjs";
 import {
   LaunchPolicyAuthorityOwnershipError,
@@ -18,6 +22,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 try {
   const launchPolicy = verifyLaunchPolicyArtifacts({ repositoryRoot: root });
+  const applicantCompatibility = verifyApplicantCompatibilityContract({
+    allowLegacyFallback: true,
+    repositoryRoot: root
+  });
   const authorityOwnership = verifyLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
   const releaseVersion = verifyReleaseVersion({ repositoryRoot: root });
   const generated = verifyGeneratedArtifacts({ repositoryRoot: root });
@@ -28,9 +36,10 @@ try {
   }
   runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   runNodeTests("scripts/test", (name) => name.startsWith("verify-public-hook-application") && name.endsWith(".test.mjs"), ["--test-concurrency=1"]);
-  process.stdout.write(`${canonicalJson({ ...generated, authorityOwnership, checks: ["authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion })}\n`);
+  process.stdout.write(`${canonicalJson({ ...generated, applicantCompatibility, authorityOwnership, checks: ["applicant-compatibility", "authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion })}\n`);
 } catch (error) {
   const known = error instanceof RegistryError
+    || error instanceof ApplicantCompatibilityError
     || error instanceof LaunchPolicyArtifactError
     || error instanceof LaunchPolicyAuthorityOwnershipError
     || error instanceof ReleaseVersionError;

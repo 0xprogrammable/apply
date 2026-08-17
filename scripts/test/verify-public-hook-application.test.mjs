@@ -29,7 +29,7 @@ import {
   generatePublicApplicationSchema,
   serializePublicApplicationSchema
 } from "../../vendor/programmable-v4-hook-builder/scripts/generate-public-pr-application-schema.mjs";
-import { GitHubPublicSourceError } from "../../vendor/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
+import { GitHubPublicSourceError } from "../../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   COMPANION_MANIFEST_V2,
   verifyCompanionManifestV2Closure

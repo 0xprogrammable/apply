@@ -287,7 +287,14 @@ test("the receipt-bound vendored Hookbuilder is frozen legacy data, never curren
     source: "https://github.com/0xprogrammable/hookbuilder/tree/7869f44aa8dcc7cefeb379b76118407d53384558/skills/programmable-v4-hook-builder"
   });
 
-  assert.equal(git(["status", "--porcelain", "--untracked-files=all", "--", "vendor"]), "");
+  assert.equal(git([
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+    "--",
+    "vendor/receipt.json",
+    "vendor/programmable-v4-hook-builder"
+  ]), "");
   const tree = git(["write-tree"]);
   const entry = git(["ls-tree", tree, "vendor/programmable-v4-hook-builder"]);
   assert.match(entry, new RegExp(`^040000 tree ${receipt.skillTree}\\tvendor/programmable-v4-hook-builder$`, "u"));

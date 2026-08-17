@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:applicant-compatibility:1.0.0",
+  "title": "Programmable Applicant Compatibility V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "application",
+    "capabilities",
+    "kind",
+    "minimumBuilderProtocolVersion",
+    "schemaVersion",
+    "trustedRepository",
+    "validatorPackage"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:programmable:applicant-compatibility:1.0.0"
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractId",
+        "schemaPath",
+        "schemaSha256"
+      ],
+      "properties": {
+        "contractId": {
+          "const": "public-pr-application-v3.1"
+        },
+        "schemaPath": {
+          "const": "intake/schemas/public-pr-application-v3.schema.json"
+        },
+        "schemaSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "draftTransportOperations",
+        "missingObjectRecovery",
+        "sourceClosureModes",
+        "unreviewedDraftOnly"
+      ],
+      "properties": {
+        "draftTransportOperations": {
+          "const": [
+            "create",
+            "update"
+          ]
+        },
+        "missingObjectRecovery": {
+          "const": true
+        },
+        "sourceClosureModes": {
+          "const": [
+            "inline",
+            "manifest"
+          ]
+        },
+        "unreviewedDraftOnly": {
+          "const": true
+        }
+      }
+    },
+    "kind": {
+      "const": "programmable-applicant-compatibility"
+    },
+    "minimumBuilderProtocolVersion": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "trustedRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultBranch",
+        "numericId"
+      ],
+      "properties": {
+        "defaultBranch": {
+          "const": "main"
+        },
+        "numericId": {
+          "const": "1320171831"
+        }
+      }
+    },
+    "validatorPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "closureSha256",
+        "entrypointPath",
+        "receiptPath",
+        "rootPath"
+      ],
+      "properties": {
+        "closureSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "entrypointPath": {
+          "const": "vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs"
+        },
+        "receiptPath": {
+          "const": "vendor/programmable-applicant-validator/validator-package-receipt.v1.json"
+        },
+        "rootPath": {
+          "const": "vendor/programmable-applicant-validator"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

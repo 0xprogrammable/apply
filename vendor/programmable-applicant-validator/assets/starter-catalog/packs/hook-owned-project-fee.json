@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "pack",
+  "id": "hook-owned-project-fee",
+  "label": "Hook-owned project fee",
+  "summary": "Add a disclosed hook-owned project fee without inventing a separate platform-fee requirement.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "custom-review",
+  "requires": [
+    "custom-hook-behavior"
+  ],
+  "conflictsWith": [],
+  "capabilities": [
+    "claimable-project-fee",
+    "quote-side-volume-accounting"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "indexer",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Selected project fee, basis and its relationship to any other explicitly requested fee",
+    "Project beneficiary, mutation rules, liability keys and claim behavior",
+    "Executed gross quote-side basis, rounding and partial-fill behavior",
+    "Public fee disclosure for every trading surface"
+  ],
+  "requiredFiles": [
+    "Integrated fee-hook source",
+    "Project beneficiary policy",
+    "Accounting and claim tests",
+    "Public fee disclosure"
+  ],
+  "requiredTests": [
+    "Project fee behavior at zero, minimum, ordinary and maximum selected rates",
+    "Any other explicitly requested fee composes without double collection",
+    "Beneficiary mutation cannot redirect another selected recipient share",
+    "Solvency, claims and pool isolation"
+  ],
+  "risks": [
+    "Additive implementation can charge more than the disclosed total",
+    "Mutable recipients can create undisclosed payout control"
+  ]
+}
