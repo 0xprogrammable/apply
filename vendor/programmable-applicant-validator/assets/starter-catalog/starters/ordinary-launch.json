@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "starter",
+  "id": "ordinary-launch",
+  "label": "Ordinary token launch",
+  "summary": "Start a fixed-supply token and canonical v4 pool without inventing project-defined hook behavior or platform economics.",
+  "acceleratorOnly": true,
+  "eligibilityEffect": "none",
+  "unknownCapabilityPolicy": "preserve-and-route",
+  "reviewRoute": "standard-review",
+  "defaultPacks": [
+    "metadata-disclosures",
+    "test-evidence-threat-model"
+  ],
+  "conflictsWith": [
+    "custom-hook-behavior",
+    "token-managed-automatic-liquidity",
+    "token-transfer-tax"
+  ],
+  "capabilities": [
+    "canonical-v4-pool",
+    "fixed-supply-token",
+    "ordinary-price-discovery"
+  ],
+  "projectSurfaces": [
+    "contract",
+    "metadata"
+  ],
+  "requiredFacts": [
+    "Token name, symbol, fixed supply and immutable control model",
+    "Canonical PoolKey, launch price-discovery path and initial liquidity",
+    "Any fee or hook behavior explicitly requested by preserved intent or selected by the current central policy",
+    "Claim, exit, metadata and retirement behavior"
+  ],
+  "requiredFiles": [
+    "Token source",
+    "Launch configuration",
+    "Architecture proposal",
+    "Threat model",
+    "Test plan",
+    "Evidence index"
+  ],
+  "requiredTests": [
+    "Fixed supply and absence of hidden issuer controls",
+    "Canonical pool initialization and ordinary trading",
+    "Any explicitly selected hook behavior in every applicable swap quadrant",
+    "Claims, liquidity exit and metadata binding"
+  ],
+  "risks": [
+    "Adding custom price or transfer behavior invalidates the ordinary profile",
+    "External routing and indexing remain provider-specific evidence states"
+  ]
+}

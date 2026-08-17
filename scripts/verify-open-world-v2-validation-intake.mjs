@@ -1,18 +1,18 @@
-import { analyzeOpenWorldSecurity } from "../vendor/programmable-v4-hook-builder/scripts/open-world-security-core.mjs";
+import { analyzeOpenWorldSecurity } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   MAX_PACKAGE_FILE_BYTES,
   canonicalJson,
   inspectJsonStructure,
   isObject,
   sha256Bytes
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-primitives.mjs";
-import { isSafeRepositoryPath } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-package-io.mjs";
-import { validateExtensionInstance } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-extension-schema-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { isSafeRepositoryPath } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { validateExtensionInstance } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   validateTradeCapabilityManifestV1,
   validateTradeResultPairV1,
   validateTradeTestResultV1
-} from "../vendor/programmable-v4-hook-builder/scripts/trade-capability-manifest-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   EXTENSION_SPLIT_REVIEW_CODES,
   OPEN_WORLD_V2_ARTIFACTS,

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 
-import { parseBoundedLosslessJson } from "../vendor/programmable-v4-hook-builder/scripts/github-public-source-lossless-json.mjs";
+import { parseBoundedLosslessJson } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import { ruleHandlersForPolicyVersion } from "./launch-policy-handlers.mjs";
 
 const MAXIMUM_POLICY_BYTES = 512 * 1024;

@@ -131,10 +131,10 @@ test("released v1.6.3 remains the only compatibility-less full-vendor fallback",
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "applicant-compat-legacy-"));
   t.after(() => fs.rmSync(fixtureRoot, { recursive: true, force: true }));
   for (const relativePath of [
-    ".programmable/active-contract.json",
     "intake/schemas/public-pr-application-v3.schema.json",
     "vendor/receipt.json"
   ]) copyFixtureFile(repositoryRoot, fixtureRoot, relativePath);
+  copyFixtureFile(repositoryRoot, fixtureRoot, "test/fixtures/submit-launch-v1.6.3-active-contract.json", ".programmable/active-contract.json");
 
   const result = verifyApplicantCompatibilityContract({
     allowLegacyFallback: true,
@@ -267,8 +267,8 @@ function writeFile(root, relativePath, bytes) {
   fs.writeFileSync(target, bytes);
 }
 
-function copyFixtureFile(sourceRoot, targetRoot, relativePath) {
-  const target = path.join(targetRoot, ...relativePath.split("/"));
+function copyFixtureFile(sourceRoot, targetRoot, relativePath, targetRelativePath = relativePath) {
+  const target = path.join(targetRoot, ...targetRelativePath.split("/"));
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(path.join(sourceRoot, ...relativePath.split("/")), target);
 }

@@ -1,10 +1,10 @@
-import { canonicalJson } from "../vendor/programmable-v4-hook-builder/scripts/submission-core.mjs";
-import { sha256Bytes } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-core.mjs";
+import { canonicalJson } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { sha256Bytes } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   analyzeOpenWorldSecurity,
   validateOpenWorldSecurityInput
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-security-core.mjs";
-import { inspectDependencyPointerCoverage } from "../vendor/programmable-v4-hook-builder/scripts/application-dependency-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { inspectDependencyPointerCoverage } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   addFindingCopy,
   cloneCanonicalJson,
@@ -20,14 +20,14 @@ import {
   privacySafeReport,
   privacySafeSecuritySummary,
   validatePublicApplicationText
-} from "../vendor/programmable-v4-hook-builder/scripts/public-pr-application-v3-privacy.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   validatePublicPrApplicationV3
 } from "./verify-public-application-v3-core.mjs";
-import { sourceClosureBindingMatchesRepository } from "../vendor/programmable-v4-hook-builder/scripts/public-pr-application-v3-source-validation.mjs";
+import { sourceClosureBindingMatchesRepository } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 
 const securityAssessmentSchema = readJson(
-  new URL("../vendor/programmable-v4-hook-builder/references/open-world-security-v1.schema.json", import.meta.url)
+  new URL("../vendor/programmable-applicant-validator/references/open-world-security-v1.schema.json", import.meta.url)
 );
 
 const confirmedUnsafeIntentSignals = Object.freeze({
