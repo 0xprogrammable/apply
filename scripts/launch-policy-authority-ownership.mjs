@@ -27,6 +27,10 @@ const REPOSITORY_ID = "1320171831";
 const REPOSITORY_BRANCH = "main";
 const VENDOR_ROOT = "vendor/programmable-v4-hook-builder";
 const VENDOR_PREFIX = `${VENDOR_ROOT}/`;
+const APPLICANT_VALIDATOR_ROOT = "vendor/programmable-applicant-validator";
+const APPLICANT_VALIDATOR_PREFIX = `${APPLICANT_VALIDATOR_ROOT}/`;
+const APPLICANT_COMPATIBILITY_PATH = ".programmable/applicant-compatibility.v1.json";
+const FROZEN_VENDOR_PREFIXES = Object.freeze([APPLICANT_VALIDATOR_PREFIX, VENDOR_PREFIX]);
 const VENDOR_RECEIPT_PATH = "vendor/receipt.json";
 const MAXIMUM_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAXIMUM_INSPECTOR_OUTPUT_BYTES = 8 * 1024 * 1024;
@@ -75,6 +79,7 @@ const MODULE_OWNERSHIP_ROLES = new Set([
   "semantic-consumer"
 ]);
 const CONTROL_IMPLEMENTATION_PATHS = new Set([
+  "scripts/applicant-compatibility-core.mjs",
   "review/cli.mjs",
   "review/open-review-engine.mjs",
   "scripts/acceptance-entitlement-core.mjs",
@@ -387,7 +392,7 @@ function validateEntrypoints(entrypoints) {
     assertSortedUniquePaths(entrypoint.frozenVendorImports, "AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID", `${entrypoint.id}.frozenVendorImports`);
     if (!entrypoint.moduleClosure.includes(entrypoint.path)) fail("AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID", `${entrypoint.id} does not include itself in its module closure.`);
     for (const vendorImport of entrypoint.frozenVendorImports) {
-      if (!vendorImport.startsWith(VENDOR_PREFIX) || !vendorImport.endsWith(".mjs")) {
+      if (!FROZEN_VENDOR_PREFIXES.some((prefix) => vendorImport.startsWith(prefix)) || !vendorImport.endsWith(".mjs")) {
         fail("AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID", `${entrypoint.id} has an invalid frozen-vendor import.`);
       }
     }
@@ -525,7 +530,11 @@ function listRepositoryFiles(repositoryRoot) {
   if (result.status !== 0) fail("AUTHORITY_OWNERSHIP_GIT_FAILED", "The closed repository file inventory could not be read.");
   const paths = result.stdout.toString("utf8").split("\0").filter(Boolean);
   for (const relativePath of paths) assertSafeRepositoryPath(relativePath, "AUTHORITY_OWNERSHIP_FILE_SET_INVALID", "repository path");
-  return [...new Set(paths.filter((relativePath) => !relativePath.startsWith(VENDOR_PREFIX)))].sort(compareUtf8);
+  const compactContractPresent = paths.includes(APPLICANT_COMPATIBILITY_PATH);
+  return [...new Set(paths.filter((relativePath) => (
+    !relativePath.startsWith(VENDOR_PREFIX)
+    && !(compactContractPresent && relativePath.startsWith(APPLICANT_VALIDATOR_PREFIX))
+  )))].sort(compareUtf8);
 }
 
 function isBoundedApplicantDataPath(manifest, relativePath) {
@@ -668,6 +677,7 @@ function verifyEntrypointClosures({ manifest, observedFiles, repositoryRoot }) {
   const importGraph = inspectStaticImports({ modulePaths, repositoryRoot });
   const ownedFiles = new Set(observedFiles);
   const declaredEntrypoints = new Set(manifest.entrypoints.map(({ path: entrypointPath }) => entrypointPath));
+  const compactContractPresent = observedFiles.includes(APPLICANT_COMPATIBILITY_PATH);
   for (const entrypointPath of manifest.fileClasses["admission-entrypoint"]) {
     if (!declaredEntrypoints.has(entrypointPath)) {
       fail("AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID", `${entrypointPath} is classified as an admission entrypoint but has no closure declaration.`);
@@ -676,6 +686,12 @@ function verifyEntrypointClosures({ manifest, observedFiles, repositoryRoot }) {
 
   for (const entrypoint of manifest.entrypoints) {
     const actual = resolveEntrypointClosure({ entrypointPath: entrypoint.path, importGraph, ownedFiles, repositoryRoot });
+    if (!compactContractPresent && actual.frozenVendorImports.some((relativePath) => relativePath.startsWith(APPLICANT_VALIDATOR_PREFIX))) {
+      fail(
+        "AUTHORITY_OWNERSHIP_COMPACT_VENDOR_UNBOUND",
+        `${entrypoint.id} imports a compact Applicant validator without the closed protected compatibility contract.`
+      );
+    }
     if (
       canonicalAuthorityJson(actual.moduleClosure) !== canonicalAuthorityJson(entrypoint.moduleClosure)
       || canonicalAuthorityJson(actual.frozenVendorImports) !== canonicalAuthorityJson(entrypoint.frozenVendorImports)
@@ -798,7 +814,7 @@ function resolveEntrypointClosure({ entrypointPath, importGraph, ownedFiles, rep
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), specifier));
       assertSafeRepositoryPath(resolved, "AUTHORITY_OWNERSHIP_IMPORT_TARGET_INVALID", "resolved import");
       if (!resolved.endsWith(".mjs")) fail("AUTHORITY_OWNERSHIP_IMPORT_TARGET_INVALID", `${relativePath} imports a non-ESM local target ${resolved}.`);
-      if (resolved.startsWith(VENDOR_PREFIX)) {
+      if (FROZEN_VENDOR_PREFIXES.some((prefix) => resolved.startsWith(prefix))) {
         vendorImports.add(resolved);
         continue;
       }
