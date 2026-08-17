@@ -5,6 +5,11 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import {
+  activateConfirmedKnowledge,
+  renderActivatedContext,
+  renderContextBrief
+} from "./knowledge-activation-core.mjs";
 import { describeKnowledgeSelectors, KnowledgeRouterError, planKnowledge } from "./knowledge-router-core.mjs";
 import { openOfflineRegistry, RegistryDiscoveryError, showRegistryProject } from "./registry-discovery-core.mjs";
 import { canonicalJson } from "./template-catalog-core.mjs";
@@ -16,14 +21,14 @@ const maximumTemplatePlanBytes = 1_048_576;
 try {
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-    process.stdout.write(help());
+    process.stdout.write(args.includes("--json") ? `${helpJson()}\n` : help());
   } else {
     const options = parseArgs(args);
     const templatePlanInput = options.templatePlan === null
       ? { templatePlan: null, templatePlanSplitReview: null }
       : await readTemplatePlan(options.templatePlan);
     const registryProjectInput = await loadRegistryProjects(options.registryProjects);
-    const result = planKnowledge({
+    const planInput = {
       mode: options.mode,
       templatePlan: templatePlanInput.templatePlan,
       templatePlanSplitReview: templatePlanInput.templatePlanSplitReview,
@@ -33,8 +38,33 @@ try {
       registryProjects: registryProjectInput.registryProjects,
       registryProjectSplitReview: registryProjectInput.registryProjectSplitReview,
       skillRoot
-    });
-    process.stdout.write(`${canonicalJson({ schemaVersion: "1.0.0", ok: true, command: "context", result })}\n`);
+    };
+    const routedPlan = planKnowledge(planInput);
+    if (options.activateConfirmed) {
+      const basePlan = planKnowledge({ mode: options.mode, skillRoot });
+      const result = activateConfirmedKnowledge({
+        basePlan,
+        routedPlan,
+        baseProfileDigest: options.baseProfileDigest,
+        explicitCapabilities: options.capabilities,
+        explicitSurfaces: options.surfaces,
+        skillRoot
+      });
+      if (result.kind === "programmable-knowledge-activation") {
+        process.stdout.write(options.brief
+          ? renderContextBrief(result, { basePlan })
+          : renderActivatedContext(result, { basePlan }));
+      } else {
+        process.stdout.write(options.brief
+          ? renderContextBrief(result)
+          : `${canonicalJson({ schemaVersion: "1.0.0", ok: true, command: "context", result })}\n`);
+      }
+    } else {
+      if (options.baseProfileDigest !== null) usageError("--base-profile-digest requires --activate-confirmed.");
+      process.stdout.write(options.brief
+        ? renderContextBrief(routedPlan)
+        : `${canonicalJson({ schemaVersion: "1.0.0", ok: true, command: "context", result: routedPlan })}\n`);
+    }
   }
 } catch (error) {
   const code = error instanceof KnowledgeRouterError || error instanceof RegistryDiscoveryError
@@ -51,11 +81,21 @@ try {
   };
   if ((error instanceof KnowledgeRouterError || error instanceof RegistryDiscoveryError) && error.details !== undefined) output.error.details = error.details;
   process.stdout.write(`${canonicalJson(output)}\n`);
-  process.exitCode = code === "USAGE_ERROR" || code === "KNOWLEDGE_MODE_INVALID" || code === "KNOWLEDGE_INPUT_INVALID" || code === "KNOWLEDGE_PACK_INVALID" || code === "KNOWLEDGE_ROUTE_FAMILY_AMBIGUOUS" || code === "REGISTRY_QUERY_INVALID" ? 2 : 1;
+  process.exitCode = code === "USAGE_ERROR" || code === "KNOWLEDGE_MODE_INVALID" || code === "KNOWLEDGE_INPUT_INVALID" || code === "KNOWLEDGE_PACK_INVALID" || code === "KNOWLEDGE_ROUTE_FAMILY_AMBIGUOUS" || code === "KNOWLEDGE_ACTIVATION_INVALID" || code === "KNOWLEDGE_ACTIVATION_BASE_MISMATCH" || code === "REGISTRY_QUERY_INVALID" ? 2 : 1;
 }
 
 function parseArgs(args) {
-  const options = { mode: null, templatePlan: null, packs: [], capabilities: [], surfaces: [], registryProjects: [] };
+  const options = {
+    mode: null,
+    templatePlan: null,
+    packs: [],
+    capabilities: [],
+    surfaces: [],
+    registryProjects: [],
+    activateConfirmed: false,
+    baseProfileDigest: null,
+    brief: false
+  };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--mode") {
@@ -72,11 +112,23 @@ function parseArgs(args) {
       options.surfaces.push(requireValue(args, ++index, "--surface"));
     } else if (argument === "--registry-project") {
       options.registryProjects.push(requireValue(args, ++index, "--registry-project"));
+    } else if (argument === "--activate-confirmed") {
+      if (options.activateConfirmed) usageError("--activate-confirmed may be provided only once.");
+      options.activateConfirmed = true;
+    } else if (argument === "--base-profile-digest") {
+      if (options.baseProfileDigest !== null) usageError("--base-profile-digest may be provided only once.");
+      options.baseProfileDigest = requireValue(args, ++index, "--base-profile-digest");
+    } else if (argument === "--brief") {
+      if (options.brief) usageError("--brief may be provided only once.");
+      options.brief = true;
     } else {
       usageError(`Unknown argument: ${argument}.`);
     }
   }
   if (options.mode === null) usageError("context requires --mode <mode>.");
+  if (options.activateConfirmed && options.baseProfileDigest === null) {
+    usageError("--activate-confirmed requires --base-profile-digest <digest>.");
+  }
   return options;
 }
 
@@ -172,60 +224,37 @@ function usageError(message) {
 }
 
 function help() {
-  const selectors = describeKnowledgeSelectors({ skillRoot });
-  const capabilityFamilies = selectors.routeFamilies.filter(({ kind }) => kind === "capability");
-  const surfaceFamilies = selectors.routeFamilies.filter(({ kind }) => kind === "surface");
   return [
-    "Usage: knowledge-router.mjs --mode <explore|autopilot|preflight|prototype|repair|review|submit|handoff> [--template-plan <programmable-template.json>] [--registry-project <id>]... [--pack <catalog-pack-id>]... [--capability <id>]... [--surface <id>]...",
+    "Usage: knowledge-router.mjs --mode <explore|autopilot|preflight|prototype|repair|review|submit|handoff> [selectors] [--brief] [--activate-confirmed --base-profile-digest <digest>]",
     "",
-    "Return the smallest deterministic local reference profile for one builder task.",
+    "Return the smallest local reference profile for the confirmed task.",
     "",
     "Options:",
-    "  --mode <mode>           Select the current builder mode.",
-    "  --template-plan <path>  Derive exact capabilities and surfaces from one current template plan.",
-    "  --pack <id>             Expand one catalog pack into its exact capabilities and surfaces; repeat as needed.",
-    "  --capability <id>       Add an explicit known or owner-defined capability; repeat as needed.",
-    "  --surface <id>          Add an explicit project surface; repeat as needed.",
-    "  --registry-project <id> Load one hash-bound project from the bundled Registry snapshot as discovery context; repeat as needed.",
-    "  --help                  Show this help and the bundled selectable ids without using the network.",
+    "  --mode <mode>           Required task phase.",
+    "  --template-plan <path>  Derive selectors from one current plan.",
+    "  --pack|--capability|--surface <id>  Add a confirmed selector; repeat as needed.",
+    "  --registry-project <id> Add bundled Registry discovery context.",
+    "  --brief                 Return a complete bounded routing brief below 2,500 bytes.",
+    "  --activate-confirmed    Load at most two route specialists for exact selectors.",
+    "  --base-profile-digest <digest>  Bind activation to the consumed mode-only profile.",
     "",
-    "Selectable capability ids:",
-    formatIds(selectors.capabilityIds),
+    "Examples:",
+    "  context --mode autopilot --brief",
+    "  context --mode autopilot --capability <confirmed-id> --activate-confirmed --base-profile-digest <digest> --brief",
     "",
-    "Selectable surface ids:",
-    formatIds(selectors.surfaceIds),
-    "",
-    "Selectable pack ids:",
-    formatIds(selectors.packIds),
-    "",
-    "Reserved routing-family names (not selectable project ids):",
-    ...capabilityFamilies.map(({ id, selectableIds, matchingPackIds }) => (
-      `  capability ${id} -> ${selectableIds.join(", ")}${matchingPackIds.length === 0 ? "" : `; packs: ${matchingPackIds.join(", ")}`}`
-    )),
-    ...surfaceFamilies.map(({ id, selectableIds }) => `  surface ${id} -> ${selectableIds.join(", ")}`),
-    "",
-    "Unknown capabilities are preserved and routed to architecture review; they never cause an automatic rejection.",
-    "Use a new owner-defined kebab-case id only when none of the listed ids expresses the confirmed behavior.",
-    "Up to 256 direct capability or surface ids and 20 Registry projects use one normal routing plan. Larger valid inventories return a complete HOLD_SPLIT_REVIEW plan with deterministic chunks and no materialization or adverse decision.",
-    "A real template plan above 1 MiB routes to the same manual-provenance hold; symbolic links and invalid UTF-8 or JSON remain invalid.",
-    "Registry capabilities and surfaces are descriptive metadata in a separate namespace. They never select Builder packs, change eligibility, or trigger architecture review.",
-    "The command reads bundled local references only and never uses the network or changes a project.",
+    "Use --help --json for every exact selectable id and reserved routing family.",
+    "Use templates list --filter <text> before selecting a pack.",
+    "Unknown owner-defined kebab-case capabilities remain eligible for architecture review.",
+    "Over 256 direct ids return HOLD_SPLIT_REVIEW; no materialization or adverse decision occurs.",
+    "Bundled local reads only; no network or project writes.",
     ""
   ].join("\n");
 }
 
-function formatIds(values) {
-  const lines = [];
-  let current = "  ";
-  for (const value of values) {
-    const next = current === "  " ? `${current}${value}` : `${current}, ${value}`;
-    if (Buffer.byteLength(next) > 116) {
-      lines.push(current);
-      current = `  ${value}`;
-    } else {
-      current = next;
-    }
-  }
-  if (current !== "  ") lines.push(current);
-  return lines.join("\n");
+function helpJson() {
+  return canonicalJson({ schemaVersion: "1.0.0", ok: true, command: "context-help", result: {
+    modes: ["explore", "autopilot", "preflight", "prototype", "repair", "review", "submit", "handoff"],
+    ...describeKnowledgeSelectors({ skillRoot }),
+    note: "Routing-family ids are reserved and are not selectable project ids."
+  } });
 }

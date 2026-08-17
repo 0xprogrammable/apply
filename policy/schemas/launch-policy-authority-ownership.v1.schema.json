@@ -222,13 +222,13 @@
       "additionalProperties": false,
       "properties": {
         "commit": {
-          "const": "547482adf6ed0ed19e9cd4d0e884abd70e143229"
+          "const": "7869f44aa8dcc7cefeb379b76118407d53384558"
         },
         "receiptPath": {
           "const": "vendor/receipt.json"
         },
         "release": {
-          "const": "v0.5.1"
+          "const": "v0.10.3"
         },
         "repository": {
           "const": "0xprogrammable/hookbuilder"
@@ -240,10 +240,10 @@
           "const": "1.0.0"
         },
         "skillTree": {
-          "const": "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec"
+          "const": "3b974b0bcb006e08d8f2504c783ac81f2ee3bd74"
         },
         "source": {
-          "const": "https://github.com/0xprogrammable/hookbuilder/tree/547482adf6ed0ed19e9cd4d0e884abd70e143229/skills/programmable-v4-hook-builder"
+          "const": "https://github.com/0xprogrammable/hookbuilder/tree/7869f44aa8dcc7cefeb379b76118407d53384558/skills/programmable-v4-hook-builder"
         }
       },
       "required": [

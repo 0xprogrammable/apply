@@ -46,7 +46,7 @@ test("contribution paths and the pull request template stay in sync", () => {
   assert.match(contributing, /four intentionally separate contribution paths/u);
   assert.match(contributing, /Open legacy V2 intake/u);
   assert.match(contributing, /separate lightweight one-file intake path/u);
-  assert.match(maturity, /receipt-bound Hookbuilder v0\.5\.1 tree also remains open/u);
+  assert.match(maturity, /receipt-bound Hookbuilder v0\.10\.3 tree also remains open/u);
   assert.match(maturity, /cannot satisfy Canary or Website eligibility/u);
   assert.match(migration, /activated the Hookbuilder 0\.5\.1 bridge/u);
   assert.match(migration, /bridge remains the open legacy V2 transport/u);

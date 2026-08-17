@@ -102,14 +102,14 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
 ]);
 const PURE_SUPPORT_MODULES = new Set();
 const EXPECTED_VENDOR = Object.freeze({
-  commit: "547482adf6ed0ed19e9cd4d0e884abd70e143229",
+  commit: "7869f44aa8dcc7cefeb379b76118407d53384558",
   receiptPath: VENDOR_RECEIPT_PATH,
-  release: "v0.5.1",
+  release: "v0.10.3",
   repository: "0xprogrammable/hookbuilder",
   rootPath: VENDOR_ROOT,
   schemaVersion: "1.0.0",
-  skillTree: "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec",
-  source: "https://github.com/0xprogrammable/hookbuilder/tree/547482adf6ed0ed19e9cd4d0e884abd70e143229/skills/programmable-v4-hook-builder"
+  skillTree: "3b974b0bcb006e08d8f2504c783ac81f2ee3bd74",
+  source: "https://github.com/0xprogrammable/hookbuilder/tree/7869f44aa8dcc7cefeb379b76118407d53384558/skills/programmable-v4-hook-builder"
 });
 const EXPECTED_BOUNDED_APPLICANT_DATA = Object.freeze([
   Object.freeze({
@@ -482,7 +482,7 @@ function verifyFrozenVendor({ manifest, repositoryRoot }) {
     Object.entries(EXPECTED_VENDOR).filter(([key]) => !new Set(["receiptPath", "rootPath"]).has(key))
   );
   if (canonicalAuthorityJson(receipt) !== canonicalAuthorityJson(expectedReceipt)) {
-    fail("AUTHORITY_OWNERSHIP_VENDOR_INVALID", "The frozen Hookbuilder receipt does not match the exact v0.5.1 identity.");
+    fail("AUTHORITY_OWNERSHIP_VENDOR_INVALID", "The frozen Hookbuilder receipt does not match the exact v0.10.3 identity.");
   }
   if (canonicalAuthorityJson(manifest.frozenVendor) !== canonicalAuthorityJson(EXPECTED_VENDOR)) {
     fail("AUTHORITY_OWNERSHIP_VENDOR_INVALID", "The ownership manifest does not bind the exact frozen Hookbuilder identity.");

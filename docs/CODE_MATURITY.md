@@ -16,6 +16,6 @@ self-assessment, not an independent audit.
 | Testing and verification | 4 | Deterministic registry and decision tests plus the complete trusted intake adversarial suite | Hidden mutation corpora, production runner evidence, and an independent penetration review remain outstanding |
 
 The repository release has public CI and protected-main evidence. The one-file hidden Workflow Canary is the lightweight
-central-policy path. The receipt-bound Hookbuilder v0.5.1 tree also remains open for its frozen six-file legacy V2
+central-policy path. The receipt-bound Hookbuilder v0.10.3 tree also remains open for its frozen six-file legacy V2
 transport while the checked-in intake state is `open`, but cannot satisfy Canary or Website eligibility. Local green
 checks alone do not prove any deployed Website, production, funds, audit, or launch authority.

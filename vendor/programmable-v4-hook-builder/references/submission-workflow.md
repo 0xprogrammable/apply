@@ -1,15 +1,19 @@
 # Submission V1 workflow
 
-This chapter owns the released six-file `prepare-pr` and confirmed draft-PR transport. New public review requests go
-only to `0xprogrammable/submit-launch:main`; follow
-[agent-entry-and-application.md](agent-entry-and-application.md). Use
+> Frozen compatibility guide for the historical six-file V1.6/V2 transport. Load only for an explicit legacy replay.
+> Nothing in this chapter is current Programmable eligibility or launch authority. New work resolves exact protected
+> Submit Launch policy bytes and follows only applicable current Rule IDs.
+
+This chapter preserves the historical six-file `prepare-pr` and confirmed Draft PR transport. New public review requests
+use Application V3.1 and go only to `0xprogrammable/submit-launch:main`; follow
+[github-application-v3.md](github-application-v3.md). Use
 [open-world-v2-workflow.md](open-world-v2-workflow.md) to build and verify an Open-World project before an eligible
 handoff.
 
-For exact candidate Application V3 replay, the GitHub sequence is namespaced and separate:
+For the generic Application V3.1 transport, the GitHub sequence is namespaced and separate:
 `open-world prepare-revision` derives revision/lineage through GET-only discovery, `open-world application` builds the
-complete zero-network package, and `open-world submit|update|status` models its separate review thread. Those candidate
-commands do not replace the released top-level Applicant transport.
+complete zero-network package, and `open-world submit|update|status` models its separate review thread. The top-level
+Applicant transport remains only for documented legacy continuations.
 
 The **Public GitHub PR Builder Beta** keeps the complete project in the builder's own public GitHub
 repository. A draft pull request carried one bounded six-file application record pointing to the exact public source
@@ -18,10 +22,10 @@ connected application service was part of that beta.
 
 ## Resolve the active package contract first
 
-This skill revision documents the released six-file Builder Beta package. A trusted intake channel may be migrating to
+The remainder of this chapter documents the released six-file Builder Beta package for exact legacy replay. A trusted intake channel may be migrating to
 a different closed package, including a seven-file generation with central `launch.json`. Before scaffolding, repairing,
 or reviewing, bind the exact default-branch workflow or service revision, PR target base, validator revision, allowed
-filenames, package-contract id or digest, skill revision, criteria revision, and fee-policy version. Do not assume that
+filenames, package-contract id or digest, skill revision, central policy binding, and fee-policy version. Do not assume that
 the target branch and the trusted workflow run the same generator.
 
 `doctor` proves local tool readiness only. Resolve the channel contract read-only from immutable objects on the target
@@ -39,13 +43,13 @@ platform change.
 Submission remains separate from the release registry. A builder can propose and test any reviewable v4 project without
 creating the appearance that Programmable has selected, accepted, scheduled, deployed, or made it available.
 
-Chain choice does not close the application door. Any positive JavaScript-safe EVM chain can be proposed. Ethereum,
-Unichain, Base and Sepolia use the standard's exact canonical slugs; an unknown chain enters architecture review. The
-current Programmable launch integration remains Ethereum Mainnet-only, so every non-Mainnet application carries a
-separate release gate and cannot claim current platform launchability. Exact Base or Unichain official deployment
-records remain a runtime-unverified reference tier, not Programmable-tested deployment evidence.
+Chain choice does not close the historical application door. Any positive JavaScript-safe EVM chain can be proposed.
+Ethereum, Unichain, Base and Sepolia use the legacy standard's exact canonical slugs; an unknown chain enters technical
+architecture review. The historical integration described by this frozen contract was Ethereum Mainnet-only. That old
+constraint must not be projected onto a current application unless an applicable central-policy Rule ID states it.
+Exact Base or Unichain official deployment records remain runtime evidence only, not Programmable approval.
 
-Submission standard `1.6.0` retains the mandatory Programmable volume-fee record, open project-surface and capability
+Historical submission standard `1.6.0` retains its Programmable volume-fee record, open project-surface and capability
 graph, exact builder-template provenance, time-bounded per-provider evidence, and the machine-enforced v4 SDK safety
 profile introduced in 1.5.0. It adds an open-ended `launchPlan`, one positive uint128
 `pool.minimumInitialLiquidity`, exact launch source/test closure, and a required post-acceptance bundle for the generic
@@ -70,10 +74,10 @@ platform and project remainders for the canonical pool lifetime, forbids claims 
 positive gross quote amounts below 1,000 smallest units, and records `fragmentationResistant: true`. Per-swap floor
 accounting is not compatible because splitting one swap into many can otherwise reduce the collected entitlement.
 
-Every new launch application declares the root `programmableFee` object from
-[programmable-fee-policy.md](programmable-fee-policy.md). Every idea remains submit-able, but no-hook, router-only,
-LP-fee-only, and transfer-tax-only enforcement stays architecture- or changes-required. A simple launch implements the
-standard Programmable fee-hook profile; a custom project integrates the policy into its single hook. Both require exact source, tests, and maintainer review.
+This document reproduces the historical V1.6 package contract. Its root `programmableFee` object and related fee gate
+remain relevant only when operating that explicit legacy workflow. They are not current launch requirements and must
+not be projected onto a new application. Current eligibility comes only from applicable Rule IDs in exact protected
+Submit Launch policy bytes.
 
 ## Stages
 
@@ -90,8 +94,9 @@ The builder repository contains:
 - Builder identity, contact, license declaration, and optional beneficiary address
 
 No implementation language is required at proposal stage. The proposal must still resolve the user outcome, project
-surfaces, value flow, canonical PoolKey, whether its mandatory fee hook is standard-profile or integrates additional
-project-defined behavior, authorities, dependencies, hard failure behavior, and expected evidence. Hook callbacks, a
+surfaces, value flow, canonical PoolKey, and, when the historical package selects a fee hook, whether it is
+standard-profile or integrates additional project-defined behavior, plus authorities, dependencies, hard failure
+behavior, and expected evidence. Hook callbacks, a
 permission mask, and CREATE2 planning apply only when `hook.used` is true. That value includes the standard fee-hook
 profile; it does not imply extra custom behavior. A
 no-hook proposal may select its applicable route and keep `programmableFee.collection.status` at
@@ -116,7 +121,7 @@ requires exact source and tests for either a project-specific standard-profile h
 callback authentication, permissions, fee accounting, owner-only claims, and CREATE2 evidence. Apps, games, and
 services also provide the relevant source closure, build and test evidence for their declared surfaces.
 
-A prototype provides builder-declared implementation evidence for review. A clean document-only analysis remains
+A historical V1.6 prototype provides builder-declared implementation evidence for review. A clean document-only analysis remains
 `IN_PROGRESS`; closed repository/package structure may reach `STRUCTURALLY_COMPLETE`. Neither state means an evidence
 command ran, a build was reproduced, or a sandbox verified the implementation. It is not accepted, audited, approved
 for deployment, launchable, provider-supported, or available by default.
@@ -128,7 +133,7 @@ candidate after confirming:
 
 - Complete declared source and supported dependency closure
 - All capability-triggered tests and security documents
-- Mandatory fee source and tests proving the floor, non-additive split, four swap modes, canonical-pool basis,
+- The historical package's fee source and tests proving the floor, non-additive split, four swap modes, canonical-pool basis,
   immutable owner-only claims, no mutable recipient, no cross-pool netting, and non-bypassability
 - Static-analysis dispositions
 - Gas and size evidence for deployed contracts
@@ -142,16 +147,12 @@ candidate after confirming:
 
 Candidate selection is not acceptance, deployment, routing approval or availability.
 
-### Launch-admission self-check
+### Central policy self-check
 
-Apply [approval-criteria.md](approval-criteria.md) before preparing a launch-admission result. A proposal may receive
-architecture feedback, but only an executable prototype can receive a positive launch-admission verdict. Keep the
-current central six-file contract unchanged; the applicant launch plan remains a bound public-source artifact until a
-trusted central schema and compiler are released together.
-
-Report exactly one predicted verdict: `CHANGES REQUIRED` for any applicant-controlled blocker, `PLATFORM PENDING` only
-after every applicant gate passes and only maintainer/provider work remains, or `READY FOR FINAL VERIFICATION` when
-the supported platform pre-final gates also pass. None of these strings creates an acceptance record or launch permit.
+Resolve the exact central policy, schema, binding, and selected profile described in
+[approval-criteria.md](approval-criteria.md). Address only applicable current Rule IDs and report only outcomes defined
+by those protected bytes. Keep the historical six-file V2 package unchanged; its policy binding is a drift anchor and
+does not turn the package into a workflow-canary decision or launch permit.
 
 ### Acceptance and availability are separate
 
@@ -403,7 +404,7 @@ It does not push a branch or open a pull request.
 
 ## Submit or update through the confirmed application client
 
-This is the normal public builder path. Save the canonical `prepare-pr` result outside the source repository, then use
+This is only the legacy continuation path. Save the canonical `prepare-pr` result outside the source repository, then use
 the application client. Do not manually fork the central repository, push a central branch, or open the draft pull
 request as an alternative to this flow.
 
@@ -459,17 +460,19 @@ never marks the pull request ready for review. See
 [github-application-journey.md](github-application-journey.md) for status, recovery, identity, and intake-state rules.
 
 Large declared path sets are not verified with one anonymous REST request per file. The resolver keeps GitHub REST as
-the bounded repository/commit/tree control plane. The central intake reads exact declared objects through one anonymous
-HTTPS Git smart-protocol batch per repository; `prepare-pr` may instead bind the clean local primary HEAD bytes against
-complete REST tree metadata. Evidence blobs are declared primary-source paths, so central intake retains only those
+the bounded repository/commit/tree control plane. The central intake reads exact declared objects through bounded
+anonymous HTTPS Git smart-protocol batches per resolver request; `prepare-pr` may instead bind the clean local primary
+HEAD bytes against complete REST tree metadata. Evidence blobs are declared primary-source paths, so central intake
+retains only those
 exact source bytes and reuses them for evidence binding without another REST tree walk or smart-Git fetch. The remote
-path uses a blobless partial fetch, a sparse `git backfill` and raw `git cat-file` object reads. It
+path uses a blobless partial fetch, one bounded `git fetch --stdin` batch for the tree-derived blob object IDs and raw
+`git cat-file` object reads. It
 never checks out project files, recurses into submodules, runs project hooks, loads project or user Git config, supplies
 credentials, or executes candidate code. Every returned path must still be a regular blob under the exact requested
 commit and root tree; its raw object id, two-megabyte file ceiling, twenty-megabyte aggregate ceiling and non-LFS bytes
 are checked.
 GitHub recursive-tree truncation is never treated as evidence: the same exact-object path proof is required instead.
-Git 2.49.0 or newer is required and the `git backfill` capability is probed before any repository fetch. If the
+Git 2.49.0 or newer is required and its version is checked before any repository fetch. If the
 installed Git cannot provide this no-checkout flow, the result is `TOOLING_BLOCKED`, not an unsafe rejection.
 The central source control plane admits at most 48 REST requests and reserves 12 additional physical request slots for
 bounded transport retries. At 125 ms pacing, all admitted pacing plus worst-case retry delay is 19.375 seconds inside
@@ -559,7 +562,7 @@ A submission PR states:
 - Stage: proposal or prototype
 - Exact authoritative design and implementation readiness, compatibility-only legacy decision, and risk tier
 - User outcome, project surfaces, and model difference
-- Whether the mandatory fee hook uses the standard profile or integrates additional project-defined behavior; permissions and mask when `hook.used` is true
+- When the historical package selects a fee hook, whether it uses the standard profile or integrates additional project-defined behavior; permissions and mask when `hook.used` is true
 - Assets, fees, custody, value flow, authorities, and dependencies
 - Tests actually run and tests still required
 - Known limitations and open decisions

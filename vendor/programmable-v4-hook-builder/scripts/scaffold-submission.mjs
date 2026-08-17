@@ -4,10 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import {
-  builderTemplateFromPlan,
-  manualBuilderTemplate
-} from "./builder-template-contract.mjs";
+import { builderTemplateFromPlan, manualBuilderTemplate } from "./builder-template-contract.mjs";
+import { TEMPLATE_BASELINE_TRIGGERS as baselineTriggers, bindChainlinkPlanSurfaces, collectChainlinkPlanSurfaces, templateCapabilityKind, templateSecurityTriggers } from "./template-catalog-composition.mjs";
 import { parseCliOrExit } from "./cli-args.mjs";
 import { hasForbiddenInvisibleOrBidi } from "./metadata-core.mjs";
 import { PROJECT_PROFILE_IDS, requiredProjectProfiles } from "./project-surfaces-core.mjs";
@@ -22,18 +20,6 @@ const templateFiles = ["PROPOSAL.md", "THREAT_MODEL.md", "TEST_PLAN.md", "EVIDEN
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDirectory, "..");
 const templateRoot = path.join(skillRoot, "assets", "templates");
-const baselineTriggers = Object.freeze({
-  authority: true,
-  valueFlow: false,
-  sourceOfTruth: true,
-  signaturesReplay: false,
-  externalCalls: false,
-  custody: false,
-  piiGeolocation: false,
-  secretBoundary: false,
-  sourceTestSchema: true,
-  failureRecovery: true
-});
 const surfaceDescriptors = Object.freeze({
   application: ["web-app", "browser", "Application", "The browser application through which users create, inspect or use the selected product capabilities."],
   contract: ["onchain-contract", "onchain", "Onchain contracts", "The launch token, Uniswap v4 pool, hook and related onchain accounting boundary."],
@@ -47,7 +33,7 @@ const surfaceDescriptors = Object.freeze({
   mobile: ["mobile-app", "mobile-client", "Mobile application", "The mobile-client boundary used by the selected product."],
   monitoring: ["monitoring", "worker", "Monitoring", "The operational monitoring and alerting boundary used by the selected product."],
   database: ["database", "database", "Database", "The persistent offchain state boundary used by the selected product."],
-  oracle: ["external-provider", "external-provider", "External data provider", "The external data source or provider boundary used by the selected product."]
+  "external-provider": ["external-provider", "external-provider", "External data provider", "The external data source or provider boundary used by the selected product."]
 });
 const planningOnlyPackIds = new Set(["test-evidence-threat-model"]);
 const narrowedPackSurfaces = Object.freeze({
@@ -58,7 +44,7 @@ const narrowedPackSurfaces = Object.freeze({
 const { options, positionals } = parseCliOrExit({
   command: "scaffold-submission.mjs",
   usage: "scaffold-submission.mjs <model-id> [--repository-root <path>] [--name <display-name>] [--destination <path>] [--template-plan <programmable-template.json>]",
-  summary: "Create one isolated Programmable hook proposal package without changing the model registry.",
+  summary: "Create one frozen legacy V1 proposal package without changing the model registry; never use it as a current central-policy build path.",
   options: [
     { name: "--repository-root", key: "repositoryRoot", type: "value", valueName: "path", description: "Use this Git worktree instead of the current directory." },
     { name: "--name", key: "modelName", type: "value", valueName: "display-name", description: "Set a human-readable model name of at most 80 characters." },
@@ -142,6 +128,7 @@ function normalizeModelName(value, id) {
 }
 
 function preloadPackage(id, name, builderTemplate, templatePlan) {
+  if (templatePlan !== null) throw new Error("frozen legacy V1 scaffold does not accept current catalog plans; use project materialize for current builds");
   const rendered = new Map();
   const plannedFiles = templatePlan === null
     ? null
@@ -194,8 +181,7 @@ function applyTemplateArchitecturePlan(submission, plan) {
   const materialPackIds = new Set([
     ...plan.selection.requestedPackIds,
     ...plan.selection.autoIncludedPackIds,
-    "metadata-disclosures",
-    "programmable-volume-fee"
+    "metadata-disclosures"
   ]);
   const activeSurfaceSlugs = new Set(
     plan.starter.id === "blank-custom" ? ["other"] : plan.starter.projectSurfaces
@@ -205,6 +191,7 @@ function applyTemplateArchitecturePlan(submission, plan) {
     if (!pack || planningOnlyPackIds.has(packId)) continue;
     for (const slug of surfacesForDefinition(pack)) activeSurfaceSlugs.add(slug);
   }
+  const chainlinkSelection = collectChainlinkPlanSurfaces(plan, activeSurfaceSlugs);
   for (const slug of [...activeSurfaceSlugs]) {
     if (!surfaceDescriptors[slug]) activeSurfaceSlugs.delete(slug);
   }
@@ -224,17 +211,18 @@ function applyTemplateArchitecturePlan(submission, plan) {
     const slug = activeSurfaceSlugs.has("other") ? "other" : (activeSurfaceSlugs.has("contract") ? "contract" : [...activeSurfaceSlugs][0]);
     capabilitySurfaceSlugs.set(custom.id, new Set([slug]));
   }
+  bindChainlinkPlanSurfaces(chainlinkSelection, capabilitySurfaceSlugs);
 
   const projectCapabilities = [];
   const customIds = new Set(plan.customCapabilities.map(({ id }) => id));
   for (const capabilityId of plan.machineCapabilities.allCapabilityIds) {
-    const triggers = inferSecurityTriggers(capabilityId);
+    const triggers = templateSecurityTriggers(capabilityId);
     const surfaceIds = [...(capabilitySurfaceSlugs.get(capabilityId) ?? new Set(["contract"]))]
       .sort()
       .map(surfaceIdForSlug);
     projectCapabilities.push({
       id: capabilityId,
-      kind: capabilityKind(capabilityId, surfaceIds, customIds.has(capabilityId)),
+      kind: templateCapabilityKind(capabilityId, surfaceIds, customIds.has(capabilityId)),
       summary: customIds.has(capabilityId)
         ? `Owner-defined capability ${capabilityId} is preserved as an explicit architecture boundary for review.`
         : `Selected template capability ${capabilityId} is bound to the generated project architecture and must be verified by source, tests and evidence.`,
@@ -277,32 +265,6 @@ function surfacesForDefinition(definition) {
 
 function surfaceIdForSlug(slug) {
   return `${slug}-surface`;
-}
-
-function capabilityKind(capabilityId, surfaceIds, custom) {
-  if (custom) return capabilityId;
-  if (/reward|fee|claim|distribution|incentive|vesting/u.test(capabilityId)) return "reward-distribution";
-  if (/wallet|transaction/u.test(capabilityId)) return "wallet-transaction";
-  if (/game|threejs|loot/u.test(capabilityId)) return "gameplay";
-  if (/map|location/u.test(capabilityId)) return "map-interaction";
-  if (/keeper|automation|twamm/u.test(capabilityId)) return "scheduled-execution";
-  if (/index|discovery|metadata|disclosure|evidence|security-propert/u.test(capabilityId)) return "indexing";
-  if (/token|launch/u.test(capabilityId)) return "token-launch";
-  if (surfaceIds.some((id) => id === "service-surface")) return "api";
-  return "pool-interaction";
-}
-
-function inferSecurityTriggers(capabilityId) {
-  const text = capabilityId.toLowerCase();
-  return {
-    ...baselineTriggers,
-    valueFlow: /accounting|asset|auction|claim|curve|fee|incentive|liquidity|order|pool|price|reward|staking|swap|token|twamm|vesting|wrapper|yield/u.test(text),
-    signaturesReplay: /signed|wallet-action|transaction/u.test(text),
-    externalCalls: /adapter|cross-chain|external|map|oracle|provider|randomness|service|wrapped|yield/u.test(text),
-    custody: /accumulator|custody|hook-owned|inventory|staking|vesting|yield/u.test(text),
-    piiGeolocation: /geolocation|location|map/u.test(text),
-    secretBoundary: /keeper|oracle|randomness|service|signed/u.test(text)
-  };
 }
 
 function makeProjectSurface(surfaceId, linkedCapabilities) {
@@ -432,10 +394,10 @@ function modelDefaultsForTemplate(builderTemplate) {
   if (builderTemplate.source !== "catalog") return null;
   if (builderTemplate.templateSelection.starterId !== "ordinary-launch") return null;
   return {
-    summary: "Launch one immutable fixed-supply token into one canonical Ethereum Uniswap v4 pool with the mandatory standard Programmable fee-hook profile.",
-    userOutcome: "A creator launches a standard transferable token whose canonical pool keeps ordinary Uniswap v4 pricing and adds no project-defined callback behavior beyond mandatory fee collection.",
+    summary: "Build one immutable fixed-supply token for one Ethereum Uniswap v4 pool without inventing platform economics.",
+    userOutcome: "A creator gets a standard transferable token and a clearly modeled Uniswap v4 pool boundary; any hook or project fee remains explicit product intent.",
     category: "permissionless-token",
-    whyV4: "Uniswap v4 supplies the canonical pool and its mandatory standard-profile fee hook without adding a project-defined curve, transfer restriction or external dependency."
+    whyV4: "Uniswap v4 supplies the pool and optional hook surface without adding a project-defined curve, transfer restriction, platform fee or external dependency by default."
   };
 }
 

@@ -25,7 +25,7 @@ Read [`docs/builder/PUBLIC_GITHUB_PR_BETA.md`](docs/builder/PUBLIC_GITHUB_PR_BET
 
 ### Legacy V2 compatibility
 
-> **Open legacy V2 intake.** While the checked-in intake state remains `open`, the receipt-bound Hookbuilder v0.5.1
+> **Open legacy V2 intake.** While the checked-in intake state remains `open`, the receipt-bound Hookbuilder v0.10.3
 > tree may submit its frozen six-file transport. It cannot satisfy Workflow Canary or Website eligibility.
 
 One new or existing legacy V2 application pull request changes exactly one generated six-file directory
