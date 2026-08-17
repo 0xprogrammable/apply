@@ -21,9 +21,38 @@ Review the preview, then repeat with `--write` only when an unconfirmed proposal
 Autopilot build use the productive `project materialize` command after the architecture and implementation inputs are
 ready. Perform no network or GitHub action.
 
-For the one bundled tradable profile, require a natural idea that independently names a Uniswap v4 hook, fees on
-executed gross quote volume and buy/sell rates immutable after registration. Preview this command without `--write`, inspect the
-report, then repeat it with `--write`; never add missing intent merely to satisfy the profile:
+Custom tradable implementation is open-ended. Once architecture is selected, author the complete Solidity and Foundry
+test roots and materialize them without choosing a bundled profile:
+
+```bash
+node "$SKILL_ROOT/scripts/cli.mjs" project materialize --idea-file "$IDEA_FILE" --application-id "$APPLICATION_ID" --classification tradable --market-ref "$MARKET_REF" --project-profile foundry --contract-config-root "$CONTRACT_CONFIG_ROOT" --source-root "$SOURCE_ROOT" --test-root "$TEST_ROOT" --output "$NEW_REPOSITORY"
+```
+
+Dry-run first, then repeat with `--write`. The contract configuration root must contain caller-owned `package.json`,
+`package-lock.json`, `remappings.txt` and `foundry.toml`; additional safe root build configuration is accepted. Its exact
+files, bytes and executable modes are bound without running or semantically certifying them, so custom dependencies,
+remappings, `via_ir`, EVM selection and other technically valid Foundry choices are not replaced by Fee V2 defaults.
+Use `--contract-config-profile foundry-default` instead as an explicit convenience choice. Older invocations that omit
+both configuration flags retain that same default for compatibility. This writes inert source,
+tests, configuration and a local build plan; it executes no candidate bytes. A missing trusted sandbox may leave test
+evidence unverified, but it must never block source implementation. Central launch policy is evaluated later and is not
+an architecture or source allowlist.
+
+When the selected architecture includes an application surface, replace `foundry` with the owner-declared layout label
+`foundry-web`, `foundry-service`, or `foundry-game` and add `--surface-root "$SURFACE_ROOT"`. Accepted regular files,
+tests, build manifests, caller-supplied lock bytes and assets are copied byte-for-byte with executable modes below
+`surfaces/<label>`; empty directories are omitted. The label does not certify web, service or game semantics. Git
+control paths, non-portable names, symlinks, path escapes, component-level secret risks, generated/dependency
+directories, unresolved root build profiles and portable path collisions fail before output. Profile detection uses
+the frozen input inventory, and the materializer rechecks the input plus exact committed and cloned inventories before
+success. Known credential basenames such as gcloud ADC are rejected without treating ordinary credential-named source
+classes as secrets; the committed `surfaces/` namespace must exactly match the declared profile. It runs none of those bytes.
+
+The one bundled tradable profile is frozen legacy compatibility, not a current platform requirement. Require a natural
+idea that independently names a Uniswap v4 hook, fees on executed gross quote volume, buy/sell rates immutable after
+registration, policy `programmable-volume-fee-v2@2.0.0`, its inclusive 10 bps Programmable platform share, and claimant
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. Preview this legacy command without `--write`; never add or infer missing
+intent. Its exact profile replay remains dry-run-only:
 
 ```bash
 node "$SKILL_ROOT/scripts/cli.mjs" project materialize --idea-file "$IDEA_FILE" --application-id "$APPLICATION_ID" --classification tradable --market-ref "$MARKET_REF" --reference-profile programmable-volume-fee-v2 --output "$NEW_REPOSITORY"
@@ -34,21 +63,38 @@ graphs in `product-graph.v1.json`, the required three-role `architecture-candida
 `repository-plan.v1.json`. Process schemas through the project compiler; inspect only a failing section. Preserve
 unresolved facts and owner/external blockers instead of inventing them.
 
-Classify the ProjectSpec routing entry as `tradable`, `no-market`, or `unresolved`. Every selected tradable market gets
-one content-addressed `trade-capability.v1.json` and distinct quote/execution commands; `no-market` gets neither. An
-unresolved market blocks completion rather than inheriting a route.
+Classify the ProjectSpec routing entry as `tradable`, `no-market`, or `unresolved`. Every selected tradable market needs
+content-addressed, policy-neutral route and quote/execution evidence; `no-market` gets neither. The bundled
+`trade-capability.v1.json` carries the frozen Fee V2 projection and is emitted only by the exact intent-bound legacy
+profile. Custom tradable source and tests still materialize; only canonical launch-manifest, route evidence and approval
+remain unresolved until their later submission gates are satisfied.
 
 Validate the hash-bound phase without executing its planned commands:
 
 ```bash
 node "$SKILL_ROOT/scripts/project-compiler.mjs" validate \
+  --brief \
   --repository-root "$REPOSITORY_ROOT" \
   --state "$PROJECT_STATE_PATH"
 ```
 
-After materialization, commit the complete source tree first. Bind a `materializing` plan to that exact clean commit and
-branch, declare `executionPolicy.externalWrites: false` for every command, and keep only that transient input plan on one
-specifically ignored path. Execute the reviewed argv without a shell:
+After no-market source materialization, the output contains one clean source commit plus a `materializing` plan bound to
+that exact commit and branch. The plan is transient on one specifically ignored path and every command declares
+`executionPolicy.externalWrites: false`. The portable command below never executes its argv; it validates the source and
+plan boundary, then exits 2 with `PROJECT_EXTERNAL_SANDBOX_REQUIRED`:
+
+Custom tradable materialization commits `.programmable/custom-tradable-build-plan.v1.json`. It then emits the ignored,
+local-only `.programmable/custom-tradable-materialization-receipt.v1.json` outside the commit so the receipt can bind the
+actual emitted commit/tree without a self-reference. Validation checks that receipt against every committed path, byte,
+Git mode and cloned working file, and reconstructs its closed semantic schema from the tracked plan, declared profile and
+complete root contract-configuration inventory.
+Commands remain `NOT_RUN`; absence of execution evidence does not erase the
+implemented repository or turn its source status into `EXTERNAL_BLOCKED`.
+
+For iterative developer feedback only, an already active workspace sandbox may run the generated plan's explicit
+offline format/test commands. Treat that output as unauthenticated `LOCAL_ONLY` evidence: it cannot complete the plan.
+On failure, edit the authored input roots and rematerialize; never patch generated output. Do not invoke `project execute`
+merely to observe its expected external-sandbox blocker, and do not repeat a green command on unchanged bytes.
 
 ```bash
 node "$SKILL_ROOT/scripts/project-compiler.mjs" execute \
@@ -57,29 +103,48 @@ node "$SKILL_ROOT/scripts/project-compiler.mjs" execute \
   --output-plan ".programmable/repository-plan.v1.json"
 ```
 
-The executor strips inherited credentials, bounds each timeout and output, rejects repeated/trivial commands, unsafe
-cwd symlinks and known external-write flags, and stops on source drift. Its receipts and completed plan must not be
-ignored. Add them plus the immutable project-state JSON only in a narrow evidence-only descendant commit, then validate
-from that clean commit. A fresh clone must retain and revalidate the same source/evidence ancestry and bytes.
+Completion requires an external launcher/runtime isolated by a separate UID, container or VM and a receipt conforming to
+`project-sandbox-receipt-v1.schema.json`. Verification binds the exact commit/tree, plan/command/input hashes,
+launcher/runtime identities, enforced filesystem/network/secret/external-write/process policies, boolean network/write
+observations and command/output hashes. It also verifies Ed25519 provenance against an independently configured trust
+root. This release configures no production key, so a local unsigned or self-signed JSON file cannot satisfy the gate.
+Only after trusted evidence exists may a host integration author a completed plan and immutable states; the portable CLI
+does not provide that integration.
 
-Before showing or handing off ProjectSpec, ProductGraph, RepositoryPlan, ProjectState, Submission, or trade manifests,
-require them as one byte-bound output. `--submission-root` is repository-relative and must contain only files declared
-by the Open World package:
+For the opt-in Docker planning format and structural signature inspection boundary, use `project-sandbox-host.md`.
+Caller-supplied keys remain untrusted, outputs are not traversed, and both commands return `EXTERNAL_BLOCKED`; neither
+executes candidate bytes, observes isolation, proves teardown, or imports completion.
+
+The following stronger completion gate belongs only to authenticated Autopilot completion and the diagnostic
+`application-handoff` path. Before claiming that ProjectSpec, ProductGraph, RepositoryPlan, ProjectState, Submission,
+or trade manifests are one independently attested byte-bound output, run it with a repository-relative
+`--submission-root` that contains only files declared by the Open World package:
 
 ```bash
 node "$SKILL_ROOT/scripts/cli.mjs" project require-output \
+  --brief \
   --repository-root "$REPOSITORY_ROOT" \
   --state "$PROJECT_STATE_PATH" \
   --previous-state "$PREVIOUS_STATE_PATH" \
   --submission-root "$SUBMISSION_PACKAGE_PATH"
 ```
 
-Proceed only when the command exits zero with `PROJECT_PREFLIGHT_VALID`; `CLEAR` is source-only and
-`DRAFT_UNRESOLVED` remains a noncanonical proposal. The report binds every project artifact plus the sorted complete submission
-inventory. It rejects invented contracts, adjacent unbound files, identity/facet/applicability/market/route drift,
-manufactured no-market evidence, unresolved completion, and non-byte-identical tradable manifests. It remains local
-deterministic validation: commands are not reexecuted and no approval, audit, deployment, production, or issuer trust is
-created.
+Proceed with an authenticated Autopilot completion or diagnostic handoff only when the command exits zero with
+`PROJECT_PREFLIGHT_VALID`; `CLEAR` is source-only and `DRAFT_UNRESOLVED` remains a noncanonical proposal. The report
+binds every project artifact plus the sorted complete submission inventory. It rejects invented contracts, adjacent
+unbound files, identity/facet/applicability/market/route drift, manufactured no-market evidence, unresolved completion,
+and non-byte-identical tradable manifests. It remains local deterministic validation: commands are not reexecuted and
+no approval, audit, deployment, production, or issuer trust is created.
+
+Do not require `PROJECT_PREFLIGHT_VALID` or a trusted external sandbox to create an unreviewed Applicant Draft through
+Application V3.1. For that public route, an existing completed project may create or repair its complete
+`submission.v2.json` and companion package directly from the preserved public-safe idea, owner-confirmed intent,
+actual architecture, exact source bindings, and honestly classified evidence. Validate that package with
+`open-world validate`, freeze every exact public GitHub source commit and tree, then continue through
+`prepare-revision`, `application`, and the confirmation-gated Draft transport in
+[`github-application-v3.md`](github-application-v3.md). Local or applicant-supplied test evidence remains unverified until independent review.
+Never invent evidence or authority. A custom `proposal` Draft requires exact source, Fee V2 `not-selected`, no legacy
+bindings or trade records, and unresolved trade capability. Never call it a prototype.
 
 Retain an immutable repository-relative chain:
 
@@ -114,9 +179,9 @@ storage/namespace, delta, fee, authority, lifecycle, router, settlement, and dep
 Route `INDEPENDENT_REVIEW_REQUIRED`. Every report keeps implementation, security, and deployment authorization
 `NOT_GRANTED` and `independentReviewerRequired: true`; `NO_KNOWN_CONFLICT` never means safety or approval.
 
-Derive fee applicability from the full graph. Keep it `unresolved` while an unknown surface might be
-Programmable-canonical. Load Fee V2 only for an actual canonical or explicit fee-bearing scope. A service, external
-market, no-pool system, or other zero-scope design must not gain a placeholder hook, pool, fee instance, or receipt.
+Do not derive a Programmable fee requirement from the graph. Load and derive the frozen Fee V2 package only when the
+preserved project intent or an applicable current central-policy Rule ID selects that exact kernel. Otherwise create no
+Fee V2 applicability, hook, pool, fee instance, or receipt. A local `Programmable-canonical` label is never sufficient.
 
 For each v4 hook, require the typed semantic profile in `submission.v2.json`; permission booleans alone are
 insufficient. Proposal gaps route to review; prototype gaps block. Bind PoolManager authentication/address, PoolId
@@ -180,11 +245,12 @@ Never execute candidate hooks, filters, submodules, or build scripts during clos
 or verifier budgets to an exact split-review/tooling hold without rejecting the idea.
 
 After source freeze, derive source-assessed security and verification reports against the already-existing commit; do
-not create a Git self-reference. Rerun revision preparation and application generation after any source, closure,
-evidence, dependency, or recheck change. Read [github-application-v3.md](github-application-v3.md) only now. Do not write
-to GitHub without exact authority, and never treat a PR, merge, label, or Builder verdict as canonical acceptance.
-Without a public GitHub numeric repository id, URI, commit and tree, emit only a validated local transport plan marked
-`NOT_SUBMITTED`; do not call it a canonical Application V3.
+not create a Git self-reference. The protected generic Applicant handoff uses Application V3.1 and its
+exact central contract binding. Read [github-application-v3.md](github-application-v3.md), prepare revision and lineage
+through GET-only discovery, then materialize the package without network access. Do not write to GitHub without exact
+authority, and never treat a PR, merge, label, or Builder verdict as canonical acceptance. Without a public GitHub
+numeric repository id, URI, commit, and tree, report `INTEGRATION_PENDING` and `NOT_SUBMITTED`; do not manufacture a
+public Application V3 package.
 
 ## 6. Run release-only E2E evidence
 

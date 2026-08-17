@@ -1,10 +1,11 @@
 # Multi-repository project closure
 
 Use this reference when an open-world V2 project spans a primary repository plus any number of apps, games, services,
-indexers, keepers, libraries, evidence repositories, or other source surfaces. Application V3 treats every repository as
-an independent public GitHub source binding. There is no product-level limit of eight companions, 512 files, or 20 MB.
-Bounded verifier resources may require deterministic fragmentation or split review; they never make the idea unsafe or
-ineligible.
+indexers, keepers, libraries, evidence repositories, or other source surfaces. Treat every repository as an independent
+public GitHub source binding. The generic Applicant transport uses Application V3.1; its conditional Fee V2 fields are
+compatibility-only and never create platform economics for a project that did not select that package.
+There is no product-level limit of eight companions, 512 files, or 20 MB. Bounded verifier resources may require
+deterministic fragmentation or split review; they never make the idea unsafe or ineligible.
 
 Historical companion-manifest V1/V2 files, `prepare-pr`, the six-file `application.json` package, and their limits belong
 only to exact historical Submission V1 reproduction. Do not use them to prepare or describe a new V2/V3 project.
@@ -25,9 +26,9 @@ A path, workflow, receipt, fee artifact or test in one repository cannot satisfy
 flatten repositories into one synthetic trust boundary. Detect dependency cycles as architecture and operations facts;
 keep provenance and revision lineage acyclic.
 
-Application V3 is GitHub-only. A private repository, local path, ZIP, pasted source, mutable branch, other Git host or
-credentialed URL can support local exploration but cannot satisfy the public application contract. Report
-`INTEGRATION_PENDING`, preserve idea eligibility and perform no public-package or external write.
+For current Application V3 transport, every source is GitHub-only. A private repository, local path, ZIP, pasted
+source, mutable branch, other Git host, or credentialed URL can support local exploration but cannot satisfy that
+contract. Report `INTEGRATION_PENDING`, preserve idea eligibility, and perform no public-package or external write.
 
 ## Closure modes
 
@@ -65,9 +66,10 @@ submodules, Git LFS and unsupported toolchains remain representable. They requir
 review instead of being renamed or dropped to fit one analyzer. Missing analyzer support is a tooling/evidence gap, not a
 product verdict.
 
-## Application preparation
+## Application V3 preparation
 
-Freeze and push every source revision before preparation. First use `cli.mjs open-world prepare-revision` with one
+Use this sequence for every completed generic project that has a valid project preflight. Freeze and push every source
+revision before preparation. First use `cli.mjs open-world prepare-revision` with one
 `--source-root <repository-ref>=<git-root>` per current repository; keep revision and lineage absent from its draft.
 This GET-only step derives the unique revision and creates only a new external `application.v3.json` root when
 explicitly written. Then use that file with the released `cli.mjs open-world application --help` interface. The second
@@ -79,7 +81,7 @@ On an update, a current repository can supply an earlier commit from its own obj
 unavailable; a removed inline companion in mixed manifest/inline history is one such case. Do not supply it for fully
 remote-replayable all-inline history.
 
-Preparation is local and read-only unless an explicit local write flag is chosen. It does not push, publish, open a pull
+This preparation is local and read-only unless an explicit local write flag is chosen. It does not push, publish, open a pull
 request, approve the project, or authorize launch. Only the revision step performs GET reads; the package builder does
 not use the network. The later GitHub submit/update path first produces a read-only action plan and requires separate
 authorization for its exact current digest.

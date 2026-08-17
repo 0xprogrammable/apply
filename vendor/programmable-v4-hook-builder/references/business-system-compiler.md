@@ -18,11 +18,20 @@ Preserve public-safe verbatim UTF-8 intent, language and byte hash. Emit:
 
 Process schemas outside context. Summaries, templates and code never replace verbatim intent.
 
-`validate` never runs code; `execute` runs reviewed argv and binds receipts. After architecture selection use SKILL.md's
-`project materialize`; never hand-author derived hashes, state, inventory or applicability. Before handoff run
-`project require-output` with exact state/package. Schemas must yield one identity/facet/market/route projection; invented claims
-block. `CLEAR` is source-only, `DRAFT_UNRESOLVED` noncanonical, and only exit zero with `PROJECT_PREFLIGHT_VALID`
-completes Autopilot. Unsigned receipts prove content, not execution; completion stays `NOT_PROVEN` until fresh E2E.
+`validate` never runs code. The portable `execute` path also never runs candidate argv: it fails closed with
+`PROJECT_EXTERNAL_SANDBOX_REQUIRED`. `project materialize --write` emits inert source/tests: a no-market repository plan
+or a custom-tradable build plan with no bundled pack requirement. The `foundry-web`, `foundry-service`, and
+`foundry-game` values are owner-declared layout labels: they bind accepted regular-file bytes, executable modes,
+caller-supplied lock bytes and a locally validated non-execution receipt, but certify no product semantics. Never
+replace a supplied contract configuration with the bundled Fee V2 dependency graph. Custom tradable materialization
+binds the caller's root config inventory; omission retains `foundry-default` only for v0.9.1 compatibility. Never
+hand-author derived hashes, state, inventory or applicability. A completed launch plan requires an exact external-sandbox receipt plus Ed25519 provenance from an
+independently configured trust root; this release bundles no production authority. Before handoff run `project
+require-output` only when that evidence and the exact state/package exist. Schemas must yield one
+identity/facet/market/route projection; invented claims block. `CLEAR` is source-only, `DRAFT_UNRESOLVED` noncanonical,
+`PROJECT_MATERIALIZATION_PLAN_WRITTEN` is not execution, and only exit zero with `PROJECT_PREFLIGHT_VALID` completes
+Autopilot. Legacy unsigned receipts prove content consistency only; completion stays `NOT_PROVEN` until trusted fresh
+E2E.
 
 ## ProjectSpec
 
@@ -66,11 +75,12 @@ each permission, storage/namespace, delta, fee, authority, lifecycle, router, se
 `NO_KNOWN_CONFLICT` means no detected modeled conflict, never approval.
 
 Render the first slice's Design Card; later ideas are non-goals. Checkpoint hashes, unresolved provenance, obligations,
-blockers, resume argv, and false authorizations. Continue to [open-world-v2-workflow.md](open-world-v2-workflow.md) only
-when the selected architecture and required owner facts are stable enough to materialize.
+blockers, resume argv, and false authorizations. For resolved no-market, materialize from `project --help` before the
+[workflow](open-world-v2-workflow.md); open it only on failure. Tradable/unresolved continue when stable.
 
-The materializer maps ProjectSpec `applicable/not-applicable/unresolved` to RepositoryPlan/Submission
-`tradable/no-market/unresolved`; never hand-map it. Transport stays `NOT_SUBMITTED` without public GitHub identity.
+Canonical launch maps ProjectSpec `applicable/not-applicable/unresolved` to RepositoryPlan/Submission
+`tradable/no-market/unresolved`; never hand-map it or restrict custom source with it. Transport stays `NOT_SUBMITTED`
+without public GitHub identity.
 
 Escalate novel/ambiguous/cross-domain/value-bearing slices; use smaller models for bounded known work. If capability is
 unavailable, preserve the design and emit `INTEGRATION_PENDING` or `EXTERNAL_BLOCKED`.

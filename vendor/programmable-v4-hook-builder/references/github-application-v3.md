@@ -1,18 +1,28 @@
 # GitHub application v3
 
-> Candidate Application V3 contract, not the released package version. Both released and future Applicant transports
-> use the canonical `0xprogrammable/submit-launch:main` repository identity; never create a new Applicant PR in
-> Hookbuilder.
+> Application V3.1 is the accepted generic Applicant contract for protected Draft PRs to
+> `0xprogrammable/submit-launch:main`. Never create a new Applicant PR in Hookbuilder.
+
+Use this path for every completed generic Programmable project and for an exact source-bound policy-neutral proposal,
+including hooks, applications, services, games, multi-repository systems and unfamiliar custom architectures. Unknown
+project kinds remain eligible and enter review; they are not rejected or forced into a template because they are novel.
+
+Do not require `PROJECT_PREFLIGHT_VALID` or a trusted external sandbox to create an unreviewed Applicant Draft.
+Local or applicant-supplied test evidence remains unverified until independent review. Preserve that limitation in
+the review package and keep the application `unreviewed`; authenticated sandbox completion is optional stronger
+evidence, not admission authority.
+
+Fee V2 fields below are exact compatibility only. They apply only when preserved project intent or
+an applicable current central-policy Rule ID selects that exact legacy package; Submission V2 cannot create the
+requirement itself.
 
 Use this reference only for `submission.v2.json` and `public-pr-application-v3`. Do not route a v2 project through the
 historical v1 `prepare-pr` contract, six-file `application.json` package or maximum-eight-companion path.
 
-Application v3 is a candidate until its local generator, trusted Registry validator, update/status client and release
-gates pass together. Schema presence or a locally valid example is not evidence that public v3 intake is active.
-
-The authenticated approval-to-Website bridge is part of the same local release candidate and remains pending production
-activation. The target path is GitHub application and exact-revision status, then Website Custom Launcher eligibility
-for that same unchanged approved source SHA. The Builder never derives that eligibility locally.
+The protected Submit a Launch workflow validates the accepted V3.1 schema and exact revision package with trusted base
+code. Local generation or validation alone is not submission; only remote readback of the exact Draft PR and its checks
+proves transport. Website eligibility remains a separate later authority for the same unchanged approved source SHA,
+and the Builder never derives it locally.
 
 Application V3 is GitHub-only. Every source surface must be an exact public GitHub repository. Another Git host, private
 repository, ZIP, pasted source, upload form or email is not an alternate V3 transport; it needs a different versioned
@@ -31,14 +41,14 @@ no public Application V3 package for that source.
 
 ## Application contract
 
-Generate `application.v3.json` only through the released v3 generator. Bind:
+Generate `application.v3.json` only through the installed V3.1 generator. Bind:
 
 - application id, revision and explicit lineage;
 - builder identity and public-data acknowledgements;
 - the exact idea-source repository/path/digest as the sole normative intent source;
 - intent and fidelity state without inherited approval;
 - `submission.v2.json` by repository, path and digest;
-- Fee V2 schema, derived `feeApplicability`, and a real project instance only when applicability is `applicable`;
+- optional Fee V2 schema/applicability/instance only when that exact legacy package was explicitly selected;
 - security schema plus source-assessed security and verification records derived after source freeze;
 - exact review-package records and evidence; and
 - every primary/companion repository by local id, GitHub numeric id, URI, commit and tree.
@@ -66,15 +76,21 @@ second normative summary that can replace provenance.
 Keep a submitted application `unreviewed`. Require no acceptance binding and grant no approval. A later trusted review
 decision is a separate authority record for one exact revision.
 
-Derive fee applicability from the exact bound Submission V2 graph:
+A policy-neutral `proposal` may be materialized for this unreviewed Applicant route only when `feeApplicability` is
+`not-selected`, every legacy Fee V2 field is null, and no Fee V2 record exists. Preserve unresolved trade capability and
+omit trade manifests and trade-test results. If exact trade evidence exists, advance honestly to `prototype` instead of
+attaching it to a proposal. Source verification still does not prove trade capability, audit, deployment, approval, or launch.
+
+Only after the legacy Fee V2 package is explicitly selected, derive its compatibility field from the exact bound
+Submission V2 graph:
 
 - `proposal` requires `unresolved` and null fee-instance path, repository and digest;
 - a prototype with at least one `programmable-canonical` scope requires `applicable` plus a real instance path,
   repository and digest; and
 - an exact zero-scope prototype requires `not-applicable` and keeps all three instance fields null.
 
-Do not use N/A to hide a canonical execution path, and do not fabricate a market or fee artifact for a zero-scope app,
-service, indexer, game or standalone external settlement.
+Inside that selected package, do not use N/A to hide a declared Fee V2 execution path. Outside it, do not fabricate
+`feeApplicability`, a market, or a fee artifact for any project.
 
 Let a source-owned proposal keep its security assessment null or explicitly pending/unassessed. Do not place a
 source-assessed security instance or source-verification report in the source commit whose id it contains. After
@@ -159,6 +175,7 @@ complete review/security inputs and repeatable current-source mappings. This sec
 - accept only already-derived immutable repository identities, revision/lineage and exact local Git objects;
 - validate the complete v2 package and source closure;
 - derive source-assessed security and repository verification reports only after all source commits are fixed;
+- preserve a policy-neutral proposal as `proposal` with Fee V2 `not-selected` and no invented prototype or trade evidence;
 - generate canonical deterministic `application.v3.json` bytes;
 - refuse an existing destination unless a separately documented update path owns that exact revision; and
 - write only after an explicit local write flag through staging and atomic rename.
@@ -182,9 +199,15 @@ candidate-code execution.
 
 ## External-write boundary
 
-Keep GitHub preparation and GitHub mutation separate. After trusted V3 intake is active, use only namespaced
-`cli.mjs open-world submit`, `update`, and `status`; top-level application commands remain the released V1 path. The first V3
-submit or update invocation must be a read-only plan
+Every completed generic project follows one path after its exact public source and closed local package validate:
+
+```text
+APPLICATION_PACKAGE_VALID -> submit plan -> explicit confirmation -> protected Draft PR
+```
+
+Keep GitHub preparation and GitHub mutation separate. Use only namespaced `cli.mjs open-world submit`, `update`, and
+`status`; top-level application commands remain the released V1 path. The first V3 submit or update invocation must be
+a read-only plan
 that reports:
 
 - target repository, base revision, application id and revision;
@@ -224,8 +247,8 @@ remote package and review state; optional local source roots add evidence but ar
 The confirmed client may perform only the writes listed in the plan. It must never mark the pull request ready, approve,
 merge, deploy, sign, launch, change an account or move funds.
 
-`open-world status` is read-only. Do not claim that the client, trusted intake or public Registry path exists merely
-because the local command schema is present; require the exact released client, protected workflow and live canary.
+`open-world status` is read-only. Report a Draft PR only after it re-reads the exact remote package, pull request and
+checks. That proof still establishes transport only, never review, approval, deployment or launch.
 
 ## Review and status
 

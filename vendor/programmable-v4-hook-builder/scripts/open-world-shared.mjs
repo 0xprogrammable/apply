@@ -21,9 +21,12 @@ import {
   OPEN_WORLD_V2_ARTIFACTS,
   OPEN_WORLD_V2_OPTIONAL_SUPPORTING_ARTIFACTS,
   OPEN_WORLD_V2_SUPPORTING_ARTIFACTS,
+  createLegacyFeeV2DraftPackage,
   createOpenWorldDraftPackage,
   deriveOpenWorldV2FeeApplicability,
   isRepositorySchemaBinding,
+  validateLegacyFeeV2OpenWorldPackage,
+  validateLegacyFeeV2OpenWorldV2Package,
   validateOpenWorldPackage,
   validateOpenWorldV2Package
 } from "./open-world-v2-core.mjs";
@@ -40,6 +43,7 @@ import {
   classifyPublicPrApplicationV3GitLfsPointer,
   derivePublicPrApplicationV3PreviousBinding,
   generatePublicPrApplicationV3,
+  publicPrApplicationV3RequiredReviewKinds,
   projectPublicPrApplicationV3DiffPaths,
   scanPublicPrApplicationV3ArtifactBytes,
   validatePublicPrApplicationV3,
@@ -88,9 +92,12 @@ export {
   OPEN_WORLD_V2_ARTIFACTS,
   OPEN_WORLD_V2_OPTIONAL_SUPPORTING_ARTIFACTS,
   OPEN_WORLD_V2_SUPPORTING_ARTIFACTS,
+  createLegacyFeeV2DraftPackage,
   createOpenWorldDraftPackage,
   deriveOpenWorldV2FeeApplicability,
   isRepositorySchemaBinding,
+  validateLegacyFeeV2OpenWorldPackage,
+  validateLegacyFeeV2OpenWorldV2Package,
   validateOpenWorldPackage,
   validateOpenWorldV2Package,
   deriveDependencyAwareSecurityAssessment,
@@ -103,6 +110,7 @@ export {
   classifyPublicPrApplicationV3GitLfsPointer,
   derivePublicPrApplicationV3PreviousBinding,
   generatePublicPrApplicationV3,
+  publicPrApplicationV3RequiredReviewKinds,
   projectPublicPrApplicationV3DiffPaths,
   scanPublicPrApplicationV3ArtifactBytes,
   validatePublicPrApplicationV3,
@@ -175,7 +183,6 @@ export const EXPECTED_MIGRATION_FILES = Object.freeze([
 ]);
 export const EXPECTED_DRAFT_FILES = Object.freeze([
   "architecture-decisions.v1.json",
-  "fee-policy-v2.schema.json",
   "idea-source.v1.json",
   "intent-contract.v1.json",
   "intent-fidelity.v1.json",
@@ -189,20 +196,6 @@ export const APPLICATION_PACKAGE_RECORDS = Object.freeze([
   Object.freeze({ kind: "threat-model", path: "THREAT_MODEL.md", mediaType: "text/markdown", maxBytes: 64 * 1024 }),
   Object.freeze({ kind: "compatibility-report", path: "compatibility-report.json", mediaType: "application/json", maxBytes: 160 * 1024 }),
   Object.freeze({ kind: "evidence-index", path: "evidence-index.json", mediaType: "application/json", maxBytes: 160 * 1024 })
-]);
-export const APPLICATION_V3_REQUIRED_KINDS = Object.freeze([
-  "proposal",
-  "test-plan",
-  "threat-model",
-  "compatibility-report",
-  "evidence-index",
-  "idea-source",
-  "intent-contract",
-  "architecture-decisions",
-  "intent-fidelity",
-  "fee-policy-schema",
-  "security-assessment-schema",
-  "security-assessment"
 ]);
 export const APPLICATION_V2_CENTRAL_FILES = Object.freeze([
   "application.json",

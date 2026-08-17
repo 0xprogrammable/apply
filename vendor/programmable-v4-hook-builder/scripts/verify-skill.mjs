@@ -10,42 +10,21 @@ import { validateReviewedDriftReceipt } from "./reviewed-drift-receipt-core.mjs"
 import { validateAgainstSchema } from "./submission-core.mjs";
 import { validateStarterCatalogClosure, validateTemplateCatalogHistory } from "./verify-skill-catalog-core.mjs";
 import { scanPins, validateKnowledgeRoutingClosure, validateLocalModuleClosure } from "./verify-skill-closure-core.mjs";
-import { validateScriptsAndTests } from "./verify-skill-execution-core.mjs";
-import { createPortableFilesystem, isForbiddenPortableDirectory, isInside, resolveSkillRootWithoutSymlinks } from "./verify-skill-filesystem-core.mjs";
+import { INSTALLED_RUNTIME_SMOKE, validateRepositoryTestInventory, validateScriptsAndTests } from "./verify-skill-execution-core.mjs";
+import { MAX_PORTABLE_FILES, createPortableFilesystem, isForbiddenPortableDirectory, isInside, resolveSkillRootWithoutSymlinks, writeDiagnostics } from "./verify-skill-filesystem-core.mjs";
 import { validateInstalledProvenance } from "./verify-skill-provenance-core.mjs";
 import { markdownHeadingAnchors, parseCanonicalYamlMapping, redactInstalledLocalPathForPortableScan } from "./verify-skill-yaml-core.mjs";
+import { buildPortablePackageInventory, loadPortablePackageManifest } from "./portable-package-manifest-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const canonicalSkillRoot = path.resolve(scriptDirectory, "..");
 const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0], 10);
-if (!Number.isInteger(nodeMajor) || nodeMajor < 24) {
-  console.error("verify-skill.mjs: NODE_24_OR_NEWER_REQUIRED");
+if (!Number.isInteger(nodeMajor) || nodeMajor < 22) {
+  console.error("verify-skill.mjs: NODE_22_OR_NEWER_REQUIRED");
   process.exit(1);
 }
-const MAX_PORTABLE_FILES = 640;
-const MAX_PORTABLE_BYTES = 12_000_000;
+const MAX_PORTABLE_BYTES = 8_750_000;
 const MAX_PORTABLE_FILE_BYTES = 1_000_000;
-const REQUIRED_PORTABLE_TESTS = Object.freeze(`
-application-api-schema application-dependency-core application-v3-prepare-revision-core build-info
-build-profile builder-lifecycle canonical-json-core cli
-cli-central-base cli-central-package cli-entry cli-open-world
-cli-open-world-github cli-output-dir cli-prepare-pr companion-manifest-v2
-composition-checker contract-registry cross-chain-policy dependency-pointer-core
-example-materializer fee-conformance fee-conformance-receipt-v1 fee-conformance-vector-set-v1
-fee-policy-v2 fee-policy-v2-vector-parity github-application github-exact-object-resolver
-github-public-source-core golden-scenarios historical-v1-freeze implementation-legos-runtime
-knowledge-router launch-bundle launch-bundle-v2 launch-bundle-v2-cli
-launch-plan-graph legacy-strict-json-boundaries official-launchpad open-world-migration
-open-world-regressions open-world-runtime open-world-security open-world-source-signals
-open-world-v2 open-world-v2-module-boundaries ordinary-launch-cli package-dependency-contract
-policy-bundle project-compiler project-surfaces public-claims
-raw-git-integrity-core registry-acceptance-v3-github registry-discovery residual-json-boundaries
-resolve-contract-core review-target review-target-contract reviewed-drift-receipt
-runtime-assets-core schema-security semantic-rule-registry source-closure-verifier
-source-evidence-workflow source-manifest strict-json-core submission
-template-catalog trade-capability-manifest typed-launch-contracts-v1 upstream-drift
-v4-hook-semantic-contract verify-package-build-info verify-skill-static
-`.trim().split(/\s+/u).map((stem) => `scripts/test/${stem}.test.mjs`));
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const errors = [];
 const { options } = parseCliOrExit({
@@ -101,16 +80,35 @@ const packageEntriesByPath = new Map(packageTree.map((entry) => [relative(entry.
 const packageEntries = packageTree.filter((entry) => entry.stat.isFile());
 const packageFiles = packageEntries.map((entry) => entry.path);
 const packageContext = { packageEntries, packageEntriesByPath, packageFiles, read, relative, skillRoot };
+const repositoryRoot = !installedMode && !untrustedDataMode
+  ? path.resolve(skillRoot, "..", "..")
+  : null;
+try {
+  const packageManifest = loadPortablePackageManifest({ skillRoot });
+  buildPortablePackageInventory({
+    allowInstalledExecutableModeNormalization: installedMode,
+    manifest: packageManifest,
+    repositoryRoot,
+    skillRoot
+  });
+} catch (error) {
+  errors.push(`portable-package.json: ${error instanceof Error ? error.message : String(error)}`);
+}
+if (errors.length > 0) await failWithErrors(errors);
 
 const required = [
   "SKILL.md",
   "LICENSE.txt",
   "THIRD_PARTY_NOTICES.md",
+  "portable-package.json",
   "agents/openai.yaml",
   "references/agent-entry-and-application.md",
+  "references/application-handoff.md",
+  "references/application-handoff-input-v1.schema.json",
   "references/architecture-candidates-v1.schema.json",
   "references/application-api.schema.json",
   "references/approval-criteria.md",
+  "references/workflow-canary-application.md",
   "references/business-system-compiler.md",
   "references/build-profiles.md",
   "references/builder-reviewer-alignment.md",
@@ -129,6 +127,8 @@ const required = [
   "references/intent-fidelity-v1.schema.json",
   "references/intake-playbook.md",
   "references/knowledge-routing.json",
+  "references/knowledge-activation-v1.json",
+  "references/v4-contract-reasoning-kernel.md",
   "references/delegated-payer-sponsor-intent-v1.schema.json",
   "references/launch-admission-decision-v1.schema.json",
   "references/normative-property-manifest-v1.json",
@@ -168,12 +168,20 @@ const required = [
   "references/open-world-security-v1.schema.json",
   "references/programmable-trade-execution-v1.schema.json",
   "references/product-graph-v1.schema.json",
+  "references/project-repair-attempt-v1.schema.json",
+  "references/project-sandbox-host-attestation-v1.schema.json",
+  "references/project-sandbox-host-profile-v1.schema.json",
+  "references/project-sandbox-host.md",
   "references/project-spec-v1.schema.json",
+  "references/project-sandbox-receipt-v1.schema.json",
+  "references/project-sandbox-trust-root-v1.schema.json",
   "references/project-state-v1.schema.json",
   "references/project-toolchain-lock-v1.schema.json",
   "references/repository-plan-v1.schema.json",
+  "references/repair-loop.md",
   "references/semantic-rule-registry-v1.json",
   "references/semantic-rule-registry-v1.schema.json",
+  "references/semantic-rule-test-evidence-v1.json",
   "references/contract-registry-source-v1.json",
   "references/contract-registry-v1.json",
   "references/submission-schema-catalog.json",
@@ -204,13 +212,20 @@ const required = [
   "references/template-catalog.md",
   "references/template-catalog-history.json",
   "assets/build-profiles/catalog.json",
+  "assets/semantic-rule-test-evidence-v1/builder-lifecycle.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/cross-chain-policy.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/fee-policy-v2.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/github-application.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/open-world-security.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/schema-security.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/submission.test.mjs",
+  "assets/semantic-rule-test-evidence-v1/v4-hook-semantic-contract.test.mjs",
   "assets/examples/dynamic-lp-fee.json",
   "assets/examples/managed-usdc-quote.json",
   "assets/examples/transparent-pool-scoped-fee.json",
   "assets/examples/unsafe-hidden-curve.json",
   "assets/templates/submission.example.json",
   "assets/templates/open-world-v2/new-idea/architecture-decisions.v1.json",
-  "assets/templates/open-world-v2/new-idea/fee-policy-v2.schema.json",
   "assets/templates/open-world-v2/new-idea/idea-source.v1.json",
   "assets/templates/open-world-v2/new-idea/intent-contract.v1.json",
   "assets/templates/open-world-v2/new-idea/intent-fidelity.v1.json",
@@ -297,10 +312,13 @@ const required = [
   "scripts/builder-lifecycle.mjs",
   "scripts/builder-template-contract.mjs",
   "scripts/application-recheck.mjs",
+  "scripts/application-handoff-core.mjs",
+  "scripts/application-handoff.mjs",
   "scripts/canonical-json-core.mjs",
   "scripts/canonical-json-legacy-adapters.mjs",
   "scripts/cli-args.mjs",
   "scripts/cli-central-base.mjs",
+  "scripts/cli-central-canary-base.mjs",
   "scripts/cli-central-package.mjs",
   "scripts/companion-manifest-contract.mjs",
   "scripts/contract-registry-core.mjs",
@@ -308,6 +326,7 @@ const required = [
   "scripts/cli-local-draft.mjs",
   "scripts/cli-output-dir.mjs",
   "scripts/cli-prepare-pr.mjs",
+  "scripts/prepare-canary.mjs",
   "scripts/cli-review-target.mjs",
   "scripts/cli-runtime.mjs",
   "scripts/cli.mjs",
@@ -359,8 +378,13 @@ const required = [
   "scripts/no-custom-hook-route-core.mjs",
   "scripts/normative-policy-core.mjs",
   "scripts/package-dependency-contract.mjs",
+  "scripts/portable-package-manifest-core.mjs",
   "scripts/project-surfaces-core.mjs",
   "scripts/project-command-executor-core.mjs",
+  "scripts/project-sandbox-host-core.mjs",
+  "scripts/project-sandbox-host.mjs",
+  "scripts/project-sandbox-receipt-core.mjs",
+  "scripts/project-repair-attempt-core.mjs",
   "scripts/project-compiler-core.mjs",
   "scripts/project-compiler.mjs",
   "scripts/project-tradable-authoring-core.mjs",
@@ -385,8 +409,10 @@ const required = [
   "scripts/scaffold-submission.mjs",
   "scripts/source-manifest.mjs",
   "scripts/semantic-rule-registry-core.mjs",
+  "scripts/semantic-rule-test-evidence-core.mjs",
   "scripts/settlement-policy-core.mjs",
   "scripts/strict-json-core.mjs",
+  "scripts/workflow-canary-application-client.mjs",
   "scripts/submission-core.mjs",
   "scripts/submission-analysis-helpers.mjs",
   "scripts/submission-constants-core.mjs",
@@ -404,8 +430,7 @@ const required = [
   "scripts/update-registry-snapshot.mjs",
   "scripts/v4-deployment-evidence-core.mjs",
   "scripts/v4-hook-semantic-contract-core.mjs",
-  "scripts/test/fee-conformance-v1-fixture.mjs",
-  ...REQUIRED_PORTABLE_TESTS,
+  INSTALLED_RUNTIME_SMOKE,
   "scripts/validate-submission.mjs",
   "scripts/validate-semantic-rule-registry.mjs",
   "scripts/verify-package.mjs",
@@ -424,25 +449,7 @@ for (const relativePath of required) {
   if (!entry?.stat.isFile()) errors.push(`missing ${relativePath}`);
 }
 
-const discoveredPortableTestPaths = packageEntries
-  .map((entry) => relative(entry.path))
-  .filter((relativePath) => /^scripts\/test\/[^/]+\.test\.mjs$/u.test(relativePath))
-  .sort();
-const declaredPortableTestSet = new Set(REQUIRED_PORTABLE_TESTS);
-const discoveredPortableTestSet = new Set(discoveredPortableTestPaths);
-const missingPortableTestPaths = REQUIRED_PORTABLE_TESTS
-  .filter((relativePath) => !discoveredPortableTestSet.has(relativePath))
-  .sort();
-const undeclaredPortableTestPaths = discoveredPortableTestPaths
-  .filter((relativePath) => !declaredPortableTestSet.has(relativePath));
-const duplicatePortableTestDeclarations = REQUIRED_PORTABLE_TESTS
-  .filter((relativePath, index) => REQUIRED_PORTABLE_TESTS.indexOf(relativePath) !== index);
-errors.push(...[[
-    "portable test inventory must exactly match declared required tests",
-    `missing files: ${missingPortableTestPaths.join(", ") || "none"}`,
-    `undeclared tests: ${undeclaredPortableTestPaths.join(", ") || "none"}`,
-    `duplicate declarations: ${[...new Set(duplicatePortableTestDeclarations)].sort().join(", ") || "none"}`
-  ].join("; ")].filter(() => missingPortableTestPaths.length + undeclaredPortableTestPaths.length + duplicatePortableTestDeclarations.length > 0));
+if (repositoryRoot !== null) validateRepositoryTestInventory({ errors, repositoryRoot });
 
 const packageBytes = packageEntries.reduce((total, entry) => total + entry.stat.size, 0);
 if (packageFiles.length > MAX_PORTABLE_FILES) errors.push(`portable package has ${packageFiles.length} files; keep it at or below ${MAX_PORTABLE_FILES}`);
@@ -450,7 +457,7 @@ if (packageBytes > MAX_PORTABLE_BYTES) errors.push(`portable package is ${packag
 for (const entry of packageEntries) {
   if (entry.stat.size > MAX_PORTABLE_FILE_BYTES) errors.push(`${relative(entry.path)} exceeds the ${MAX_PORTABLE_FILE_BYTES}-byte per-file limit`);
 }
-if (errors.length > 0) failWithErrors(errors);
+if (errors.length > 0) await failWithErrors(errors);
 
 for (const jsonPath of packageFiles.filter((entry) => entry.toLowerCase().endsWith(".json"))) {
   try {
@@ -460,7 +467,7 @@ for (const jsonPath of packageFiles.filter((entry) => entry.toLowerCase().endsWi
     errors.push(`${relative(jsonPath)}: must be bounded duplicate-free UTF-8 JSON`);
   }
 }
-if (errors.length > 0) failWithErrors(errors);
+if (errors.length > 0) await failWithErrors(errors);
 
 const skill = read("SKILL.md");
 const rawSkillLineCount = skill.split("\n").length;
@@ -680,14 +687,13 @@ await validateScriptsAndTests({
   errors,
   installedMode,
   relative,
+  repositoryRoot,
   skillRoot,
   untrustedDataMode,
   walk
 });
 
-if (errors.length > 0) {
-  failWithErrors(errors);
-}
+if (errors.length > 0) await failWithErrors(errors);
 
 if (untrustedDataMode) {
   console.log(`Validated candidate skill structure, schema, links, Git pin shapes and script syntax without executing candidate scripts or tests; SKILL.md has ${lineCount} lines.`);
@@ -695,7 +701,7 @@ if (untrustedDataMode) {
   console.log(`Validated portable skill structure, schema, links, Git pin shapes, deterministic CLI checks${installedMode ? "" : " and repository fixture tests"} and ${lineCount}-line SKILL.md.`);
 }
 
-function failWithErrors(messages) {
-  for (const error of [...new Set(messages)].sort()) console.error(`- ${error}`);
+async function failWithErrors(messages) {
+  await writeDiagnostics(messages);
   process.exit(1);
 }

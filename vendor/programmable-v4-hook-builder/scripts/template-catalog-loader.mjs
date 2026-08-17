@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { parseCli } from "./cli-args.mjs";
+import { chainlinkProductCapabilities } from "./template-catalog-composition.mjs";
 import {
   assertDirectory,
   assertExactKeys,
@@ -40,6 +42,50 @@ import {
   starterKeys,
   strictUtf8
 } from "./template-catalog-shared.mjs";
+
+const listSpec = {
+  command: "template-catalog.mjs list",
+  options: [
+    { name: "--kind", key: "kind", type: "value", valueName: "starter|pack" },
+    { name: "--filter", key: "filter", type: "value", valueName: "text" },
+    { name: "--json", key: "asJson", type: "boolean" }
+  ],
+  positionals: { min: 0, max: 0 }
+};
+
+const frozenLegacyFeeV2ImplementationLegoIds = new Set([
+  "async-batch-fee-adapter",
+  "zero-amm-fee-adapter"
+]);
+
+export function parseTemplateCatalogList(args) {
+  if (args.includes("--help") || args.includes("-h")) return { help: true, options: null };
+  try {
+    return { help: false, options: parseCli(listSpec, args).options };
+  } catch (error) {
+    fail("USAGE_ERROR", error.message);
+  }
+}
+
+export function filterTemplateCatalogEntries(entries, filter) {
+  if (filter === null) return entries;
+  const normalized = filter.normalize("NFC").toLowerCase();
+  return entries.filter((entry) => JSON.stringify(entry).toLowerCase().includes(normalized));
+}
+
+export function compactTemplateCatalogEntry({ id, kind }) {
+  return { id, kind };
+}
+
+export function addChainlinkProductSelection(options, product) {
+  if (options.chainlinkProducts.includes(product)) {
+    fail("USAGE_ERROR", `Duplicate Chainlink product: ${product}.`);
+  }
+  options.chainlinkProducts.push(product);
+  for (const capability of chainlinkProductCapabilities(product)) {
+    if (!options.capabilityIds.includes(capability)) options.capabilityIds.push(capability);
+  }
+}
 
 export function loadTemplateCatalog({ skillRoot = null, catalogDirectory = null } = {}) {
   if ((skillRoot === null) === (catalogDirectory === null)) {
@@ -359,8 +405,12 @@ export function validateImplementationLegoDefinition(definition, entry) {
   assertIdArray(definition.activatesFor.starterIds, `${entry.id}.activatesFor.starterIds`, { maximum: 32, allowEmpty: true });
   assertIdArray(definition.activatesFor.packIds, `${entry.id}.activatesFor.packIds`, { maximum: 64, allowEmpty: true });
   assertIdArray(definition.activatesFor.capabilityIds, `${entry.id}.activatesFor.capabilityIds`, { maximum: 64, allowEmpty: true });
-  if (Object.values(definition.activatesFor).every((values) => values.length === 0)) {
+  const hasNoActivationTrigger = Object.values(definition.activatesFor).every((values) => values.length === 0);
+  if (hasNoActivationTrigger && !frozenLegacyFeeV2ImplementationLegoIds.has(definition.id)) {
     fail("IMPLEMENTATION_LEGO_SCHEMA_INVALID", `Implementation Lego ${entry.id} has no exact activation trigger.`);
+  }
+  if (!hasNoActivationTrigger && frozenLegacyFeeV2ImplementationLegoIds.has(definition.id)) {
+    fail("IMPLEMENTATION_LEGO_POLICY_INVALID", `Frozen legacy Fee V2 implementation Lego ${entry.id} must not have a generic catalog trigger.`);
   }
   assertIdArray(definition.requiresLegos, `${entry.id}.requiresLegos`, { maximum: 16, allowEmpty: true });
   assertIdArray(definition.projectSurfaces, `${entry.id}.projectSurfaces`, { maximum: 16 });
@@ -537,6 +587,9 @@ export function validateCrossReferences(manifest, byId) {
       }
     }
     if (definition.kind === "starter") {
+      if (definition.defaultPacks.includes("programmable-volume-fee")) {
+        fail("CATALOG_POLICY_INVALID", `Starter ${definition.id} cannot select frozen branded Fee V2 platform economics.`);
+      }
       for (const mandatoryPack of manifest.mandatoryPacks) {
         if (!definition.defaultPacks.includes(mandatoryPack)) {
           fail("CATALOG_POLICY_INVALID", `Starter ${definition.id} omits mandatory pack ${mandatoryPack}.`);
