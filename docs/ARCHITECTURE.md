@@ -44,6 +44,10 @@ establish a common review floor; additional slug-named records preserve novel ca
 them new admission requirements. A project that did not select legacy Fee V2 uses the explicit `not-selected` state
 and an all-null Fee V2 binding tuple rather than fabricating fee artifacts.
 
+A source-backed `proposal` may enter only as an unreviewed Application V3.1 Draft with unresolved trade capability,
+no trade manifest or result, and an `architecture-review-required` compatibility result. This transport state is not
+prototype evidence and grants no review, approval, deployment, or launch authority.
+
 Strict JSON, path safety, size limits, Git identity, authentication, signatures, and key or audience pinning are
 implementation security controls. They protect the policy path but do not create separate semantic admission rules.
 
