@@ -190,6 +190,8 @@ const MAXIMUM_APPLICATION_V3_PACKAGE_FILES = 100;
 const MAXIMUM_APPLICATION_V3_FILE_BYTES = 4 * 1024 * 1024;
 const MAXIMUM_APPLICATION_V3_MANIFEST_BYTES = 256 * 1024;
 const MAXIMUM_APPLICATION_V3_PACKAGE_BYTES = 12 * 1024 * 1024;
+const MAXIMUM_APPLICATION_V3_OPEN_DRAFT_COMMITS = 32;
+const APPLICATION_V3_OPEN_DRAFT_FETCH_DEPTH = MAXIMUM_APPLICATION_V3_OPEN_DRAFT_COMMITS + 2;
 const CANARY_APPLICATION_PREFIX = "canary-submissions/";
 const CANARY_APPLICATION_PATH_PATTERN = /^canary-submissions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/application\.json$/;
 const SHA1_PATTERN = /^[a-f0-9]{40}$/;
@@ -440,7 +442,19 @@ export function classifyPublicIntakePullRequest({
     if (classifiedV3.contract !== "public-pr-application-v3") {
       reject("APPLICATION_PATH_INVALID", "An Application V3 pull request must add exactly one immutable revision directory.");
     }
-    return { mode: "application-v3", applicationV3: classifiedV3, ...comparison };
+    const applicationV3DraftPredecessor = deriveAuthenticatedOpenDraftApplicationV3Predecessor({
+      base: comparison.base,
+      candidate: comparison.candidate,
+      applicationId: classifiedV3.applicationId,
+      applicationRevision: classifiedV3.applicationRevision,
+      limits
+    });
+    return {
+      mode: "application-v3",
+      applicationV3: classifiedV3,
+      applicationV3DraftPredecessor,
+      ...comparison
+    };
   }
   const canaryApplicationChanges = changes.filter((change) => (
     change.path.startsWith(CANARY_APPLICATION_PREFIX)
@@ -527,16 +541,7 @@ export async function preflightPublicApplicationCandidateFetch({
   const limits = mergeLimits(limitOverrides);
   const base = inspectGitRevision(baseRoot, expectedBaseCommit, limits);
   const intakeStatus = readTrustedIntakeStatus(base);
-  if (intakeStatus.state === "open") {
-    return {
-      schemaVersion: 1,
-      result: "candidate-fetch-allowed",
-      intakeState: intakeStatus.state,
-      modeHint: "unclassified"
-    };
-  }
-
-  const changedFiles = await resolveCentralPullRequestChangedFiles({
+  const { changedFiles, pullRequestDraft } = await resolveCentralPullRequestChangedFiles({
     repository,
     pullRequestNumber,
     expectedBaseCommit,
@@ -569,6 +574,9 @@ export async function preflightPublicApplicationCandidateFetch({
   }
 
   if (applicationPaths.some((entryPath) => APPLICATION_V3_PATH_PATTERN.test(entryPath))) {
+    if (pullRequestDraft !== true) {
+      reject("APPLICATION_V3_DRAFT_REQUIRED", "Application V3 intake is available only through an exact open Draft pull request.");
+    }
     const classifiedV3 = classifyBoundedApplicationPathChanges(changedFiles);
     if (classifiedV3.contract !== "public-pr-application-v3") {
       reject(
@@ -648,7 +656,7 @@ export async function verifyBoundedApplicationPullRequestPaths({
 }, dependencies = {}) {
   validateHydrationAuthority({ repository, readToken });
   validateCandidateHeadIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit });
-  const changes = await resolveCentralPullRequestChangedFiles({
+  const { changedFiles: changes, pullRequestDraft } = await resolveCentralPullRequestChangedFiles({
     repository,
     pullRequestNumber,
     expectedBaseCommit,
@@ -659,6 +667,9 @@ export async function verifyBoundedApplicationPullRequestPaths({
     timeoutMs: dependencies.timeoutMs ?? TRUSTED_GIT_TIMEOUT_MS
   });
   const classified = classifyBoundedApplicationPathChanges(changes);
+  if (classified.contract === "public-pr-application-v3" && pullRequestDraft !== true) {
+    reject("APPLICATION_V3_DRAFT_REQUIRED", "Application V3 intake is available only through an exact open Draft pull request.");
+  }
   return {
     schemaVersion: 1,
     result: "bounded-public-application-paths",
@@ -844,7 +855,7 @@ export async function fetchPublicApplicationCandidate({
         "--no-tags",
         "--no-write-fetch-head",
         "--no-recurse-submodules",
-        "--depth=1",
+        `--depth=${APPLICATION_V3_OPEN_DRAFT_FETCH_DEPTH}`,
         "--filter=blob:none",
         "origin",
         `+refs/pull/${pullRequestNumber}/merge:refs/heads/candidate-merge`
@@ -934,12 +945,17 @@ export async function hydratePublicApplicationCandidate({
     : isApplicationV3
       ? planApplicationV3Hydration(classified)
       : planWorkflowCanaryHydration(classified, limits);
+  const draftPredecessorPlan = isApplicationV3 && classified.applicationV3DraftPredecessor !== null
+    ? planApplicationV3DraftPredecessorHydration(classified, plan)
+    : null;
+  const hydrationPlans = draftPredecessorPlan === null ? [plan] : [plan, draftPredecessorPlan];
   const intakeStatus = isLegacyV2 || isApplicationV3 ? readTrustedIntakeStatus(classified.base) : null;
   const isUpdate = isLegacyV2
     ? classifyTrustedBaseApplication(classified.base, plan.applicationId)
     : isApplicationV3
       ? inspectTrustedBaseApplicationV3History(classified.base, plan.applicationId).length > 0
         || hasTrustedLegacyV2Application(classified.base, plan.applicationId)
+        || draftPredecessorPlan !== null
       : false;
   const continuation = isLegacyV2 || isApplicationV3
     ? enforceTrustedIntakeStatus({
@@ -954,16 +970,27 @@ export async function hydratePublicApplicationCandidate({
     gitDirectory,
     dependencies.remoteUrlForTests ?? `https://github.com/${repository}.git`
   );
-  const packageTreeObjectId = readPackageTreeObjectId(gitDirectory, plan.packageDirectory);
-  const metadata = await resolveCandidateTreeMetadata({
-    repository,
-    readToken,
-    packageTreeObjectId,
-    fetchImplementation: dependencies.fetchImplementation ?? globalThis.fetch,
-    timeoutMs: dependencies.metadataTimeoutMs ?? TRUSTED_GIT_TIMEOUT_MS,
-    recursive: plan.recursive === true
-  });
-  const boundedMetadata = enforceHydrationMetadata(plan, metadata, limits);
+  const boundedMetadataRecords = [];
+  for (const hydrationPlan of hydrationPlans) {
+    const packageTreeObjectId = readPackageTreeObjectId(
+      gitDirectory,
+      hydrationPlan.packageDirectory,
+      hydrationPlan.commit ?? "HEAD"
+    );
+    const metadata = await resolveCandidateTreeMetadata({
+      repository,
+      readToken,
+      packageTreeObjectId,
+      fetchImplementation: dependencies.fetchImplementation ?? globalThis.fetch,
+      timeoutMs: dependencies.metadataTimeoutMs ?? TRUSTED_GIT_TIMEOUT_MS,
+      recursive: hydrationPlan.recursive === true
+    });
+    boundedMetadataRecords.push(enforceHydrationMetadata(hydrationPlan, metadata, limits));
+  }
+  const aggregateHydrationBytes = boundedMetadataRecords.reduce((total, metadata) => total + metadata.totalBytes, 0);
+  if (isApplicationV3 && aggregateHydrationBytes > MAXIMUM_APPLICATION_V3_PACKAGE_BYTES * 2) {
+    reject("APPLICATION_PACKAGE_TOO_LARGE", "Current and predecessor Draft packages exceed the trusted aggregate byte limit.");
+  }
 
   const baselineBytes = measureHydrationDirectory(gitDirectory);
   const maximumAdditionalRepositoryBytes = dependencies.maximumAdditionalRepositoryBytes
@@ -978,7 +1005,8 @@ export async function hydratePublicApplicationCandidate({
   }
 
   const sparsePath = path.join(gitDirectory, "info", "sparse-checkout");
-  const sparseBytes = Buffer.from(`${plan.entries.map((entry) => `/${entry.path}`).join("\n")}\n`, "utf8");
+  const sparsePaths = [...new Set(hydrationPlans.flatMap((hydrationPlan) => hydrationPlan.entries.map((entry) => entry.path)))];
+  const sparseBytes = Buffer.from(`${sparsePaths.map((entryPath) => `/${entryPath}`).join("\n")}\n`, "utf8");
   let operationFailed = false;
   try {
     fs.mkdirSync(path.dirname(sparsePath), { recursive: true, mode: 0o700 });
@@ -1010,7 +1038,9 @@ export async function hydratePublicApplicationCandidate({
     ) {
       systemBlocked("HYDRATION_BOUNDED_FETCH_FAILED", "Git could not hydrate the bounded application blobs within trusted resource limits.");
     }
-    verifyHydratedObjects(gitDirectory, plan, boundedMetadata, limits);
+    hydrationPlans.forEach((hydrationPlan, index) => {
+      verifyHydratedObjects(gitDirectory, hydrationPlan, boundedMetadataRecords[index], limits);
+    });
   } catch (error) {
     operationFailed = true;
     throw error;
@@ -1064,7 +1094,7 @@ export async function hydratePublicApplicationCandidate({
       pullRequestNumber,
       continuationAuthorized: continuation !== null,
       fileCount: plan.entries.length,
-      totalBytes: boundedMetadata.totalBytes
+      totalBytes: aggregateHydrationBytes
     }
     : isApplicationV3
       ? {
@@ -1076,7 +1106,7 @@ export async function hydratePublicApplicationCandidate({
         pullRequestNumber,
         continuationAuthorized: continuation !== null,
         fileCount: plan.entries.length,
-        totalBytes: boundedMetadata.totalBytes
+        totalBytes: aggregateHydrationBytes
       }
       : {
       schemaVersion: 1,
@@ -1085,7 +1115,7 @@ export async function hydratePublicApplicationCandidate({
       pullRequestNumber,
       policyBinding: workflowCanaryPolicy.binding,
       fileCount: 1,
-      totalBytes: boundedMetadata.totalBytes
+      totalBytes: aggregateHydrationBytes
       };
 }
 
@@ -1221,7 +1251,7 @@ async function resolveCentralPullRequestChangedFiles({
 
   const supportedStatuses = new Set(["added", "removed", "modified", "renamed", "copied", "changed", "unchanged"]);
   const observedPaths = new Set();
-  return records.map((record) => {
+  const changedFiles = records.map((record) => {
     if (
       !isPlainObject(record)
       || typeof record.filename !== "string"
@@ -1242,6 +1272,7 @@ async function resolveCentralPullRequestChangedFiles({
     }
     return { path: record.filename, previousPath, status: record.status };
   });
+  return { changedFiles, pullRequestDraft: pullRequest.draft };
 }
 
 async function requestCentralCandidateJson({ url, readToken, fetchImplementation, deadline }) {
@@ -1452,6 +1483,39 @@ function planApplicationV3Hydration(classified) {
   };
 }
 
+function planApplicationV3DraftPredecessorHydration(classified, currentPlan) {
+  const predecessor = classified.applicationV3DraftPredecessor;
+  if (
+    !isPlainObject(predecessor)
+    || !SHA1_PATTERN.test(predecessor.commit)
+    || incrementCanonicalDecimal(predecessor.revision) !== currentPlan.applicationRevision
+    || !Array.isArray(predecessor.entries)
+    || predecessor.entries.length < 1
+    || predecessor.entries.length > MAXIMUM_APPLICATION_V3_PACKAGE_FILES
+  ) {
+    systemBlocked("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The internally derived Draft predecessor plan was malformed.");
+  }
+  const packageDirectory = `submissions/${currentPlan.applicationId}/v3/revisions/${predecessor.revision}`;
+  const packagePrefix = `${packageDirectory}/`;
+  const entries = [...predecessor.entries].sort((left, right) => compareUtf8(left.path, right.path));
+  if (
+    entries.some((entry) => !entry.path.startsWith(packagePrefix))
+    || !entries.some((entry) => entry.path === `${packagePrefix}${APPLICATION_V3_ROOT_FILE}`)
+  ) {
+    systemBlocked("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The internally derived Draft predecessor entries escaped their exact revision directory.");
+  }
+  entries.forEach(assertRegularBlob);
+  return {
+    applicationId: currentPlan.applicationId,
+    applicationRevision: predecessor.revision,
+    packageDirectory,
+    entries,
+    recursive: true,
+    maximumPackageBytes: MAXIMUM_APPLICATION_V3_PACKAGE_BYTES,
+    commit: predecessor.commit
+  };
+}
+
 function planWorkflowCanaryHydration(classified, limits) {
   if (classified.mode !== "workflow-canary" || classified.changes.length !== 1) {
     reject("APPLICATION_CHANGE_REQUIRED", "Only one closed workflow-canary application may hydrate candidate bytes.");
@@ -1477,10 +1541,13 @@ function planWorkflowCanaryHydration(classified, limits) {
   return { applicationId, packageDirectory, entries, recursive: false };
 }
 
-function readPackageTreeObjectId(gitDirectory, packageDirectory) {
+function readPackageTreeObjectId(gitDirectory, packageDirectory, commit = "HEAD") {
+  if (commit !== "HEAD" && !SHA1_PATTERN.test(commit)) {
+    systemBlocked("HYDRATION_TREE_INVALID", "The historical application tree commit was malformed.");
+  }
   const objectId = runGitText(
     gitDirectory,
-    ["rev-parse", "--verify", `HEAD:${packageDirectory}`],
+    ["rev-parse", "--verify", `${commit}:${packageDirectory}`],
     128
   ).trim();
   if (!SHA1_PATTERN.test(objectId)) {
@@ -2021,7 +2088,8 @@ async function verifyPublicApplicationV3({
   const plan = planApplicationV3Hydration(classified);
   const baseHistory = inspectTrustedBaseApplicationV3History(classified.base, plan.applicationId);
   const hasLegacyV2 = hasTrustedLegacyV2Application(classified.base, plan.applicationId);
-  const isUpdate = baseHistory.length > 0 || hasLegacyV2;
+  const draftPredecessor = classified.applicationV3DraftPredecessor;
+  const isUpdate = baseHistory.length > 0 || hasLegacyV2 || draftPredecessor !== null;
   const intakeStatus = readTrustedIntakeStatus(classified.base);
   const continuation = enforceTrustedIntakeStatus({
     intakeStatus,
@@ -2057,6 +2125,8 @@ async function verifyPublicApplicationV3({
     base: classified.base,
     baseHistory,
     legacyPredecessor,
+    draftPredecessor,
+    draftPredecessorRoot: classified.candidate.root,
     expectedBuilderLogin: application.builder.githubLogin,
     expectedBuilderUserId: application.builder.githubUserId
   });
@@ -2194,10 +2264,12 @@ function validateApplicationV3Lineage({
   base,
   baseHistory,
   legacyPredecessor,
+  draftPredecessor,
+  draftPredecessorRoot,
   expectedBuilderLogin,
   expectedBuilderUserId
 }) {
-  if (baseHistory.length === 0) {
+  if (baseHistory.length === 0 && draftPredecessor === null) {
     if (legacyPredecessor !== null) {
       if (
         application.lineage.kind !== "schema-migration"
@@ -2216,9 +2288,9 @@ function validateApplicationV3Lineage({
     }
     return;
   }
-  const previous = baseHistory.at(-1);
+  const previous = baseHistory.at(-1) ?? draftPredecessor;
   if (application.applicationRevision !== incrementCanonicalDecimal(previous.revision)) {
-    reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 revision must increment the latest protected-base revision exactly once.");
+    reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 revision must increment its exact authenticated predecessor once.");
   }
   const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${previous.revision}`;
   const plan = {
@@ -2229,7 +2301,8 @@ function validateApplicationV3Lineage({
     recursive: true,
     maximumPackageBytes: MAXIMUM_APPLICATION_V3_PACKAGE_BYTES
   };
-  const packageFiles = readApplicationV3PackageFiles(base.root, plan);
+  const predecessorRoot = baseHistory.length > 0 ? base.root : draftPredecessorRoot;
+  const packageFiles = readApplicationV3PackageFiles(predecessorRoot, plan);
   let validated;
   try {
     validated = validatePublicApplicationV3PackageFiles({
@@ -2241,7 +2314,10 @@ function validateApplicationV3Lineage({
     });
   } catch (error) {
     if (error instanceof PublicApplicationV3IntakeError) {
-      systemBlocked("INTAKE_BASE_APPLICATION_V3_INVALID", "The latest trusted Application V3 predecessor package is invalid.");
+      const code = baseHistory.length > 0
+        ? "INTAKE_BASE_APPLICATION_V3_INVALID"
+        : "APPLICATION_V3_DRAFT_HISTORY_INVALID";
+      systemBlocked(code, "The exact trusted Application V3 predecessor package is invalid.");
     }
     throw error;
   }
@@ -2268,7 +2344,7 @@ function validateApplicationV3Lineage({
     })
   });
   if (canonicalJson(application.lineage.previous) !== canonicalJson(expectedPrevious)) {
-    reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 lineage does not bind the exact latest protected-base predecessor package.");
+    reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 lineage does not bind the exact authenticated predecessor package.");
   }
 }
 
@@ -2564,6 +2640,21 @@ function incrementCanonicalDecimal(value) {
     }
   }
   if (carry === 1) digits.unshift("1");
+  return digits.join("");
+}
+
+function decrementCanonicalDecimal(value) {
+  if (!/^[1-9][0-9]*$/u.test(value) || value === "1") return null;
+  const digits = [...value];
+  let borrow = 1;
+  for (let index = digits.length - 1; index >= 0 && borrow === 1; index -= 1) {
+    if (digits[index] === "0") digits[index] = "9";
+    else {
+      digits[index] = String(Number(digits[index]) - 1);
+      borrow = 0;
+    }
+  }
+  if (digits[0] === "0") digits.shift();
   return digits.join("");
 }
 
@@ -3606,6 +3697,197 @@ function inspectExactPullRequestMergeIdentity(rootInput, {
     systemBlocked("PR_MERGE_PARENT_MISMATCH", "GitHub's PR merge parents do not match the event's exact base and head commits.");
   }
   return { root, mergeCommit };
+}
+
+/**
+ * Recover one unpublished V3 predecessor only from the exact PR head that was
+ * authenticated as parent 2 of GitHub's merge ref. The protected base remains
+ * authoritative whenever it already contains application history.
+ */
+function deriveAuthenticatedOpenDraftApplicationV3Predecessor({
+  base,
+  candidate,
+  applicationId,
+  applicationRevision,
+  limits
+}) {
+  if (
+    inspectTrustedBaseApplicationV3History(base, applicationId).length > 0
+    || hasTrustedLegacyV2Application(base, applicationId)
+    || applicationRevision === "1"
+  ) return null;
+
+  const previousRevision = decrementCanonicalDecimal(applicationRevision);
+  if (previousRevision === null) {
+    reject("APPLICATION_V3_LINEAGE_MISMATCH", "An unpublished Draft revision must have one exact preceding revision.");
+  }
+  const root = candidate.root;
+  const mergeBases = runGitText(
+    root,
+    ["merge-base", "--all", base.commit, candidate.commit],
+    4096
+  ).trim().split("\n").filter(Boolean);
+  if (mergeBases.length !== 1 || mergeBases[0] !== base.commit) {
+    reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The authenticated Draft head does not have the exact protected base as its unique merge base.");
+  }
+  const commits = runGitText(
+    root,
+    ["rev-list", "--first-parent", "--reverse", `${base.commit}..${candidate.commit}`],
+    (MAXIMUM_APPLICATION_V3_OPEN_DRAFT_COMMITS + 1) * 41
+  ).trim().split("\n").filter(Boolean);
+  if (
+    commits.length < 1
+    || commits.length > MAXIMUM_APPLICATION_V3_OPEN_DRAFT_COMMITS
+    || commits.at(-1) !== candidate.commit
+    || commits.some((commit) => !SHA1_PATTERN.test(commit))
+  ) {
+    reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The authenticated Draft first-parent history is missing or exceeds its trusted commit bound.");
+  }
+
+  const prefix = `submissions/${applicationId}/`;
+  let phase = "empty";
+  let previousState = inspectApplicationV3DraftHistoryState({
+    root,
+    commit: base.commit,
+    applicationId,
+    allowedRevisions: new Set([previousRevision, applicationRevision]),
+    limits
+  });
+  if (previousState.key !== "") {
+    systemBlocked("INTAKE_BASE_APPLICATION_V3_INVALID", "The protected base application state disagrees with its trusted history classification.");
+  }
+  let predecessor = null;
+  let predecessorFingerprint = null;
+  let currentFingerprint = null;
+
+  for (const commit of commits) {
+    const state = inspectApplicationV3DraftHistoryState({
+      root,
+      commit,
+      applicationId,
+      allowedRevisions: new Set([previousRevision, applicationRevision]),
+      limits
+    });
+    const targetChanged = state.key !== previousState.key
+      || [...state.revisions].some(([revision, record]) => previousState.revisions.get(revision)?.fingerprint !== record.fingerprint);
+    const parents = readCommitParents(root, commit);
+    if (targetChanged) {
+      if (parents.length !== 1) {
+        reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "A merge commit cannot introduce, remove, or substitute unpublished application bytes.");
+      }
+      const paths = runGitText(
+        root,
+        ["diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", parents[0], commit],
+        limits.maximumGitTreeBytes
+      ).split("\n").filter(Boolean);
+      if (paths.length < 1 || paths.some((entryPath) => !entryPath.startsWith(prefix))) {
+        reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "A commit that changes unpublished application history must be confined to that exact application.");
+      }
+    } else if (parents.length > 1) {
+      if (
+        parents.length !== 2
+        || !gitIsAncestor(root, parents[1], base.commit)
+      ) {
+        reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "A Draft base-sync merge is not anchored in the exact protected-base ancestry.");
+      }
+    }
+
+    const prior = state.revisions.get(previousRevision) ?? null;
+    const current = state.revisions.get(applicationRevision) ?? null;
+    if (prior !== null) {
+      if (predecessorFingerprint !== null && predecessorFingerprint !== prior.fingerprint) {
+        reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The unpublished predecessor revision was substituted in Draft history.");
+      }
+      predecessorFingerprint = prior.fingerprint;
+      predecessor = { commit, revision: previousRevision, entries: prior.entries };
+    }
+    if (current !== null) {
+      if (currentFingerprint !== null && currentFingerprint !== current.fingerprint) {
+        reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The current unpublished revision drifted in Draft history.");
+      }
+      currentFingerprint = current.fingerprint;
+    }
+
+    const nextPhase = state.key === previousRevision
+      ? "previous"
+      : state.key === `${previousRevision},${applicationRevision}`
+        ? "transition"
+        : state.key === applicationRevision
+          ? "current"
+          : state.key === ""
+            ? "empty"
+            : "invalid";
+    const allowedTransition = (
+      (phase === "empty" && (nextPhase === "empty" || nextPhase === "previous"))
+      || (phase === "previous" && (nextPhase === "previous" || nextPhase === "transition"))
+      || (phase === "transition" && (nextPhase === "transition" || nextPhase === "current"))
+      || (phase === "current" && nextPhase === "current")
+    );
+    if (!allowedTransition) {
+      reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "Unpublished revision history is not the monotonic previous-to-current Draft transition.");
+    }
+    phase = nextPhase;
+    previousState = state;
+  }
+  if (phase !== "current" || predecessor === null || currentFingerprint === null) {
+    reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "The exact Draft history does not close from one predecessor to one current revision.");
+  }
+  return predecessor;
+}
+
+function inspectApplicationV3DraftHistoryState({ root, commit, applicationId, allowedRevisions, limits }) {
+  const prefix = `submissions/${applicationId}/`;
+  const output = runGit(root, ["ls-tree", "-rz", "--full-tree", "-r", commit, "--", prefix], limits.maximumGitTreeBytes);
+  const allEntries = parseGitTree(output, limits);
+  const revisions = new Map();
+  for (const entry of allEntries.values()) {
+    const match = APPLICATION_V3_PATH_PATTERN.exec(entry.path);
+    if (
+      !match
+      || match[1] !== applicationId
+      || !allowedRevisions.has(match[2])
+      || !isSafeApplicationV3PackagePath(match[3])
+    ) {
+      reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "Draft history contains an unrelated, legacy, or non-adjacent application entry.");
+    }
+    assertRegularBlob(entry);
+    const record = revisions.get(match[2]) ?? [];
+    record.push(entry);
+    revisions.set(match[2], record);
+  }
+  const normalized = new Map();
+  for (const [revision, entries] of [...revisions].sort(([left], [right]) => compareCanonicalDecimal(left, right))) {
+    entries.sort((left, right) => compareUtf8(left.path, right.path));
+    const rootPath = `${prefix}v3/revisions/${revision}/${APPLICATION_V3_ROOT_FILE}`;
+    if (!entries.some((entry) => entry.path === rootPath) || entries.length > MAXIMUM_APPLICATION_V3_PACKAGE_FILES) {
+      reject("APPLICATION_V3_DRAFT_HISTORY_INVALID", "A Draft-history revision is not one bounded closed package.");
+    }
+    normalized.set(revision, {
+      entries,
+      fingerprint: entries.map(({ path: entryPath, mode, type, oid }) => `${entryPath}\0${mode}\0${type}\0${oid}`).join("\n")
+    });
+  }
+  return { revisions: normalized, key: [...normalized.keys()].join(",") };
+}
+
+function readCommitParents(root, commit) {
+  const record = runGitText(root, ["rev-list", "--parents", "-n", "1", commit], 4096).trim().split(" ");
+  if (record[0] !== commit || record.slice(1).some((parent) => !SHA1_PATTERN.test(parent))) {
+    systemBlocked("APPLICATION_V3_DRAFT_HISTORY_INVALID", "Git returned malformed Draft commit ancestry.");
+  }
+  return record.slice(1);
+}
+
+function gitIsAncestor(root, ancestor, descendant) {
+  const result = childProcess.spawnSync(
+    "git",
+    ["-c", "core.hooksPath=/dev/null", "-c", "credential.helper=", "-C", root, "merge-base", "--is-ancestor", ancestor, descendant],
+    { encoding: null, shell: false, timeout: TRUSTED_GIT_TIMEOUT_MS, killSignal: "SIGKILL", env: trustedGitEnvironment() }
+  );
+  if (result.error || !new Set([0, 1]).has(result.status)) {
+    systemBlocked("GIT_COMMAND_FAILED", "A fixed trusted Git ancestry check failed.");
+  }
+  return result.status === 0;
 }
 
 function inspectGitRevision(rootInput, expectedCommit, limits) {

@@ -4,6 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
+    types: [opened, synchronize, reopened, converted_to_draft, ready_for_review]
 
 permissions:
   contents: read
@@ -159,6 +160,21 @@ jobs:
             --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
             --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
+
+      - name: Rebind exact open Draft metadata after Application V3 verification
+        if: steps.classify.outputs.mode == 'application-v3'
+        shell: bash
+        env:
+          CANDIDATE_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          timeout --signal=KILL 30s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --verify-bounded-application-paths \
+            --repository "${{ github.repository }}" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}"
 
       - name: Verify policy-bound hidden workflow canary
         if: steps.classify.outputs.mode == 'workflow-canary'
