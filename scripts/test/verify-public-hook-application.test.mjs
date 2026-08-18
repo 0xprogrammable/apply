@@ -29,13 +29,17 @@ import {
   generatePublicApplicationSchema,
   serializePublicApplicationSchema
 } from "../../vendor/programmable-v4-hook-builder/scripts/generate-public-pr-application-schema.mjs";
-import { GitHubPublicSourceError } from "../../vendor/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
+import { GitHubPublicSourceError } from "../../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   COMPANION_MANIFEST_V2,
   verifyCompanionManifestV2Closure
 } from "../../vendor/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 import { builderTemplateFromPlan } from "../../vendor/programmable-v4-hook-builder/scripts/builder-template-contract.mjs";
 import { composeTemplate, loadTemplateCatalog } from "../../vendor/programmable-v4-hook-builder/scripts/template-catalog-core.mjs";
+import {
+  createAnonymousGitHubExactObjectResolverV1,
+  GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1
+} from "../../vendor/programmable-v4-hook-builder/scripts/github-exact-object-resolver.mjs";
 
 const PRIMARY = Object.freeze({
   repositoryUri: "https://github.com/alice/example-hook",
@@ -1149,6 +1153,80 @@ test("the exact versioned vendor receipt is trusted Registry maintenance", (t) =
   const candidateCommit = commitAll(fixture.candidate, "update exact vendor receipt");
   const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
   assert.equal(result.mode, "registry-maintenance");
+});
+
+test("the trusted vendored resolver fetches every tree-derived blob object id in one bounded batch", async () => {
+  const filePath = "submissions/project/idea-source.v1.json";
+  const fileBytes = Buffer.from("{\"idea\":true}\n", "utf8");
+  const blobObjectId = gitBlobObjectId(fileBytes);
+  const treeObjectId = "b".repeat(40);
+  const commitBytes = Buffer.from(`tree ${treeObjectId}\n\ncentral vendor regression\n`, "utf8");
+  const revisionObjectId = gitObjectId("commit", commitBytes);
+  const calls = [];
+  const runGit = async (call) => {
+    calls.push({ ...call, args: [...call.args], input: call.input === null ? null : Buffer.from(call.input) });
+    const invocation = parseExactGitInvocation(call.args);
+    const success = (stdout = Buffer.alloc(0), status = 0) => ({
+      addressSpaceExceeded: false,
+      cpuExceeded: false,
+      fileSizeExceeded: false,
+      outputExceeded: false,
+      status,
+      stderr: Buffer.alloc(0),
+      stdout: Buffer.from(stdout),
+      temporaryBytesExceeded: false,
+      timedOut: false
+    });
+    if (invocation.command === "--version") return success("git version 2.50.1\n");
+    if (invocation.command === "init") {
+      fs.mkdirSync(invocation.arguments.at(-1), { recursive: true });
+      return success();
+    }
+    if (invocation.command === "fetch") return success();
+    if (invocation.command === "ls-tree") {
+      return success(Buffer.concat([
+        Buffer.from(`100644 blob ${blobObjectId}\t`, "ascii"),
+        Buffer.from(filePath, "utf8"),
+        Buffer.from([0])
+      ]));
+    }
+    if (invocation.command === "cat-file" && invocation.arguments[0] === "--batch") {
+      const objectIds = exactGitInputLines(call.input);
+      return success(objectIds[0] === revisionObjectId
+        ? exactGitBatchObject(revisionObjectId, "commit", commitBytes)
+        : exactGitBatchObject(blobObjectId, "blob", fileBytes));
+    }
+    if (invocation.command === "cat-file" && invocation.arguments[0].startsWith("--batch-check=")) {
+      const objectId = exactGitInputLines(call.input)[0];
+      return success(objectId === treeObjectId
+        ? `${treeObjectId} tree 123\n`
+        : `${blobObjectId} blob ${fileBytes.length}\n`);
+    }
+    return success(Buffer.alloc(0), 1);
+  };
+  const resolver = createAnonymousGitHubExactObjectResolverV1({ runGit });
+
+  const result = await resolver({
+    maximumFileBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumFileBytes,
+    maximumTotalBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTotalBytes,
+    paths: [filePath],
+    repositoryUri: "https://github.com/example/project",
+    revisionObjectId,
+    timeoutMs: 10_000,
+    treeObjectId
+  });
+
+  assert.deepEqual(result.records.get(filePath).bytes, fileBytes);
+  const invocations = calls.map((call) => ({ call, parsed: parseExactGitInvocation(call.args) }));
+  const objectFetches = invocations.filter(({ parsed }) => (
+    parsed.command === "fetch" && parsed.arguments.includes("--stdin")
+  ));
+  assert.equal(objectFetches.length, 1);
+  assert.deepEqual(exactGitInputLines(objectFetches[0].call.input), [blobObjectId]);
+  assert.ok(objectFetches[0].parsed.arguments.includes("--no-write-fetch-head"));
+  assert.ok(objectFetches[0].parsed.arguments.includes("--recurse-submodules=no"));
+  assert.ok(objectFetches[0].parsed.arguments.includes("--filter=blob:none"));
+  assert.equal(invocations.some(({ parsed }) => parsed.command === "backfill"), false);
 });
 
 test("the versioned vendor receipt allowlist is exact and does not trust sibling vendor paths", async (t) => {
@@ -3282,6 +3360,32 @@ function gitBlobObjectId(bytes) {
     .update(Buffer.from(`blob ${bytes.length}\0`, "utf8"))
     .update(bytes)
     .digest("hex");
+}
+
+function gitObjectId(type, bytes) {
+  return crypto.createHash("sha1")
+    .update(Buffer.from(`${type} ${bytes.length}\0`, "utf8"))
+    .update(bytes)
+    .digest("hex");
+}
+
+function parseExactGitInvocation(argumentsList) {
+  let index = 0;
+  while (argumentsList[index] === "-c") index += 2;
+  if (argumentsList[index] === "-C") index += 2;
+  return { command: argumentsList[index], arguments: argumentsList.slice(index + 1) };
+}
+
+function exactGitInputLines(input) {
+  return Buffer.from(input ?? Buffer.alloc(0)).toString("ascii").trim().split("\n").filter(Boolean);
+}
+
+function exactGitBatchObject(objectId, type, bytes) {
+  return Buffer.concat([
+    Buffer.from(`${objectId} ${type} ${bytes.length}\n`, "ascii"),
+    bytes,
+    Buffer.from("\n", "ascii")
+  ]);
 }
 
 function mutateObservation(observation, field, value) {

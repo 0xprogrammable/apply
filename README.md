@@ -29,7 +29,7 @@ public repository.
 > [!IMPORTANT]
 > **Three intake transports are open.** Generic Application V3.1 accepts one immutable revision of any complete
 > no-market, tradable, hook, token, app, game, service, or hybrid project as an official protected draft for review.
-> The hidden Workflow Canary remains a separate one-file handoff test. The receipt-bound Hookbuilder v0.5.1 tree may
+> The hidden Workflow Canary remains a separate one-file handoff test. The receipt-bound Hookbuilder v0.10.3 tree may
 > still submit its frozen six-file legacy V2 package while the checked-in intake state remains `open`. A valid draft is
 > not reviewed, accepted, audited, deployed, available, or launched, and no intake transport grants funds authority.
 
@@ -151,7 +151,7 @@ means `ELIGIBLE_FOR_REVIEW` only. Read the [public GitHub intake contract](docs/
 `canary-submissions/<application-id>/application.json` file that binds the central policy and exact public source.
 
 **Open legacy V2.** While [`docs/builder/intake-status.json`](docs/builder/intake-status.json) reports `open`, the pinned
-Hookbuilder v0.5.1 package may also submit exactly six frozen files under `submissions/<application-id>/`. New and
+Hookbuilder v0.10.3 package may also submit exactly six frozen files under `submissions/<application-id>/`. New and
 existing V2 applications use that bounded compatibility validator, but their bytes are never reinterpreted as Canary
 or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the exact boundary.
 

@@ -1,12 +1,12 @@
 import path from "node:path";
 import { TextDecoder } from "node:util";
-import { canonicalJson, validateAgainstSchema } from "../vendor/programmable-v4-hook-builder/scripts/submission-core.mjs";
-import { parseBoundedStrictJsonBytes } from "../vendor/programmable-v4-hook-builder/scripts/strict-json-core.mjs";
+import { canonicalJson, validateAgainstSchema } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { parseBoundedStrictJsonBytes } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   PROGRAMMABLE_FEE_V2,
   deriveOpenWorldV2FeeApplicability as deriveLegacySelectedFeeApplicability,
   sha256Bytes
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   SOURCE_CLOSURE_MANIFEST_SCHEMA_ID,
   SOURCE_CLOSURE_MANIFEST_VERSION,
@@ -27,14 +27,14 @@ import {
   privacySafeReport,
   scanPublicPrApplicationV3ArtifactBytes,
   validatePublicApplicationText
-} from "../vendor/programmable-v4-hook-builder/scripts/public-pr-application-v3-privacy.mjs";
-import { validateSourceClosure } from "../vendor/programmable-v4-hook-builder/scripts/public-pr-application-v3-source-validation.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { validateSourceClosure } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   OPEN_WORLD_V2_ARTIFACTS,
   OPEN_WORLD_V2_OPTIONAL_SUPPORTING_ARTIFACTS,
   OPEN_WORLD_V2_SUPPORTING_ARTIFACTS
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-contracts.mjs";
-import { isRepositorySchemaBinding } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-package-io.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { isRepositorySchemaBinding } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import { generatePublicPrApplicationV3 } from "./verify-public-application-v3-generation.mjs";
 import {
   validateCurrentOpenWorldV2Package,
@@ -45,7 +45,7 @@ const applicationSchema = readJson(
   new URL("../intake/schemas/public-pr-application-v3.schema.json", import.meta.url)
 );
 const openWorldSecurityV1Bytes = Buffer.from(`${canonicalJson(readJson(
-  new URL("../vendor/programmable-v4-hook-builder/references/open-world-security-v1.schema.json", import.meta.url)
+  new URL("../vendor/programmable-applicant-validator/references/open-world-security-v1.schema.json", import.meta.url)
 ))}\n`, "utf8");
 const APPLICATION_V3_ROOT_FILE = "application.v3.json";
 const MAXIMUM_APPLICATION_V3_FILE_BYTES = 4 * 1024 * 1024;

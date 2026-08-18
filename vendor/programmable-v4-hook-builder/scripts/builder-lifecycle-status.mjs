@@ -4,6 +4,7 @@ import {
 } from "./submission-core.mjs";
 import {
   BUILDER_LIFECYCLE_SCHEMA_VERSION,
+  BUNDLED_BUILDER_CHANNEL,
   BUNDLED_BUILDER_PUBLICATION_STATE,
   BUNDLED_BUILDER_VERSION,
   assertPlainObject,
@@ -39,7 +40,7 @@ export function bundledVersionStatus() {
     kind: "builder-version-status",
     schemaVersion: BUILDER_LIFECYCLE_SCHEMA_VERSION,
     installed: {
-      channel: "stable",
+      channel: BUNDLED_BUILDER_CHANNEL,
       publicationState: BUNDLED_BUILDER_PUBLICATION_STATE,
       releaseSequence: null,
       releaseVersion: BUNDLED_BUILDER_VERSION,
@@ -106,7 +107,7 @@ export function renderHumanStatus(result) {
     const state = result.callerDeclaredPlanComplete ? "caller-declared inputs complete" : "caller-declared inputs incomplete";
     return [
       `Local release calculation ${result.candidate.releaseVersion} (${result.candidate.channel}): ${state}`,
-      "Proof: privacy, cadence, planned source identity, artifact and release-manifest bytes, owner authority, and release readiness are all unverified.",
+      "Proof: privacy, planned source identity, artifact and release-manifest bytes, owner authority, and release readiness are all unverified. No minimum release interval applies.",
       result.declaredPlanningBlockers.length === 0
         ? "Caller-declared blockers: none. External W5 verification remains mandatory."
         : `Caller-declared blockers: ${result.declaredPlanningBlockers.join(" | ")}`,

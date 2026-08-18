@@ -39,7 +39,7 @@ test("the closed ownership manifest proves one current authored admission author
     canonicalPolicyPath,
     entrypoints: manifest.entrypoints.length,
     files: Object.keys(manifest.fileSha256).length + 1,
-    frozenVendorTree: "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec",
+    frozenVendorTree: "3b974b0bcb006e08d8f2504c783ac81f2ee3bd74",
     ok: true,
     rules: manifest.semanticRuleMap.length
   });
@@ -279,15 +279,22 @@ test("every semantic finding and handler maps bijectively to a central Rule ID",
 test("the receipt-bound vendored Hookbuilder is frozen legacy data, never current policy authority", () => {
   const receipt = readJson("vendor/receipt.json");
   assert.deepEqual(receipt, {
-    commit: "547482adf6ed0ed19e9cd4d0e884abd70e143229",
-    release: "v0.5.1",
+    commit: "7869f44aa8dcc7cefeb379b76118407d53384558",
+    release: "v0.10.3",
     repository: "0xprogrammable/hookbuilder",
     schemaVersion: "1.0.0",
-    skillTree: "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec",
-    source: "https://github.com/0xprogrammable/hookbuilder/tree/547482adf6ed0ed19e9cd4d0e884abd70e143229/skills/programmable-v4-hook-builder"
+    skillTree: "3b974b0bcb006e08d8f2504c783ac81f2ee3bd74",
+    source: "https://github.com/0xprogrammable/hookbuilder/tree/7869f44aa8dcc7cefeb379b76118407d53384558/skills/programmable-v4-hook-builder"
   });
 
-  assert.equal(git(["status", "--porcelain", "--untracked-files=all", "--", "vendor"]), "");
+  assert.equal(git([
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+    "--",
+    "vendor/receipt.json",
+    "vendor/programmable-v4-hook-builder"
+  ]), "");
   const tree = git(["write-tree"]);
   const entry = git(["ls-tree", tree, "vendor/programmable-v4-hook-builder"]);
   assert.match(entry, new RegExp(`^040000 tree ${receipt.skillTree}\\tvendor/programmable-v4-hook-builder$`, "u"));

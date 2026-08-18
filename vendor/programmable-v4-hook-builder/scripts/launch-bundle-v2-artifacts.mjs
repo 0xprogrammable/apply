@@ -6,7 +6,7 @@ import {
   FEE_POLICY_V2_VERSION,
   validateFeePolicyV2
 } from "./fee-policy-v2-core.mjs";
-import { deriveOpenWorldV2FeeApplicability, validateOpenWorldV2Package } from "./open-world-v2-core.mjs";
+import { deriveOpenWorldV2FeeApplicability, validateLegacyFeeV2OpenWorldV2Package } from "./open-world-v2-core.mjs";
 import { TRADE_CAPABILITY_MANIFEST_V1_SCHEMA_ID } from "./trade-capability-manifest-core.mjs";
 import { validatePublicPrApplicationV3, verifyBoundSourceClosureManifestV1 } from "./public-pr-application-v3-core.mjs";
 import {
@@ -380,7 +380,7 @@ export function analyzeAuthoritativeContracts({
     submissionRecord?.sourceRef ?? null,
     artifactState.evidenceIndex
   );
-  const openWorldReport = validateOpenWorldV2Package({
+  const openWorldReport = validateLegacyFeeV2OpenWorldV2Package({
     submission,
     submissionBytes: submissionRecord?.content === null || submissionRecord?.content === undefined
       ? undefined
@@ -497,7 +497,7 @@ export function analyzeApplicationAndSubmission(context) {
     requireEqual(application.applicationId, input?.applicationId, "APPLICATION_ID_BINDING_MISMATCH", "$.artifacts.application.content#/applicationId", "Application id does not match the launch bundle.", conflicts, applicationTracker);
     requireEqual(application.schemaVersion, 3, "APPLICATION_SCHEMA_VERSION_MISMATCH", "$.artifacts.application.content#/schemaVersion", "Application schemaVersion must equal 3.", conflicts, applicationTracker);
     requireEqual(application.contract?.id, "public-pr-application-v3", "APPLICATION_CONTRACT_MISMATCH", "$.artifacts.application.content#/contract/id", "The application must use public-pr-application-v3.", conflicts, applicationTracker);
-    requireEqual(application.contract?.version, "3.0.0", "APPLICATION_CONTRACT_VERSION_MISMATCH", "$.artifacts.application.content#/contract/version", "The application contract version must equal 3.0.0.", conflicts, applicationTracker);
+    requireEqual(application.contract?.version, "3.1.0", "APPLICATION_CONTRACT_VERSION_MISMATCH", "$.artifacts.application.content#/contract/version", "The application contract version must equal 3.1.0.", conflicts, applicationTracker);
     requireEqual(application.contract?.submissionStandard, "2.0.0", "APPLICATION_SUBMISSION_STANDARD_MISMATCH", "$.artifacts.application.content#/contract/submissionStandard", "The application must bind submission standard 2.0.0.", conflicts, applicationTracker);
     if (application.declarations?.noInheritedApproval !== true) {
       addConflict(conflicts, applicationTracker, "APPLICATION_INHERITED_APPROVAL_NOT_DENIED", "$.artifacts.application.content#/declarations/noInheritedApproval", "The application must explicitly deny inherited approval.");

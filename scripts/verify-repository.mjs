@@ -6,6 +6,10 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import {
+  ApplicantCompatibilityError,
+  verifyApplicantCompatibilityContract
+} from "./applicant-compatibility-core.mjs";
 import { LaunchPolicyArtifactError, verifyLaunchPolicyArtifacts } from "./generate-launch-policy-artifacts.mjs";
 import {
   LaunchPolicyAuthorityOwnershipError,
@@ -18,6 +22,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 try {
   const launchPolicy = verifyLaunchPolicyArtifacts({ repositoryRoot: root });
+  const applicantCompatibility = verifyApplicantCompatibilityContract({
+    allowLegacyFallback: true,
+    repositoryRoot: root
+  });
   const authorityOwnership = verifyLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
   const releaseVersion = verifyReleaseVersion({ repositoryRoot: root });
   const generated = verifyGeneratedArtifacts({ repositoryRoot: root });
@@ -28,9 +36,10 @@ try {
   }
   runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   runNodeTests("scripts/test", (name) => name.startsWith("verify-public-hook-application") && name.endsWith(".test.mjs"), ["--test-concurrency=1"]);
-  process.stdout.write(`${canonicalJson({ ...generated, authorityOwnership, checks: ["authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion })}\n`);
+  process.stdout.write(`${canonicalJson({ ...generated, applicantCompatibility, authorityOwnership, checks: ["applicant-compatibility", "authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion })}\n`);
 } catch (error) {
   const known = error instanceof RegistryError
+    || error instanceof ApplicantCompatibilityError
     || error instanceof LaunchPolicyArtifactError
     || error instanceof LaunchPolicyAuthorityOwnershipError
     || error instanceof ReleaseVersionError;
@@ -46,12 +55,12 @@ function verifyVendorReceipt() {
   const receiptBytes = fs.readFileSync(receiptPath, "utf8");
   const receipt = JSON.parse(receiptBytes);
   const expectedReceipt = {
-    commit: "547482adf6ed0ed19e9cd4d0e884abd70e143229",
-    release: "v0.5.1",
+    commit: "7869f44aa8dcc7cefeb379b76118407d53384558",
+    release: "v0.10.3",
     repository: "0xprogrammable/hookbuilder",
     schemaVersion: "1.0.0",
-    skillTree: "b7a0eeec627b2fd2dfe24fcadd35befcd42b8cec",
-    source: "https://github.com/0xprogrammable/hookbuilder/tree/547482adf6ed0ed19e9cd4d0e884abd70e143229/skills/programmable-v4-hook-builder"
+    skillTree: "3b974b0bcb006e08d8f2504c783ac81f2ee3bd74",
+    source: "https://github.com/0xprogrammable/hookbuilder/tree/7869f44aa8dcc7cefeb379b76118407d53384558/skills/programmable-v4-hook-builder"
   };
   if (receiptBytes !== `${canonicalJson(expectedReceipt)}\n`) throw new RegistryError("VENDOR_RECEIPT_INVALID", "vendor receipt does not match the exact released Builder identity");
   const temporaryIndex = path.join(root, `.vendor-index-${process.pid}`);

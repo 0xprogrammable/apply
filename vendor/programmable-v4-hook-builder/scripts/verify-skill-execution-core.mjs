@@ -1,14 +1,153 @@
-import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
+import vm from "node:vm";
+import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import { runBoundedChildProcess } from "./bounded-child-process-core.mjs";
 
+const MODULE_SYNTAX_TIMEOUT_MS = 60_000;
+const MODULE_SYNTAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const TEST_BATCH_COUNT = 2;
 const TEST_TIMEOUT_MS = 15 * 60 * 1000;
 const TEST_OUTPUT_BYTES = 128 * 1024 * 1024;
 const monotonicNow = () => performance.now();
+export const REQUIRED_REPOSITORY_TESTS = Object.freeze(`
+application-api-schema application-dependency-core application-handoff application-v3-prepare-revision-core build-info
+build-profile builder-lifecycle canonical-json-core central-policy-authority-boundary cli
+cli-central-base cli-central-package cli-entry cli-open-world
+cli-open-world-github cli-output-dir cli-prepare-pr companion-manifest-v2
+composition-checker contract-registry cross-chain-policy dependency-pointer-core
+example-materializer fee-conformance fee-conformance-receipt-v1 fee-conformance-vector-set-v1
+fee-policy-v2 fee-policy-v2-vector-parity github-application github-exact-object-resolver
+github-public-source-core golden-scenarios historical-v1-freeze implementation-legos-runtime
+knowledge-router launch-bundle launch-bundle-v2 launch-bundle-v2-cli
+launch-plan-graph legacy-strict-json-boundaries official-launchpad open-world-migration
+open-world-regressions open-world-runtime open-world-security open-world-source-signals
+open-world-snapshot-source-utilities open-world-v2 open-world-v2-module-boundaries ordinary-launch-cli package-dependency-contract
+policy-bundle project-compiler-foundation project-compiler-materialization
+prepare-canary project-compiler-output project-compiler-plan project-compiler-receipts
+project-compiler-v4-deployment project-executor-safety project-repair-attempt project-sandbox-host
+project-surfaces public-claims
+raw-git-integrity-core registry-acceptance-v3-github registry-discovery residual-json-boundaries
+resolve-contract-core review-target review-target-contract reviewed-drift-receipt
+runtime-assets-core schema-security semantic-rule-registry source-closure-verifier
+source-evidence-workflow source-manifest strict-json-core submission submit-launch-policy-client
+template-catalog trade-capability-manifest typed-launch-contracts-v1 upstream-drift
+v4-hook-semantic-contract verify-package-build-info verify-skill-static
+`.trim().split(/\s+/u).map((stem) => `test/portable-skill/${stem}.test.mjs`));
+
+export const INSTALLED_RUNTIME_SMOKE = "scripts/installed-runtime-smoke.mjs";
+
+if (!isMainThread && workerData?.kind === "module-syntax-parser") {
+  if (!Array.isArray(workerData.scripts) || typeof vm.SourceTextModule !== "function") {
+    throw new Error("module syntax parser requires Node 24 vm.SourceTextModule and a script inventory");
+  }
+  const diagnostics = [];
+  for (const script of workerData.scripts) {
+    try {
+      const source = fs.readFileSync(script, "utf8");
+      new vm.SourceTextModule(source, { identifier: script });
+    } catch (error) {
+      const name = typeof error?.name === "string" ? error.name : "Error";
+      const message = typeof error?.message === "string" ? error.message : String(error);
+      diagnostics.push({ message: `${name}: ${message}`.slice(0, 4_096), script });
+    }
+  }
+  parentPort.postMessage({ diagnostics });
+}
+
+export async function parseModuleSyntax({
+  scripts,
+  timeoutMs = MODULE_SYNTAX_TIMEOUT_MS
+}) {
+  return await new Promise((resolve) => {
+    let payload = null;
+    let settled = false;
+    let deadline = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (deadline !== null) clearTimeout(deadline);
+      resolve(result);
+    };
+    let worker;
+    try {
+      worker = new Worker(new URL(import.meta.url), {
+        execArgv: ["--experimental-vm-modules", "--no-warnings"],
+        resourceLimits: {
+          codeRangeSizeMb: 16,
+          maxOldGenerationSizeMb: 128,
+          maxYoungGenerationSizeMb: 16,
+          stackSizeMb: 4
+        },
+        type: "module",
+        workerData: { kind: "module-syntax-parser", scripts }
+      });
+    } catch (error) {
+      finish({ diagnostics: [], failure: `module syntax parser could not start: ${error.message}` });
+      return;
+    }
+    deadline = setTimeout(() => {
+      void worker.terminate();
+      finish({ diagnostics: [], failure: `module syntax parser exceeded its ${timeoutMs}ms bound` });
+    }, timeoutMs);
+
+    worker.once("message", (message) => {
+      let outputBytes;
+      try {
+        outputBytes = Buffer.byteLength(JSON.stringify(message));
+      } catch {
+        void worker.terminate();
+        finish({ diagnostics: [], failure: "module syntax parser returned an invalid result" });
+        return;
+      }
+      if (outputBytes > MODULE_SYNTAX_OUTPUT_BYTES) {
+        void worker.terminate();
+        finish({ diagnostics: [], failure: "module syntax parser exceeded its 4 MiB output bound" });
+        return;
+      }
+      payload = message;
+    });
+    worker.once("error", (error) => {
+      finish({ diagnostics: [], failure: `module syntax parser failed: ${error.message}` });
+    });
+    worker.once("exit", (status) => {
+      if (status !== 0) {
+        finish({ diagnostics: [], failure: `module syntax parser exited with status ${status}` });
+        return;
+      }
+      if (!Array.isArray(payload?.diagnostics) || payload.diagnostics.some((diagnostic) =>
+        typeof diagnostic?.script !== "string" || typeof diagnostic?.message !== "string"
+      )) {
+        finish({ diagnostics: [], failure: "module syntax parser returned an invalid result" });
+        return;
+      }
+      finish({ diagnostics: payload.diagnostics, failure: null });
+    });
+  });
+}
+
+export function validateRepositoryTestInventory({ errors, repositoryRoot }) {
+  const discovered = fs.readdirSync(path.join(repositoryRoot, "test", "portable-skill"))
+    .filter((name) => name.endsWith(".test.mjs"))
+    .sort()
+    .map((name) => `test/portable-skill/${name}`);
+  const declaredSet = new Set(REQUIRED_REPOSITORY_TESTS);
+  const discoveredSet = new Set(discovered);
+  const missing = REQUIRED_REPOSITORY_TESTS.filter((relativePath) => !discoveredSet.has(relativePath)).sort();
+  const undeclared = discovered.filter((relativePath) => !declaredSet.has(relativePath));
+  const duplicates = REQUIRED_REPOSITORY_TESTS
+    .filter((relativePath, index) => REQUIRED_REPOSITORY_TESTS.indexOf(relativePath) !== index);
+  if (missing.length + undeclared.length + duplicates.length > 0) {
+    errors.push([
+      "repository test inventory must exactly match declared required tests",
+      `missing files: ${missing.join(", ") || "none"}`,
+      `undeclared tests: ${undeclared.join(", ") || "none"}`,
+      `duplicate declarations: ${[...new Set(duplicates)].sort().join(", ") || "none"}`
+    ].join("; "));
+  }
+}
 
 export function createDeterministicTestBatches(testFiles) {
   return Array.from({ length: TEST_BATCH_COUNT }, (_, batchIndex) =>
@@ -28,30 +167,42 @@ export async function runDeterministicTestBatches({
 }) {
   const batches = createDeterministicTestBatches(testFiles);
   const deadline = now() + timeoutMs;
-  const results = [];
-  let remainingOutputBytes = maximumOutputBytes;
+  const batchTimeoutMs = Math.floor(deadline - now());
+  if (batchTimeoutMs < 1) {
+    return { batches, failure: { batchIndex: 0, kind: "timeout", signal: null, status: null }, results: [] };
+  }
+  const batchOutputBytes = Math.floor(maximumOutputBytes / batches.length);
+  if (batchOutputBytes < 1) {
+    return { batches, failure: { batchIndex: 0, kind: "output", signal: null, status: null }, results: [] };
+  }
 
-  for (const [batchIndex, batch] of batches.entries()) {
-    const timeoutMs = Math.floor(deadline - now());
-    if (timeoutMs < 1) {
-      return { batches, failure: { batchIndex, kind: "timeout", signal: null, status: null }, results };
-    }
-    if (remainingOutputBytes < 1) {
-      return { batches, failure: { batchIndex, kind: "output", signal: null, status: null }, results };
-    }
-    const result = await runChildProcess({
-      command,
-      args: ["--test", "--test-concurrency=2", ...batch],
-      cwd,
-      env,
-      maximumOutputBytes: remainingOutputBytes,
-      timeoutMs
-    });
-    results.push(result);
+  const settlements = await Promise.allSettled(batches.map((batch) => runChildProcess({
+    command,
+    args: ["--test", "--test-concurrency=2", ...batch],
+    cwd,
+    env,
+    maximumOutputBytes: batchOutputBytes,
+    timeoutMs: batchTimeoutMs
+  })));
+  const results = settlements.map((settlement) => settlement.status === "fulfilled"
+    ? settlement.value
+    : {
+        outputExceeded: false,
+        runnerRejected: true,
+        signal: null,
+        status: null,
+        stderr: settlement.reason instanceof Error
+          ? settlement.reason.message
+          : "child runner rejected without an Error",
+        stdout: "",
+        timedOut: false
+      });
+
+  for (const [batchIndex, result] of results.entries()) {
+    if (result.runnerRejected) return { batches, failure: { ...result, batchIndex, kind: "runner" }, results };
     if (result.timedOut) return { batches, failure: { ...result, batchIndex, kind: "timeout" }, results };
     if (result.outputExceeded) return { batches, failure: { ...result, batchIndex, kind: "output" }, results };
     if (result.status !== 0) return { batches, failure: { ...result, batchIndex, kind: "status" }, results };
-    remainingOutputBytes -= Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr);
   }
   return { batches, failure: null, results };
 }
@@ -60,21 +211,27 @@ export async function validateScriptsAndTests({
   errors,
   installedMode,
   relative,
+  repositoryRoot,
   skillRoot,
   untrustedDataMode,
   walk
 }) {
-  for (const script of walk(path.join(skillRoot, "scripts")).filter((entry) => entry.stat.isFile() && entry.path.endsWith(".mjs")).map((entry) => entry.path)) {
-    const result = childProcess.spawnSync(process.execPath, ["--check", script], { encoding: "utf8", shell: false });
-    if (result.status !== 0) errors.push(`${relative(script)}: ${result.stderr.trim()}`);
+  const scripts = walk(path.join(skillRoot, "scripts"))
+    .filter((entry) => entry.stat.isFile() && entry.path.endsWith(".mjs"))
+    .map((entry) => entry.path);
+  const syntax = await parseModuleSyntax({ scripts });
+  if (syntax.failure) {
+    errors.push(syntax.failure);
+  } else {
+    for (const diagnostic of syntax.diagnostics) {
+      errors.push(`${relative(diagnostic.script)}: ${diagnostic.message}`);
+    }
   }
 
-  const testDirectory = path.join(skillRoot, "scripts", "test");
   if (!untrustedDataMode) {
-    const testFiles = fs.readdirSync(testDirectory)
-      .filter((name) => name.endsWith(".test.mjs") && (!installedMode || name === "cli.test.mjs"))
-      .sort()
-      .map((name) => path.join(testDirectory, name));
+    const testFiles = installedMode
+      ? [path.join(skillRoot, INSTALLED_RUNTIME_SMOKE)]
+      : REQUIRED_REPOSITORY_TESTS.map((relativePath) => path.join(repositoryRoot, ...relativePath.split("/")));
     const tests = await runDeterministicTestBatches({
       command: process.execPath,
       cwd: skillRoot,
@@ -88,6 +245,8 @@ export async function validateScriptsAndTests({
         errors.push(`deterministic tests exceeded the shared 15-minute aggregate bound in ${shard}:\n${stdout}${stderr}`.trim());
       } else if (kind === "output") {
         errors.push(`deterministic tests exceeded the shared 128 MiB aggregate output bound in ${shard}`);
+      } else if (kind === "runner") {
+        errors.push(`deterministic test runner failed in ${shard}: ${stderr}`.trim());
       } else {
         errors.push(`deterministic tests failed in ${shard} (status ${status ?? "null"}, signal ${signal ?? "none"}):\n${stdout}${stderr}`.trim());
       }

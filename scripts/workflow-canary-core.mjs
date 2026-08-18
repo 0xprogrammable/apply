@@ -8,7 +8,7 @@ import {
   GitHubPublicSourceError,
   parseBoundedLosslessJson,
   resolveGitHubPublicSourceV1
-} from "../vendor/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   canonicalLaunchPolicyDecision,
   evaluateTrustedLaunchPolicyReview

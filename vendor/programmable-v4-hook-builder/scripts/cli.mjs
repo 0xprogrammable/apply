@@ -6,11 +6,14 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseCli, renderHelp } from "./cli-args.mjs";
 import { normalizeCompanionManifest } from "./companion-manifest-contract.mjs";
-import { inspectLocalGitReadiness, preparePullRequest } from "./cli-prepare-pr.mjs";
+import { preparePullRequest } from "./cli-prepare-pr.mjs";
+import { compactDoctorReport } from "./cli-prepare-pr-readiness.mjs";
 import { runLaunchBundleV2Cli } from "./launch-bundle-v2.mjs";
+import { detectOpenWorldV2Submission, executeOpenWorldV2Check } from "./open-world-v2-validation-core.mjs";
 import { assertInsideRepository, resolveInstalledPackageRoot, resolveRepositoryRoot } from "./repository-root.mjs";
 import { CliFailure, emitFailure, emitSuccess, requireJsonResult, runBundledCommand } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
+import { summarizeV1Check, summarizeV2Check } from "./submission-report-core.mjs";
 import { parseBoundedStrictJsonBytes } from "./strict-json-core.mjs";
 import { SUBMIT_LAUNCH_INTAKE_CONTRACT as INTAKE } from "./registry-intake-contract.mjs";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +22,7 @@ const delegatedCommands = new Map([
   ["open-world", { script: "open-world.mjs", prefix: [] }],
   ["application-recheck", { script: "application-recheck.mjs", prefix: [] }],
   ["context", { script: "knowledge-router.mjs", prefix: [] }],
+  ["policy", { script: "current-launch-requirements.mjs", prefix: [] }],
   ["templates", { script: "template-catalog.mjs", prefix: [] }],
   ["discover", { script: "registry-discovery.mjs", prefix: [] }],
   ["resolve-contract", { script: "resolve-contract.mjs", prefix: [] }],
@@ -27,37 +31,40 @@ const delegatedCommands = new Map([
   ["fee", { script: "fee-conformance.mjs", prefix: [] }],
   ["launch-bundle", { script: "launch-bundle.mjs", prefix: [] }],
   ["launch-plan-graph", { script: "launch-plan-graph.mjs", prefix: [] }],
+  ["handoff", { script: "application-handoff.mjs", prefix: [] }],
   ["submit", { script: "github-application.mjs", prefix: ["submit"] }],
   ["status", { script: "github-application.mjs", prefix: ["status"] }],
   ["update", { script: "github-application.mjs", prefix: ["update"] }],
   ["version", { script: "builder-lifecycle.mjs", prefix: ["version"] }],
   ["update-check", { script: "builder-lifecycle.mjs", prefix: ["update-check"] }],
   ["migrate", { script: "builder-lifecycle.mjs", prefix: ["migrate"] }],
-  ["plan-release", { script: "builder-lifecycle.mjs", prefix: ["plan-release"] }]
+  ["plan-release", { script: "builder-lifecycle.mjs", prefix: ["plan-release"] }],
+  ["prepare-canary", { script: "prepare-canary.mjs", prefix: [] }]
 ]);
 const commandSpecs = new Map([
   ["doctor", {
-    usage: "cli.mjs doctor [--repository-root <path>]",
-    summary: "Inspect local builder readiness and emit one JSON result.",
-    options: [repositoryOption()],
+    usage: "cli.mjs doctor [--json] [--repository-root <path>]",
+    summary: "Inspect local readiness; --json adds complete diagnostics.",
+    options: [repositoryOption(), { name: "--json", key: "fullJson", type: "boolean", description: "Include complete diagnostics." }],
     positionals: { min: 0, max: 0 }
   }],
   ["scaffold", {
     usage: "cli.mjs scaffold <model-id> [--name <display-name>] [--destination <path>] [--template-plan <programmable-template.json>] [--repository-root <path>]",
-    summary: "Create one isolated proposal package through the canonical scaffolder.",
+    summary: "Create a frozen legacy V1 package.",
     options: [
       repositoryOption(),
       { name: "--name", key: "modelName", type: "value", valueName: "display-name", description: "Set the model display name." },
       { name: "--destination", key: "destination", type: "value", valueName: "path", description: "Create below this repository directory." },
-      { name: "--template-plan", key: "templatePlan", type: "value", valueName: "programmable-template.json", description: "Bind one exact materialized starter and capability selection into the new submission." }
+      { name: "--template-plan", key: "templatePlan", type: "value", valueName: "programmable-template.json", description: "Reserved historical input; frozen legacy V1 scaffold rejects current catalog plans." }
     ],
     positionals: { min: 1, max: 1, names: ["model-id"] }
   }],
   ["check", {
-    usage: "cli.mjs check <submission.json> [--write-report <path> | --no-write] [--require-design-ready | --require-intake-ready | --require-ready | --require-prototype-validated] [--repository-root <path>]",
-    summary: "Generate the canonical compatibility report. Without a --require-* gate, exit 0 means report generation only, not readiness.",
+    usage: "cli.mjs check <submission.json> [--json] [--write-report <path> | --no-write] [--require-design-ready | --require-intake-ready | --require-ready | --require-prototype-validated] [--repository-root <path>]",
+    summary: "Summarize at most three root causes and generate the canonical compatibility report. Use --json for complete diagnostics; without a --require-* gate, exit 0 means report generation only, not readiness.",
     options: [
       repositoryOption(),
+      { name: "--json", key: "fullJson", type: "boolean", description: "Return the complete machine-readable report instead of the concise outcome." },
       { name: "--write-report", key: "reportPath", type: "value", valueName: "path", description: "Write to this in-repository path; by default compatibility-report.json is written beside the submission." },
       { name: "--no-write", key: "noWrite", type: "boolean", description: "Return the diagnostic report without changing files." },
       { name: "--require-design-ready", key: "requireDesignReady", type: "boolean", description: "Fail unless the design axis is DESIGN_READY." },
@@ -69,7 +76,7 @@ const commandSpecs = new Map([
   }],
   ["package", {
     usage: "cli.mjs package <submission-directory> [--require-intake-ready | --require-ready] [--repository-root <path>]",
-    summary: "Validate the released V1 package; never execute project code.",
+    summary: "Validate frozen V1 bytes; never execute project code.",
     options: [
       repositoryOption(),
       { name: "--require-intake-ready", key: "requireIntakeReady", type: "boolean", description: "Fail unless static package intake is READY." },
@@ -88,7 +95,7 @@ const commandSpecs = new Map([
   }],
   ["prepare-pr", {
     usage: "cli.mjs prepare-pr <submission-directory> [--base main] [--companion-manifest <path>]... [--output-dir <path>] [--replace-existing | --replace-draft] [--repository-root <path>]",
-    summary: "Prepare Submit a Launch PR metadata without a GitHub write.",
+    summary: "Prepare frozen V1 transport metadata without a GitHub write.",
     options: [
       repositoryOption(),
       { name: "--base", key: "baseBranch", type: "value", valueName: "main", description: `Fixed target: ${launchTarget.slug}:${launchTarget.defaultBranch}.` },
@@ -109,16 +116,17 @@ const commandSpecs = new Map([
 ]);
 const argv = process.argv.slice(2);
 if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
-  process.stdout.write(`${globalHelp()}\n`);
+  const helpRenderer = new Map([[false, globalHelp], [true, globalHelpJson]]).get(argv.includes("--json"));
+  process.stdout.write(`${helpRenderer()}\n`);
   process.exit(0);
 }
 const command = argv[0];
 const nodeMajor = Number.parseInt(process.versions.node.split(".", 1)[0], 10);
-const nodeRuntimeSupported = Number.isInteger(nodeMajor) && nodeMajor >= 24;
+const nodeRuntimeSupported = Number.isInteger(nodeMajor) && nodeMajor >= 22;
 if (command !== "doctor" && !nodeRuntimeSupported) {
   process.exitCode = emitFailure(command, new CliFailure(
-    "NODE_24_OR_NEWER_REQUIRED",
-    "Programmable v4 Builder requires Node.js 24 or newer"
+    "NODE_22_OR_NEWER_REQUIRED",
+    "Programmable v4 Builder requires Node.js 22 or newer"
   ));
 } else if (command === "start" && (argv.slice(1).includes("--help") || argv.slice(1).includes("-h"))) {
   process.stdout.write(`${startHelp()}\n`);
@@ -189,15 +197,8 @@ async function execute(command, options, positionals) {
       ),
       "doctor.mjs"
     );
-    const publicBetaGit = inspectLocalGitReadiness(repositoryRoot);
-    return {
-      ...tooling,
-      publicBetaGit,
-      readyForPublicBeta: false,
-      publicBetaNote: publicBetaGit.readyForPreparePrLocal
-        ? "Local Git gates are ready; public GitHub repository, commit and tree reachability remain notChecked until prepare-pr."
-        : "One or more local Git gates block prepare-pr; public reachability remains notChecked."
-    };
+    const report = { ...tooling, publicBetaNote: "Application V3 is the current protected public Applicant path; doctor does not inspect GitHub authentication." };
+    return new Map([[false, compactDoctorReport(report)], [true, report]]).get(options.fullJson);
   }
   if (command === "scaffold") {
     const [modelId] = positionals;
@@ -221,6 +222,9 @@ async function execute(command, options, positionals) {
   }
   if (command === "check") {
     const submission = resolveRegularFile(repositoryRoot, positionals[0]);
+    if (detectOpenWorldV2Submission(submission)) {
+      return executeOpenWorldV2Check({ submission, repositoryRoot, options, summarize: summarizeV2Check });
+    }
     const args = [submission, "--repository-root", repositoryRoot];
     const result = requireJsonResult(
       runBundledCommand("validate-submission.mjs", args, {
@@ -249,18 +253,19 @@ async function execute(command, options, positionals) {
             submissionHash: result.submissionHash
           }
     };
+    const output = options.fullJson ? completed : summarizeV1Check(completed);
     if (options.requirePrototypeValidated) {
       throw new CliFailure(
         "INDEPENDENT_VERIFICATION_REQUIRED",
         "prototype validation requires independent verification that this local command does not perform",
-        { exitCode: 1, details: completed }
+        { exitCode: 1, details: output }
       );
     }
     if (options.requireDesignReady && result.readiness?.design !== "DESIGN_READY") {
       throw new CliFailure(
         "CHECK_DESIGN_NOT_READY",
         "the exact design has not reached DESIGN_READY",
-        { exitCode: 1, details: completed }
+        { exitCode: 1, details: output }
       );
     }
     if (
@@ -273,10 +278,10 @@ async function execute(command, options, positionals) {
       throw new CliFailure(
         "CHECK_INTAKE_NOT_READY",
         "the exact implementation has not reached STRUCTURALLY_COMPLETE with complete repository closure",
-        { exitCode: 1, details: completed }
+        { exitCode: 1, details: output }
       );
     }
-    return completed;
+    return output;
   }
   if (command === "package") {
     const packageRoot = resolveDirectory(repositoryRoot, positionals[0]);
@@ -442,47 +447,36 @@ function globalHelp() {
   return [
     "Usage: cli.mjs <command> [options]",
     "",
-    "Programmable v4 Builder JSON entry point.",
+    "Programmable v4 Builder. Local checks are not approval.",
     "",
-    "Commands:",
-    "  open-world    Prepare open-world v2/Application V3 locally (candidate).",
-    "  application-recheck  Recheck immutable application evidence.",
-    "  context       Select the smallest local knowledge profile for this task.",
-    "  templates     List, inspect or materialize open starter packs.",
-    "  discover      Search, inspect, or compare the live Programmable project Registry.",
-    "  resolve-contract  Resolve exact public default-branch contract evidence; never infer approval.",
-    "  start         Materialize one starter plus capability packs.",
-    "  profile       Detect build profiles without executing code.", "  project       Validate or execute canonical project output.",
-    "  doctor        Inspect local tooling and repository readiness.",
-    "  scaffold      Create one isolated proposal package.",
-    "  check         Generate a compatibility report; readiness gates are opt-in.",
-    "  fee           Create or check structural fee-conformance evidence.",
-    "  launch-bundle Build an unsigned DeploymentSpec candidate from exact local bytes.",
-    "  launch-bundle-v2  Check exact multi-repository V2 bytes read-only; never authorize.",
-    "  package       Validate the released V1 package.",
-    "  companion     Validate or canonicalize one companion manifest.",
-    "  prepare-pr    Prepare Submit a Launch PR metadata.",
-    "  submit        Create a draft-only Submit a Launch PR.",
-    "  status        Read Submit a Launch status.",
-    "  update        Update an existing Submit a Launch draft.",
-    "  version       Report bundled versions or an explicit installed-state override.",
-    "  update-check  Verify a supplied signed and pinned update.",
-    "  migrate       Produce a migration dry-run; never write it.",
-    "  plan-release  Plan one private daily release candidate.",
-    "",
-    "Run 'cli.mjs <command> --help' for command options."
+    "Golden path:",
+    "  doctor        Check local readiness.",
+    "  policy        Read current launch requirements.",
+    "  context       Route the confirmed task.",
+    "  project       Materialize and verify output.",
+    "  handoff       Preview bound handoff; no writes",
+    "Start: doctor -> policy -> context --mode autopilot -> project --help -> handoff --help",
+    "Templates: cli.mjs templates list",
+    "All commands: cli.mjs --help --json"
   ].join("\n");
+}
+function globalHelpJson() {
+  const commands = [...new Set(["launch-bundle-v2", ...delegatedCommands.keys(), ...commandSpecs.keys()])]
+    .sort().map((id) => ({ id, help: `cli.mjs ${id} --help` }));
+  return canonicalJson({ schemaVersion: "1.0.0", ok: true, command: "help", result: { goldenPath: ["doctor", "policy", "context", "project", "handoff"], frozenLegacyCommands: ["application-recheck", "fee", "launch-bundle", "launch-bundle-v2", "package", "prepare-pr", "scaffold", "submit", "status", "update"], commands } });
 }
 function startHelp() {
   return [
     "Usage: cli.mjs start --starter <id> --target <new-directory>",
     "       [--pack <id>]... [--capability <known-id>]... [--custom-capability <id>=<visible-label>]...",
+    "       [--chainlink-product ccip|cre|data-feeds|data-streams|vrf-v2-5]...",
     "       [--local-tag <slug>]...",
     "",
     "Create one deterministic planning directory from a starter and capability packs.",
     "--target names the new directory itself; its parent must already exist.",
-    "Keep the plan inside the project repository when it will later be passed to cli.mjs scaffold.",
+    "Use the plan for architecture review; frozen legacy V1 scaffold does not accept current catalog plans.",
     "Dependencies and mandatory packs are included automatically.",
+    "Chainlink requires --chainlink-product with one exact product; --pack chainlink-provider is intentionally incomplete.",
     "Known --capability selections are exact Legos and never expand sibling capabilities from a pack.",
     "Unknown capabilities stay eligible and route to architecture review.",
     "No Git, network, submission, deployment or publication action occurs."
@@ -521,6 +515,7 @@ function checkCommandOutcome(result, options) {
     readinessFlags: ["--require-design-ready", "--require-intake-ready", "--require-prototype-validated"]
   };
 }
+
 function runDelegatedCommand(command, args) {
   const delegated = delegatedCommands.get(command);
   const scriptPath = path.join(scriptDirectory, delegated.script);

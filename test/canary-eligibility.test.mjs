@@ -439,15 +439,27 @@ test("protected canary compiler CLI emits one canonical envelope without reposit
   assert.equal(git(fixture.base, ["status", "--short"]), before);
 });
 
-test("exact canary compiler scripts are maintenance but nearby scripts and mixed applicant PRs fail", (t) => {
+test("exact canary and Applicant compatibility maintenance paths are bounded while nearby paths and mixed applicant PRs fail", (t) => {
   const fixture = createPolicyRepository(t);
   for (const script of [
     "scripts/canary-eligibility-core.mjs",
-    "scripts/compile-canary-eligibility.mjs"
+    "scripts/compile-canary-eligibility.mjs",
+    "scripts/applicant-compatibility-core.mjs"
   ]) {
     git(fixture.candidate, ["checkout", "--quiet", "--detach", fixture.baseCommit]);
     writeFile(fixture.candidate, script, "maintenance\n");
     const head = commitAll(fixture.candidate, `maintain ${script}`);
+    const merge = createMergeCommit(fixture.candidate, fixture.baseCommit, head);
+    assert.equal(classifyPublicIntakePullRequest(classificationInput(fixture, head, merge)).mode, "registry-maintenance");
+  }
+
+  for (const entryPath of [
+    ".programmable/applicant-compatibility.v1.json",
+    "vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs"
+  ]) {
+    git(fixture.candidate, ["checkout", "--quiet", "--detach", fixture.baseCommit]);
+    writeFile(fixture.candidate, entryPath, "maintenance\n");
+    const head = commitAll(fixture.candidate, `maintain ${entryPath}`);
     const merge = createMergeCommit(fixture.candidate, fixture.baseCommit, head);
     assert.equal(classifyPublicIntakePullRequest(classificationInput(fixture, head, merge)).mode, "registry-maintenance");
   }
@@ -460,6 +472,20 @@ test("exact canary compiler scripts are maintenance but nearby scripts and mixed
     () => classifyPublicIntakePullRequest(classificationInput(fixture, nearbyHead, nearbyMerge)),
     hasCode("CHANGED_PATH_NOT_ALLOWED")
   );
+
+  for (const entryPath of [
+    ".programmable/applicant-compatibility.v2.json",
+    "vendor/programmable-applicant-validator-private/scripts/public-applicant-validator.mjs"
+  ]) {
+    git(fixture.candidate, ["checkout", "--quiet", "--detach", fixture.baseCommit]);
+    writeFile(fixture.candidate, entryPath, "untrusted\n");
+    const head = commitAll(fixture.candidate, `nearby ${entryPath}`);
+    const merge = createMergeCommit(fixture.candidate, fixture.baseCommit, head);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInput(fixture, head, merge)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED")
+    );
+  }
 
   git(fixture.candidate, ["checkout", "--quiet", "--detach", fixture.baseCommit]);
   writeFile(fixture.candidate, "scripts/canary-eligibility-core.mjs", "maintenance\n");

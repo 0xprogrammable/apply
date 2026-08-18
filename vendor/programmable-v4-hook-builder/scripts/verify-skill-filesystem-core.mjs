@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// The portable package excludes repository-only development tests. Runtime,
+// installed verification and frozen compatibility assets remain in the Skill.
+export const MAX_PORTABLE_FILES = 620;
+
 export function createPortableFilesystem(skillRoot) {
   function relative(target) {
     return path.relative(skillRoot, target).replaceAll(path.sep, "/");
@@ -73,6 +77,13 @@ export function isInside(parent, child) {
   const result = path.relative(parent, child);
   return result === ""
     || (result !== ".." && !result.startsWith(`..${path.sep}`) && !path.isAbsolute(result));
+}
+
+export function writeDiagnostics(messages, { write = (payload, callback) => process.stderr.write(payload, callback) } = {}) {
+  const payload = [...new Set(messages)].sort().map((message) => `- ${message}\n`).join("");
+  return new Promise((resolve, reject) => {
+    write(payload, (error) => error ? reject(error) : resolve());
+  });
 }
 
 function lstatOrNull(target) {

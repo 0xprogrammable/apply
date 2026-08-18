@@ -1,6 +1,6 @@
-import { validateFeeConformanceCompletionV1 } from "../vendor/programmable-v4-hook-builder/scripts/fee-conformance-receipt-v1-core.mjs";
-import { isCanonicalPositiveUint256DecimalV2 } from "../vendor/programmable-v4-hook-builder/scripts/fee-policy-v2-core.mjs";
-import { canonicalJson, isObject } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-primitives.mjs";
+import { validateFeeConformanceCompletionV1 } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { isCanonicalPositiveUint256DecimalV2 } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { canonicalJson, isObject } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   OPEN_WORLD_V2_FEE_NOT_APPLICABLE,
   PROGRAMMABLE_FEE_V2,
@@ -9,7 +9,7 @@ import {
   hasExactFeeNotApplicableProfile,
   idsFor,
   slugPattern
-} from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-contracts.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 
 export function validateOpenWorldV2Fee(context) {
   const {

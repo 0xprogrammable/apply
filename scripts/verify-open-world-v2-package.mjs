@@ -1,7 +1,7 @@
-import { createOpenWorldV2ValidationRuntime } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-validation-runtime.mjs";
+import { createOpenWorldV2ValidationRuntime } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import { validateOpenWorldV2Intent } from "./verify-open-world-v2-validation-intent.mjs";
-import { validateOpenWorldV2Graph } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-validation-graph.mjs";
-import { finalizeOpenWorldV2Validation } from "../vendor/programmable-v4-hook-builder/scripts/open-world-v2-validation-report.mjs";
+import { validateOpenWorldV2Graph } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+import { finalizeOpenWorldV2Validation } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import { validateOpenWorldV2Intake } from "./verify-open-world-v2-validation-intake.mjs";
 import { validateOpenWorldV2Fee } from "./verify-open-world-v2-validation-fee.mjs";
 

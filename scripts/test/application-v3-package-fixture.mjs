@@ -11,7 +11,7 @@ import {
 import {
   createApplicableOpenWorldV2PrototypeFixture,
   createNoMarketOpenWorldV2PrototypeFixture
-} from "../../vendor/programmable-v4-hook-builder/scripts/test/open-world-v2-prototype-fixture.mjs";
+} from "./fixtures/open-world-v2-prototype-fixture.mjs";
 import {
   PUBLIC_PR_APPLICATION_V3_BASE_REQUIRED_REVIEW_KINDS
 } from "../verify-public-application-v3-core.mjs";

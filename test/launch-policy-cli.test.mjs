@@ -52,6 +52,11 @@ function isolatedCliFixture(t, policyBytes) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(root, relativePath), target);
   }
+  fs.cpSync(
+    path.join(root, "vendor/programmable-applicant-validator"),
+    path.join(fixtureRoot, "vendor/programmable-applicant-validator"),
+    { recursive: true }
+  );
   if (policyBytes !== null) {
     const target = path.join(fixtureRoot, "policy/launch-policy.v1.json");
     fs.mkdirSync(path.dirname(target), { recursive: true });
