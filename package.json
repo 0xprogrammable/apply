@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.12.0"
   },
   "scripts": {
+    "admission:contract:check": "node scripts/universal-admission-contract.mjs --check",
+    "admission:contract:write": "node scripts/universal-admission-contract.mjs --write",
+    "admission:reference:benchmark": "node scripts/benchmark-universal-admission-sqlite.mjs",
     "authority:check": "node scripts/launch-policy-authority-ownership.mjs --check",
     "authority:write": "node scripts/launch-policy-authority-ownership.mjs --write",
     "compile:canary-eligibility": "node scripts/compile-canary-eligibility.mjs",
@@ -20,6 +23,7 @@
     "review": "node review/cli.mjs",
     "test": "node scripts/verify-repository.mjs",
     "test:acceptance": "node --test test/canary-eligibility.test.mjs test/acceptance-entitlement.test.mjs",
+    "test:admission": "node --test test/universal-admission.test.mjs test/universal-admission-command.test.mjs test/universal-admission-contract.test.mjs test/universal-admission-protocol.test.mjs test/authenticated-admission-service.test.mjs test/universal-admission-sqlite.test.mjs",
     "test:intake": "node --test --test-concurrency=1 scripts/test/verify-public-hook-application*.test.mjs",
     "test:registry": "node --test test/*.test.mjs"
   },

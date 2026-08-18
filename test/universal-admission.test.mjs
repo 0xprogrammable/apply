@@ -40,6 +40,8 @@ test("universal admission schema is closed and accepts an open-world game/hook d
   for (const repositoryUrl of [
     "http://example.com/source",
     "https://token@example.com/source",
+    "https://example.com:443/source",
+    "https://example.com:8443/source",
     "https://example.com/source?token=secret",
     "https://example.com/source#private"
   ]) {
@@ -52,6 +54,65 @@ test("universal admission schema is closed and accepts an open-world game/hook d
       repositoryUrl
     );
   }
+  for (const repositoryUrl of [
+    "https://EXAMPLE.com/source",
+    "https://example.com"
+  ]) {
+    const equivalentPublicUrl = fixture();
+    equivalentPublicUrl.source.repositoryUrl = repositoryUrl;
+    assert.equal(validate(equivalentPublicUrl), true, repositoryUrl);
+    assert.doesNotThrow(() => validateUniversalAdmission(equivalentPublicUrl), repositoryUrl);
+  }
+});
+
+test("value API snapshots plain admission data without observing accessors or proxies", () => {
+  let getterReads = 0;
+  const accessorValue = fixture();
+  Object.defineProperty(accessorValue, "kind", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return getterReads === 1 ? "programmable-universal-admission" : "schema-invalid-kind";
+    }
+  });
+  assert.throws(
+    () => validateUniversalAdmission(accessorValue),
+    hasCode("UNIVERSAL_ADMISSION_OBJECT_INVALID")
+  );
+  assert.equal(getterReads, 0);
+
+  let proxyTraps = 0;
+  const proxyValue = new Proxy(fixture(), {
+    get(target, key, receiver) {
+      proxyTraps += 1;
+      return Reflect.get(target, key, receiver);
+    },
+    ownKeys(target) {
+      proxyTraps += 1;
+      return Reflect.ownKeys(target);
+    }
+  });
+  assert.throws(
+    () => validateUniversalAdmission(proxyValue),
+    hasCode("UNIVERSAL_ADMISSION_OBJECT_INVALID")
+  );
+  assert.equal(proxyTraps, 0);
+
+  let byteGetterReads = 0;
+  const options = {};
+  Object.defineProperty(options, "bytes", {
+    enumerable: true,
+    get() {
+      byteGetterReads += 1;
+      return Buffer.from(`${canonicalJson(fixture())}\n`);
+    }
+  });
+  assert.throws(
+    () => validateUniversalAdmission(fixture(), options),
+    hasCode("UNIVERSAL_ADMISSION_BYTES_INVALID")
+  );
+  assert.equal(byteGetterReads, 0);
 });
 
 test("proposal with unknown oracle/API details remains admitted but pending", () => {
@@ -90,9 +151,20 @@ test("selecting the Programmable Ethereum route is disclosed and deferred, never
 });
 
 test("hard failures are limited to transport or internally false claims", () => {
+  const schema = JSON.parse(fs.readFileSync(path.join(root, "intake/schemas/universal-admission-v1.schema.json"), "utf8"));
+  const validateSchema = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
   const duplicate = fixture();
   duplicate.disclosure.privileges.push({ ...duplicate.disclosure.privileges[0] });
+  assert.equal(validateSchema(duplicate), false);
   assert.throws(() => validateUniversalAdmission(duplicate), hasCode("UNIVERSAL_ADMISSION_DUPLICATE_ID"));
+
+  const duplicateId = fixture();
+  duplicateId.disclosure.privileges.push({
+    ...duplicateId.disclosure.privileges[0],
+    summary: "A different summary may not reuse the same disclosure id."
+  });
+  assert.equal(validateSchema(duplicateId), true);
+  assert.throws(() => validateUniversalAdmission(duplicateId), hasCode("UNIVERSAL_ADMISSION_DUPLICATE_ID"));
 
   const unsafe = fixture();
   unsafe.disclosure.executionSurfaces[0].sourceRefs = ["../secret"];
@@ -116,6 +188,31 @@ test("canonical duplicate-free bytes and aggregate size are bounded", () => {
   const bytes = Buffer.from(`${canonicalJson(value)}\n`);
   const parsed = validateUniversalAdmissionBytes(bytes);
   assert.match(parsed.sourceDigest, /^sha256:[0-9a-f]{64}$/u);
+
+  let getterReads = 0;
+  const deceptive = new Uint8Array(bytes);
+  for (const property of ["byteLength", "byteOffset", "buffer", "length"]) {
+    Object.defineProperty(deceptive, property, {
+      configurable: true,
+      get() {
+        getterReads += 1;
+        return 0;
+      }
+    });
+  }
+  assert.equal(validateUniversalAdmissionBytes(deceptive).sourceDigest, parsed.sourceDigest);
+  assert.equal(getterReads, 0);
+
+  let proxyTraps = 0;
+  const proxied = new Proxy(new Uint8Array(bytes), {
+    get(target, property, receiver) {
+      proxyTraps += 1;
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  assert.throws(() => validateUniversalAdmissionBytes(proxied), hasCode("UNIVERSAL_ADMISSION_SIZE_INVALID"));
+  assert.equal(proxyTraps, 0);
+
   assert.throws(
     () => validateUniversalAdmission(value, { bytes: Buffer.from("{}\n") }),
     hasCode("UNIVERSAL_ADMISSION_BYTES_MISMATCH")

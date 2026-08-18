@@ -17,6 +17,18 @@ They do not crawl project repositories or load every application into context.
 pull requests are not canonical records. An offline snapshot may be used only when clearly labeled with its Submit a Launch
 commit and age; it must never be presented as live.
 
+## Transport discovery is separate
+
+`.programmable/universal-admission-contract.v1.json` is a same-tree discovery contract for the authenticated Universal
+Admission reference surface. It is not a Registry project record and is not part of the legacy active contract or
+Applicant Compatibility V1.
+
+A consumer must fetch the contract and every bound schema and implementation artifact from the same exact commit and
+verify each SHA-256. It must also obey the deployment fields before selecting a transport. The published V1 state is
+`reference-only-disabled`, with `enabled: false` and null endpoint, audience, and trust snapshot. Therefore no client may
+infer a live queue, authentication configuration, availability, production capacity, review result, or launch authority
+from the presence of the contract or reference code.
+
 ## Search behavior
 
 Search terms may match name, summary, mechanism, outcomes, capabilities, surfaces, synonyms, and tags. Results answer

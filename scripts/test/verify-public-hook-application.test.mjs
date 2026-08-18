@@ -1098,6 +1098,55 @@ test("all exact central policy Canary and release scripts are maintenance while 
   }
 });
 
+test("exact Universal Admission contract and reference paths are maintenance while adjacent private paths stay closed", (t) => {
+  const exactPaths = [
+    ".programmable/universal-admission-contract.v1.json",
+    "intake/schemas/authenticated-admission-transport-receipt-v1.schema.json",
+    "intake/schemas/universal-admission-command-v1.schema.json",
+    "intake/schemas/universal-admission-contract-v1.schema.json",
+    "intake/schemas/universal-admission-event-receipt-v1.schema.json",
+    "intake/schemas/universal-admission-runtime-policy-v1.schema.json",
+    "intake/schemas/universal-admission-snapshot-v1.schema.json",
+    "intake/schemas/universal-admission-trust-v1.schema.json",
+    "intake/schemas/universal-admission-worker-result-v1.schema.json",
+    "scripts/benchmark-universal-admission-sqlite.mjs",
+    "scripts/universal-admission-command-core.mjs",
+    "scripts/universal-admission-contract-core.mjs",
+    "scripts/universal-admission-contract.mjs",
+    "scripts/universal-admission-protocol-core.mjs",
+    "scripts/universal-admission-service-core.mjs",
+    "scripts/universal-admission-sqlite-store.mjs",
+    "scripts/universal-admission-sqlite.mjs"
+  ];
+  for (const relativePath of exactPaths) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, `maintenance fixture for ${relativePath}\n`);
+    const candidateCommit = commitAll(fixture.candidate, `maintain ${relativePath}`);
+    assert.equal(
+      classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)).mode,
+      "registry-maintenance",
+      relativePath
+    );
+  }
+
+  for (const relativePath of [
+    ".programmable/universal-admission-contract.v2.json",
+    ".programmable/universal-admission-private.json",
+    "intake/universal-admission-private.json",
+    "scripts/universal-admission-contract-helper.mjs",
+    "scripts/universal-admission-private-worker.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, "unreviewed Universal Admission maintenance path\n");
+    const candidateCommit = commitAll(fixture.candidate, `reject ${relativePath}`);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED"),
+      relativePath
+    );
+  }
+});
+
 test("bounded Registry maintenance accepts 700 changed files and rejects 701", async (t) => {
   for (const [changedFileCount, expectedMode, expectedCode] of [
     [700, "registry-maintenance", null],

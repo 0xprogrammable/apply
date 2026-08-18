@@ -7,6 +7,8 @@ requirement list.
 
 | State | Evidence | Meaning |
 | --- | --- | --- |
+| Admission envelope prepared | Canonical Universal Admission V1 bytes | Declared source coordinates and disclosures exist; they are not remotely verified or reviewed |
+| Admission queued in a future live transport | Authenticated command plus atomically bound queue event and service readback | Transport accepted one tenant-scoped revision; no review or launch authority exists |
 | Built | `BUILT_NOT_REVIEWED` under the bound `build` profile | The Builder completed declared checks; no review or launch right exists |
 | Canary prepared | Local one-file application | No GitHub or Website action occurred |
 | Canary submitted | One-file pull request in `canary-submissions/` | Hidden workflow review data exists |
@@ -20,6 +22,12 @@ requirement list.
 Policy or subject drift stops the chain before a semantic pass. The Website must independently pin the signer, exact
 policy binding, expected audience, current time, and protected replay state; copying those values from an envelope is
 not authority.
+
+The checked-in Universal Admission queue is not currently a lifecycle entrypoint. Its discovery contract is
+`reference-only-disabled`, and the SQLite implementation is single-host reference code with no public endpoint,
+audience, trust snapshot, or remote worker/admin plane. `QUEUED`, `DUPLICATE`, lease, retry, dead-letter, completion, and
+snapshot states describe transport processing only. They never imply `Built`, review completion, acceptance, Registry
+promotion, deployment, Website eligibility, or availability.
 
 The six-file V2 application remains an open but frozen legacy transport while the checked-in intake state is `open`.
 Its frozen compatibility checks, green checks, merge, or old [launch-entitlement

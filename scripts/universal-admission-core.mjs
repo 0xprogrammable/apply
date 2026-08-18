@@ -1,13 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { TextDecoder } from "node:util";
+import { TextDecoder, types } from "node:util";
 
 import {
   canonicalJson,
-  parseBoundedLosslessJson,
   sha256Bytes
-} from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
+} from "../vendor/programmable-applicant-validator/scripts/open-world-v2-primitives.mjs";
+import {
+  parseBoundedLosslessJson
+} from "../vendor/programmable-applicant-validator/scripts/github-public-source-lossless-json.mjs";
 
 export const UNIVERSAL_ADMISSION_SCHEMA_VERSION = "1.0.0";
 export const UNIVERSAL_ADMISSION_SCHEMA_ID = "urn:programmable:universal-admission:1.0.0";
@@ -19,10 +21,15 @@ export const MAX_UNIVERSAL_ADMISSION_QUEUE_RECORD_BYTES = 4096;
 export const MAX_UNIVERSAL_ADMISSION_QUEUE_ROOT_BYTES = 3072;
 
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer").get;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength").get;
+const typedArrayByteOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteOffset").get;
 const OBJECT_ID = /^[0-9a-f]{40}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const SAFE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*(?:^|\/)\.[gG][iI][tT](?:\/|$))[^\\\u0000\r\n]+$/u;
+const PUBLIC_REPOSITORY_URL = /^https:\/\/[A-Za-z0-9.-]+(?:\/[^\s\u0000\r\n?#]*)?$/u;
 const LABEL = /^[^\s\u0000\r\n]+(?:[ \t]+[^\s\u0000\r\n]+)*$/u;
 const STATUS = new Set(["declared", "not-applicable", "unknown"]);
 const ROUTES = new Set(["none", "programmable-ethereum-mainnet", "other"]);
@@ -54,10 +61,12 @@ export class UniversalAdmissionError extends Error {
  * internally dishonest transport and returns a reviewability status.
  */
 export function validateUniversalAdmissionBytes(bytes) {
-  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 2 || bytes.byteLength > MAX_UNIVERSAL_ADMISSION_BYTES) {
-    fail("UNIVERSAL_ADMISSION_SIZE_INVALID", "Universal admission bytes exceed the closed 256 KiB boundary.");
-  }
-  const buffer = Buffer.from(bytes);
+  const buffer = boundedByteCopy(
+    bytes,
+    MAX_UNIVERSAL_ADMISSION_BYTES,
+    "UNIVERSAL_ADMISSION_SIZE_INVALID",
+    "Universal admission bytes exceed the closed 256 KiB boundary."
+  );
   let source;
   let parsed;
   try {
@@ -83,6 +92,8 @@ export function validateUniversalAdmissionBytes(bytes) {
 }
 
 export function validateUniversalAdmission(value, options = {}) {
+  value = snapshotPlainAdmissionData(value);
+  const suppliedBytes = snapshotAdmissionValidationBytes(options);
   countNodes(value);
   object(value, "$", ["$schema", "application", "attestation", "disclosure", "kind", "schemaVersion", "source"]);
   exact(value.$schema, UNIVERSAL_ADMISSION_SCHEMA_ID, "$.$schema");
@@ -106,13 +117,15 @@ export function validateUniversalAdmission(value, options = {}) {
   }
   if (
     repositoryUrl === null
+    || !PUBLIC_REPOSITORY_URL.test(value.source.repositoryUrl)
     || repositoryUrl.protocol !== "https:"
     || repositoryUrl.hostname.length === 0
+    || !/^[A-Za-z0-9.-]+$/u.test(repositoryUrl.hostname)
+    || repositoryUrl.port.length > 0
     || repositoryUrl.username.length > 0
     || repositoryUrl.password.length > 0
     || repositoryUrl.search.length > 0
     || repositoryUrl.hash.length > 0
-    || repositoryUrl.href !== value.source.repositoryUrl
     || /[\s\u0000\r\n]/u.test(value.source.repositoryUrl)
   ) {
     failAt("UNIVERSAL_ADMISSION_SOURCE_URL_INVALID", "Source repository URL must be public HTTPS.", "$.source.repositoryUrl");
@@ -154,11 +167,8 @@ export function validateUniversalAdmission(value, options = {}) {
     fail("UNIVERSAL_ADMISSION_SIZE_INVALID", "Universal admission bytes exceed the closed 256 KiB boundary.");
   }
   let bytes = canonicalBytes;
-  if (options.bytes !== undefined) {
-    if (!(options.bytes instanceof Uint8Array) || options.bytes.byteLength < 2 || options.bytes.byteLength > MAX_UNIVERSAL_ADMISSION_BYTES) {
-      fail("UNIVERSAL_ADMISSION_BYTES_INVALID", "Admission bytes must be a bounded byte sequence.");
-    }
-    bytes = Buffer.from(options.bytes);
+  if (suppliedBytes !== undefined) {
+    bytes = suppliedBytes;
     if (!bytes.equals(canonicalBytes)) {
       fail("UNIVERSAL_ADMISSION_BYTES_MISMATCH", "Admission result bytes must be the canonical bytes of the validated value.");
     }
@@ -195,6 +205,136 @@ export function validateUniversalAdmission(value, options = {}) {
   return Object.freeze({ ...report, authority: Object.freeze(report.authority), findings: Object.freeze(report.findings) });
 }
 
+function snapshotAdmissionValidationBytes(options) {
+  if (options === undefined) return undefined;
+  if (options === null || typeof options !== "object" || Array.isArray(options) || types.isProxy(options)) {
+    fail("UNIVERSAL_ADMISSION_BYTES_INVALID", "Admission validation options must be a plain data object.");
+  }
+  let prototype;
+  let keys;
+  try {
+    prototype = Object.getPrototypeOf(options);
+    keys = Reflect.ownKeys(options);
+  } catch (error) {
+    fail("UNIVERSAL_ADMISSION_BYTES_INVALID", "Admission validation options could not be inspected.", { cause: error });
+  }
+  if (prototype !== Object.prototype || keys.some((key) => typeof key !== "string" || key !== "bytes")) {
+    fail("UNIVERSAL_ADMISSION_BYTES_INVALID", "Admission validation options contain unsupported fields.");
+  }
+  if (!Object.hasOwn(options, "bytes")) return undefined;
+  let descriptor;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(options, "bytes");
+  } catch (error) {
+    fail("UNIVERSAL_ADMISSION_BYTES_INVALID", "Admission byte option could not be inspected.", { cause: error });
+  }
+  if (
+    descriptor === undefined
+    || descriptor.get !== undefined
+    || descriptor.set !== undefined
+    || !Object.hasOwn(descriptor, "value")
+  ) {
+    fail("UNIVERSAL_ADMISSION_BYTES_INVALID", "Admission bytes must be one bounded data property.");
+  }
+  return boundedByteCopy(
+    descriptor.value,
+    MAX_UNIVERSAL_ADMISSION_BYTES,
+    "UNIVERSAL_ADMISSION_BYTES_INVALID",
+    "Admission bytes must be one bounded data property."
+  );
+}
+
+function snapshotPlainAdmissionData(input) {
+  const ancestors = new WeakSet();
+  let nodes = 0;
+
+  const visit = (value, location, depth) => {
+    nodes += 1;
+    if (nodes > MAX_UNIVERSAL_ADMISSION_NODES || depth > 64) {
+      failAt("UNIVERSAL_ADMISSION_NODE_LIMIT", "Admission data exceeds its closed structural boundary.", location);
+    }
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value !== "object" || types.isProxy(value)) {
+      failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission validation accepts only plain JSON data.", location);
+    }
+    if (ancestors.has(value)) {
+      failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission validation rejects cyclic object graphs.", location);
+    }
+    ancestors.add(value);
+    if (Array.isArray(value) && value.length > MAX_UNIVERSAL_ADMISSION_NODES) {
+      failAt("UNIVERSAL_ADMISSION_NODE_LIMIT", "Admission array exceeds its closed entry boundary.", location);
+    }
+
+    let keys;
+    let prototype;
+    try {
+      keys = Reflect.ownKeys(value);
+      prototype = Object.getPrototypeOf(value);
+    } catch (error) {
+      fail("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission data could not be inspected as plain data.", { cause: error, path: location });
+    }
+
+    if (Array.isArray(value)) {
+      if (prototype !== Array.prototype || keys.some((key) => typeof key !== "string")) {
+        failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission arrays must be ordinary dense arrays.", location);
+      }
+      const allowedKeys = new Set(["length", ...Array.from({ length: value.length }, (_, index) => String(index))]);
+      if (keys.length !== allowedKeys.size || keys.some((key) => !allowedKeys.has(key))) {
+        failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission arrays must be dense and contain no hidden fields.", location);
+      }
+      const output = [];
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (
+          descriptor === undefined
+          || descriptor.enumerable !== true
+          || descriptor.get !== undefined
+          || descriptor.set !== undefined
+          || !Object.hasOwn(descriptor, "value")
+        ) {
+          failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission arrays reject accessors and sparse entries.", `${location}[${index}]`);
+        }
+        output.push(visit(descriptor.value, `${location}[${index}]`, depth + 1));
+      }
+      ancestors.delete(value);
+      return output;
+    }
+
+    if ((prototype !== Object.prototype && prototype !== null) || keys.some((key) => typeof key !== "string")) {
+      failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission objects must be ordinary string-keyed data.", location);
+    }
+    const output = {};
+    for (const key of keys) {
+      let descriptor;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(value, key);
+      } catch (error) {
+        fail("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission field could not be inspected as plain data.", { cause: error, path: `${location}.${key}` });
+      }
+      if (
+        descriptor === undefined
+        || descriptor.enumerable !== true
+        || descriptor.get !== undefined
+        || descriptor.set !== undefined
+        || !Object.hasOwn(descriptor, "value")
+      ) {
+        failAt("UNIVERSAL_ADMISSION_OBJECT_INVALID", "Admission objects reject accessors and hidden fields.", `${location}.${key}`);
+      }
+      Object.defineProperty(output, key, {
+        configurable: true,
+        enumerable: true,
+        value: visit(descriptor.value, `${location}.${key}`, depth + 1),
+        writable: true
+      });
+    }
+    ancestors.delete(value);
+    return output;
+  };
+
+  return visit(input, "$", 0);
+}
+
 export function digestUniversalAdmission(value) {
   return validateUniversalAdmission(value).sourceDigest;
 }
@@ -207,10 +347,12 @@ export function digestUniversalAdmission(value) {
  * never treated as authenticated identities.
  */
 export function enqueueUniversalAdmissionBytes({ actorId, bytes, queueRoot }) {
-  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 2 || bytes.byteLength > MAX_UNIVERSAL_ADMISSION_BYTES) {
-    fail("UNIVERSAL_ADMISSION_SIZE_INVALID", "Universal admission bytes exceed the closed 256 KiB boundary.");
-  }
-  const envelopeBytes = Buffer.from(bytes);
+  const envelopeBytes = boundedByteCopy(
+    bytes,
+    MAX_UNIVERSAL_ADMISSION_BYTES,
+    "UNIVERSAL_ADMISSION_SIZE_INVALID",
+    "Universal admission bytes exceed the closed 256 KiB boundary."
+  );
   const admission = validateUniversalAdmissionBytes(envelopeBytes);
   const boundedActorId = validateQueueActorId(actorId);
   const root = resolveQueueRoot(queueRoot);
@@ -260,6 +402,29 @@ export function enqueueUniversalAdmissionBytes({ actorId, bytes, queueRoot }) {
       queueRecordDigest: sha256Bytes(storedRecordBytes)
     })
   });
+}
+
+function boundedByteCopy(value, maximumBytes, code, message) {
+  if (!(value instanceof Uint8Array) || types.isProxy(value)) fail(code, message);
+  let arrayBuffer;
+  let byteLength;
+  let byteOffset;
+  try {
+    arrayBuffer = Reflect.apply(typedArrayBuffer, value, []);
+    byteLength = Reflect.apply(typedArrayByteLength, value, []);
+    byteOffset = Reflect.apply(typedArrayByteOffset, value, []);
+  } catch (error) {
+    fail(code, message, { cause: error });
+  }
+  if (byteLength < 2 || byteLength > maximumBytes) fail(code, message);
+  let snapshot;
+  try {
+    snapshot = Buffer.from(new Uint8Array(arrayBuffer, byteOffset, byteLength));
+  } catch (error) {
+    fail(code, message, { cause: error });
+  }
+  if (snapshot.length !== byteLength || snapshot.length < 2 || snapshot.length > maximumBytes) fail(code, message);
+  return snapshot;
 }
 
 export function deriveUniversalAdmissionQueuePaths({ digest, queueRoot }) {

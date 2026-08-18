@@ -135,10 +135,10 @@ test("ordinary CI is read-only, credential-free, pinned, and runs only Node 24",
   }
 });
 
-test("the active runtime contract is Node 24-only", () => {
-  assert.equal(packageManifest.engines.node, ">=24");
-  assert.equal(packageLock.packages[""].engines.node, ">=24");
-  assert.match(readme, /Node\.js 24 or newer is required/u);
+test("the active runtime contract is Node 24 with the SQLite 24.12 floor", () => {
+  assert.equal(packageManifest.engines.node, ">=24.12.0");
+  assert.equal(packageLock.packages[""].engines.node, ">=24.12.0");
+  assert.match(readme, /Node\.js 24\.12 or newer is required/u);
   for (const source of [ordinary, postMerge, intake, codeql]) {
     assert.doesNotMatch(source, /node-version:\s*(?:20|22)(?:\s|$)|\n\s+- (?:20|22)(?:\n|$)/u);
   }

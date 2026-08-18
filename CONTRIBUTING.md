@@ -53,6 +53,27 @@ or deployment claim.
 Never hand-edit generated indexes. Change a source project record, then run `npm run generate`. Existing history files
 are append-only and must never be rewritten.
 
+### Universal Admission reference maintenance
+
+The authenticated queue is a disabled reference surface, not an applicant pull-request namespace. Keep its command,
+trust, protocol, service, store, schemas, tests, discovery contract, and documentation in one separately reviewed
+maintenance change. Runtime-capacity limits are operational controls and must not become hidden project-type, audit,
+safety, or launch-policy requirements.
+
+Do not hand-edit `.programmable/universal-admission-contract.v1.json`. After the complete runtime and schema set is
+stable, regenerate and verify its exact same-tree bindings with:
+
+```bash
+npm run admission:contract:write
+npm run admission:contract:check
+npm run test:admission
+```
+
+The contract must remain `reference-only-disabled` until a separately authorized deployment publishes an exact endpoint,
+audience, public trust snapshot, remote worker/admin authorization design, multi-node correctness evidence, and sustained
+load evidence. Never copy credentials, private keys, tokens, cookies, or applicant secrets into a trust snapshot,
+fixture, command, receipt, database, documentation, or benchmark.
+
 ### Launch policy maintenance
 
 `policy/launch-policy.v1.json` is the authored source for Programmable launch requirements. Do not copy a requirement
@@ -72,6 +93,9 @@ requests must never mix applicant data with policy or generated-contract mainten
 does not contain requirement text or values. It records exact file hashes, classifications, admission import closures,
 Rule-ID-to-handler ownership, public projections, and the receipt-bound legacy vendor exclusion. New files and imported
 gates fail closed until that ownership is explicitly reviewed and recorded.
+
+The Universal Admission well-known contract is independent of the active contract, Applicant Compatibility V1, and
+Application V3.1. Regenerating it must not rewrite or reinterpret those legacy bytes.
 
 ## Review standard maintenance
 

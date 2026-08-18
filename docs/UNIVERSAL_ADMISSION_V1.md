@@ -7,7 +7,7 @@ Programmable launch policy and from the later security/review package.
 
 An envelope can be filed when it has:
 
-1. an exact public source identity (`repositoryUrl`, commit, tree, path, and package digest);
+1. declared exact public source coordinates (`repositoryUrl`, commit, tree, path, and package digest);
 2. an explicit execution-surface list;
 3. an explicit value-flow list, including an honest `kind: "none"` entry for a no-market/no-token project;
 4. an explicit privilege and dependency list; and
@@ -15,7 +15,8 @@ An envelope can be filed when it has:
    unknowns marked as `unknown`.
 
 The source URL is canonical public HTTPS metadata. User info, passwords, query parameters, and fragments are rejected so
-tokens or other private values cannot be smuggled into the public envelope.
+tokens or other private values cannot be smuggled into the public envelope. Admission validates the declaration; it does
+not fetch the repository or prove those coordinates. A later trusted source resolver must establish that evidence.
 
 The project kind is intentionally a bounded label, not an allowlist. A hook, game, NFT, prediction market, API-backed
 service, research prototype, or a new category uses the same envelope. Empty semantics are declared explicitly rather
@@ -27,6 +28,10 @@ The envelope is not an audit, scam certificate, safety certificate, Uniswap endo
 deployment, approval, or launch authorization. An unknown oracle, provider, token standard, hook architecture, chain,
 or review result is `analysis_pending`, not a categorical rejection. A provider warning is retained with its source and
 timestamp by a later consumer; it must not be rewritten as `scam`.
+
+The JSON Schema closes field shapes, resource bounds, and byte-identical duplicate disclosure entries. The trusted
+runtime additionally requires each `id` to be unique inside its disclosure section; standard JSON Schema cannot express
+that keyed-array relationship. Schema acceptance is therefore a structural preflight, not the final admission result.
 
 The current central rule `LAUNCH.ETHEREUM_AND_TREASURY_10_BPS` is not a universal admission rule. If an applicant selects
 `programmable-ethereum-mainnet`, this front door returns `platform-route-pending`; the protected route/launch reviewer
@@ -50,13 +55,13 @@ and informational, not a certification or endorsement. See the official [hook co
 Every result keeps `approvalGranted`, `launchAuthorized`, and `externalWritesPerformed` false. A green result means
 `admitted for review`, never `safe`, `approved`, `deployed`, `routed`, or `live`.
 
-## Scale boundary
+## Transport and scale boundary
 
 The GitHub PR/Actions adapter remains a compatibility and maintainer-review path. It is not a million-submissions-per-
 day ingress: repeated full-tree scans, uncached GitHub reads, workflow fan-out, and a monolithic registry create a
 capacity and fairness bottleneck.
 
-The repository now includes a deliberately small, local reference ingress spool. It validates the complete canonical
+The repository retains a deliberately small, local reference ingress spool. It validates the complete canonical
 envelope before touching storage, uses the envelope SHA-256 as its idempotency key, and derives two fixed-depth shard
 paths from lowercase digest bytes: one read-only CAS object and one read-only queue marker. Files are created with
 temp-file `fsync` plus an atomic no-clobber link. Each digest has a closed 256-entry staging directory, so a retry can
@@ -71,6 +76,25 @@ controls before production use. The required `--actor` value is only a bounded, 
 that trusted caller; the receipt explicitly records `authenticated: false`. Credentials and other private data must
 never be used as actor ids or envelope content.
 
+The separate [authenticated queue protocol](UNIVERSAL_ADMISSION_PROTOCOL_V1.md) closes the next reference layer. It
+binds a canonical envelope to a short-lived detached-Ed25519 enqueue command, an audience, a public trust snapshot,
+tenant and subject identifiers, a request id, and the exact runtime-capacity-policy digest. The service validates the
+same snapshotted envelope bytes used by the store, and a new queue event plus its public transport readback are committed
+atomically. Tenant-scoped request replay, revision equivocation, queue capacity, leases, retry, dead-letter redrive,
+terminal retention, snapshots, and garbage collection are bounded protocol concerns, never project-type rules.
+
+The included Node SQLite implementation is an owner-private, single-host, single-writer reference. It is disabled for
+public use, has no endpoint or published trust snapshot, and proves neither multi-node correctness nor production
+capacity. Its public readback is a trusted-service statement, not a service signature or transparency proof. Worker and
+administrative contexts are accepted only inside this private reference boundary; no remote worker/admin API is
+published. A future network adapter must authenticate and authorize those operations separately.
+
+The exact same-tree reference surface is published at
+`.programmable/universal-admission-contract.v1.json`. Consumers must read it at one exact Submit a Launch commit and
+verify every bound digest. `deployment.state: "reference-only-disabled"`, `enabled: false`, and null endpoint, audience,
+and trust-snapshot fields mean the queue cannot be selected as a live transport. The older active contract,
+Applicant Compatibility V1, and Application V3.1 remain separate and unchanged.
+
 The production-scale path remains a separate transport plane:
 
 ```text
@@ -84,7 +108,8 @@ canonical envelope + size/hash
 
 The local reference spool returns only `QUEUED` or `DUPLICATE`. A future production ingress may also need bounded
 `THROTTLED`, `QUARANTINED`, or `MALFORMED` transport/abuse states; none is a project-type or launch-policy judgment. A
-content digest remains the idempotency key. GitHub can periodically anchor shard/Merkle roots for public audit, while
+tenant- and audience-scoped digest is the authenticated protocol's idempotency key. GitHub could later anchor bounded
+snapshot roots for public audit, while
 the protected repository remains the authority for policy and review rules. Per-job byte, request, retry, and
 candidate-execution limits remain necessary on every future worker.
 
@@ -99,3 +124,14 @@ Validation mode is offline and read-only. Queue mode is also offline: it perform
 filesystem writes under an existing owner-controlled root. Validation is deterministic; queue receipts are canonical
 and explicitly state whether this call won the first-writer race or observed a duplicate. Neither mode fetches a
 repository, uses a network, runs applicant code, opens a pull request, signs, deploys, approves, or launches.
+
+Maintainers can verify the separate disabled discovery contract and run the reference tests with:
+
+```bash
+npm run admission:contract:check
+npm run test:admission
+```
+
+`npm run admission:reference:benchmark -- --count 1000` is an offline single-process measurement only. Its output keeps
+`productionClaim`, `multiNodeProven`, and million-per-day production proof false. Node.js 24.12 or later is required for
+the built-in SQLite reference backend.

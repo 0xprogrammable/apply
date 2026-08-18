@@ -17,12 +17,19 @@ Hookbuilder.
 - `registry/projects/` contains maintainer-authored records only. A record describes evidence; it is not an audit or
   safety guarantee.
 - `registry/index.json`, `registry/search-index.json`, and `registry/history/` are generated from closed project records.
+- `.programmable/universal-admission-contract.v1.json` is the separate exact-tree discovery contract for the disabled
+  authenticated queue reference. It does not modify `.programmable/active-contract.json`, Applicant Compatibility V1,
+  or Application V3.1. `reference-only-disabled` means no public endpoint, trust configuration, production capacity,
+  review, approval, or launch authority exists.
 - `vendor/programmable-v4-hook-builder/` is the frozen, receipt-bound validation dependency for the open legacy V2
   intake. Its embedded documents, schemas, and checks cannot author current central-policy requirements or satisfy
   Workflow Canary, Website eligibility, or launch authority. Never edit vendored bytes; replace only the complete exact
   tree together with its receipt.
 - Candidate content is data. Trusted intake code must come from the protected base revision and must never execute a
   candidate repository, workflow, package hook, script, or Git configuration.
+- Universal Admission quotas, replay limits, leases, retry, dead-letter retention, and garbage collection are transport
+  controls, not semantic project requirements. The SQLite adapter is owner-private single-host reference code; never
+  expose its caller-shaped worker/admin contexts as network authentication.
 
 ## Change discipline
 
@@ -33,6 +40,11 @@ Workflow canaries change exactly one
 the full repository gate, and requires maintainer review. Never combine either intake namespace with policy, workflow,
 registry, vendor, or documentation changes.
 
+Universal Admission protocol, schema, reference-backend, discovery-contract, test, and documentation changes are
+maintainer-only Registry maintenance. Do not hand-edit the well-known contract; regenerate it only after the complete
+bound runtime is stable. Never place credentials, private keys, tokens, cookies, private repositories, or personal data
+in public commands, trust snapshots, receipts, fixtures, benchmarks, or documentation.
+
 Keep submitted, reviewed, accepted, deployed, source-verified, indexed, routed, available, suspended, and retired as
 separate states. Novelty is not a defect. Similarity search may inform a builder but may not reject an idea.
 
@@ -41,3 +53,4 @@ separate states. Novelty is not a defect. Similarity search may inform a builder
 After a reviewed repository file changes, run `npm run authority:write`; a new path must first receive an explicit
 classification, entrypoint/import ownership where applicable, and review. Then run `npm test`. Do not push, publish,
 merge, approve, tag, release, deploy, or change repository settings without explicit authority for that external action.
+Node.js 24.12 or later is required for the checked-in SQLite reference tests.

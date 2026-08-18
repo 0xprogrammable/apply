@@ -57,30 +57,35 @@
           "items": { "$ref": "#/$defs/dependency" },
           "maxItems": 32,
           "minItems": 1,
-          "type": "array"
+          "type": "array",
+          "uniqueItems": true
         },
         "executionSurfaces": {
           "items": { "$ref": "#/$defs/surface" },
           "maxItems": 32,
           "minItems": 1,
-          "type": "array"
+          "type": "array",
+          "uniqueItems": true
         },
         "privileges": {
           "items": { "$ref": "#/$defs/privilege" },
           "maxItems": 32,
           "minItems": 1,
-          "type": "array"
+          "type": "array",
+          "uniqueItems": true
         },
         "valueFlows": {
           "items": { "$ref": "#/$defs/valueFlow" },
           "maxItems": 32,
           "minItems": 1,
-          "type": "array"
+          "type": "array",
+          "uniqueItems": true
         },
         "evidence": {
           "items": { "$ref": "#/$defs/evidence" },
           "maxItems": 64,
-          "type": "array"
+          "type": "array",
+          "uniqueItems": true
         }
       }
     },
@@ -91,7 +96,7 @@
       "additionalProperties": false,
       "required": ["repositoryUrl", "commit", "tree", "path", "packageSha256"],
       "properties": {
-        "repositoryUrl": { "maxLength": 2048, "minLength": 12, "pattern": "^https://[^\\s\\u0000\\r\\n@/?#]+(?:/[^\\s\\u0000\\r\\n?#]*)?$", "type": "string" },
+        "repositoryUrl": { "maxLength": 2048, "minLength": 12, "pattern": "^https://[A-Za-z0-9.-]+(?:/[^\\s\\u0000\\r\\n?#]*)?$", "type": "string" },
         "repositoryId": { "maxLength": 32, "pattern": "^[0-9]{1,32}$", "type": "string" },
         "commit": { "$ref": "#/$defs/objectId" },
         "tree": { "$ref": "#/$defs/objectId" },

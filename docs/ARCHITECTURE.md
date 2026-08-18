@@ -14,29 +14,42 @@ production facts as separate authorities.
 4. The deterministic reviewer projects findings from those Rule IDs. Analyzer observations cannot add requirements,
    severity, enforcement, or approval authority.
 5. [`intake/schemas/universal-admission-v1.schema.json`](../intake/schemas/universal-admission-v1.schema.json) is the
-   cheap, project-agnostic front door. It binds source identity and truthful disclosure without requiring an audit,
-   a category allowlist, or a fabricated market/fee artifact. It emits only `ADMITTED_FOR_REVIEW` or
+   cheap, project-agnostic front door. It records declared source coordinates and truthful disclosure without requiring
+   an audit, a category allowlist, or a fabricated market/fee artifact. It emits only `ADMITTED_FOR_REVIEW` or
    `ADMITTED_FOR_REVIEW_ANALYSIS_PENDING` (plus bounded transport errors). Its optional local CAS/spool reference
    validates first and then creates fixed-depth digest shards with an atomic first-writer marker. It provides neither
    caller authentication nor production quota, fairness, worker, or deployment infrastructure.
-6. [`intake/schemas/public-pr-application-v3.schema.json`](../intake/schemas/public-pr-application-v3.schema.json) is
+6. [Universal Admission Protocol V1](UNIVERSAL_ADMISSION_PROTOCOL_V1.md) adds a detached-Ed25519 enqueue command,
+   public trust snapshot, audience and tenant binding, capacity-policy precondition, durable replay, queue state machine,
+   leases, retries, dead-letter handling, snapshots, and garbage collection. Its same-tree discovery contract is
+   `.programmable/universal-admission-contract.v1.json`. The checked-in SQLite implementation is disabled,
+   single-host, single-writer reference code: it publishes no endpoint or trust configuration and makes no distributed
+   or production-capacity claim.
+7. [`intake/schemas/public-pr-application-v3.schema.json`](../intake/schemas/public-pr-application-v3.schema.json) is
    the deeper immutable Application V3.1 draft contract. A project that proceeds beyond the front door binds applicant
    identity, exact public source, intent, evidence, policy selection, and review-package records without classifying the
    project by a closed type or capability list.
-7. Protected-base intake validates one bounded V3.1 revision as inert untrusted data. It may emit only a valid or
+8. Protected-base intake validates one bounded V3.1 revision as inert untrusted data. It may emit only a valid or
    invalid draft-for-review result; it cannot record review completion, acceptance, approval, deployment, or launch.
-8. A one-file Workflow Canary may prove only the hidden, non-production GitHub handoff against that same binding.
-9. A signed audience-bound Website eligibility envelope may expose that exact Canary result only to the Website
+9. A one-file Workflow Canary may prove only the hidden, non-production GitHub handoff against that same binding.
+10. A signed audience-bound Website eligibility envelope may expose that exact Canary result only to the Website
    environment named by protected deployment configuration. It grants no public, production, funds, audit, or launch
    authority.
-10. Registry promotion, deployment, runtime verification, provider support, and public availability remain later,
+11. Registry promotion, deployment, runtime verification, provider support, and public availability remain later,
    independently evidenced facts.
 
 The public draft flow is: source → small Universal Admission envelope → optional immutable Application V3.1 revision →
-protected validation → independent review. The separate hidden path remains: policy → reviewer → Workflow Canary →
+protected validation → independent review. The authenticated queue is currently only a reference implementation between
+the envelope and a future review worker; it is not deployed. The separate hidden path remains:
+policy → reviewer → Workflow Canary →
 signed audience-bound Website eligibility. Every step rechecks the exact policy, application, source, and prior-result
 identity before it can emit its narrower result. A changed policy fails closed as drift; it is never silently copied into
 a consumer.
+
+The Universal Admission contract is intentionally separate from `.programmable/active-contract.json` and
+`.programmable/applicant-compatibility.v1.json`. It can bind a new reference surface without changing the meaning or
+bytes of Application V3.1. A future live queue activation requires a new exact contract state; a URL or local benchmark
+alone cannot enable it.
 
 The source repository never moves into this repository. An application pull request never gains permission to edit
 policy, workflows, schemas, project records, or another application. The receipt-bound
@@ -57,6 +70,8 @@ prototype evidence and grants no review, approval, deployment, or launch authori
 
 Strict JSON, path safety, size limits, Git identity, authentication, signatures, and key or audience pinning are
 implementation security controls. They protect the policy path but do not create separate semantic admission rules.
+The private SQLite reference accepts in-process worker and administrative contexts only. Exposing those methods over a
+network would require a separately reviewed worker/admin authentication and authorization protocol.
 
 ## Generated data
 
