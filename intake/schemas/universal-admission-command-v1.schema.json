@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:universal-admission-command:1.0.0",
+  "title": "Programmable Universal Admission authenticated enqueue command V1",
+  "description": "A detached-Ed25519 command binding one authenticated signer and tenant to one canonical Universal Admission envelope. Authentication grants no review, approval, safety, routing, deployment, or launch authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "audience",
+    "expiresAt",
+    "issuedAt",
+    "kind",
+    "operation",
+    "principal",
+    "requestId",
+    "schemaVersion",
+    "signatureAlgorithm",
+    "target"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:universal-admission-command:1.0.0" },
+    "audience": { "$ref": "#/$defs/audience" },
+    "expiresAt": { "$ref": "#/$defs/timestamp" },
+    "issuedAt": { "$ref": "#/$defs/timestamp" },
+    "kind": { "const": "programmable-universal-admission-command" },
+    "operation": { "const": "enqueue" },
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "role", "subjectId", "tenantId"],
+      "properties": {
+        "keyId": { "$ref": "#/$defs/sha256" },
+        "role": { "enum": ["applicant-submitter", "tenant-ingress"] },
+        "subjectId": { "$ref": "#/$defs/subjectId" },
+        "tenantId": { "$ref": "#/$defs/tenantId" }
+      }
+    },
+    "requestId": { "pattern": "^[0-9a-f]{32}$", "type": "string" },
+    "schemaVersion": { "const": "1.0.0" },
+    "signatureAlgorithm": { "const": "Ed25519" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admissionDigest", "applicationId", "capacityPolicySha256", "revision"],
+      "properties": {
+        "admissionDigest": { "$ref": "#/$defs/sha256" },
+        "applicationId": { "$ref": "#/$defs/applicationId" },
+        "capacityPolicySha256": { "$ref": "#/$defs/sha256" },
+        "revision": { "pattern": "^[1-9][0-9]{0,30}$", "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "applicationId": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "audience": {
+      "maxLength": 160,
+      "pattern": "^urn:programmable:submit-launch:universal-admission:[a-z0-9]+(?:-[a-z0-9]+)*:v1$",
+      "type": "string"
+    },
+    "sha256": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "subjectId": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "tenantId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+      "type": "string"
+    }
+  }
+}

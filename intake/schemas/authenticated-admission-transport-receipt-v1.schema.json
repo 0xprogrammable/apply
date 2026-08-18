@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:authenticated-admission-transport-receipt:1.0.0",
+  "title": "Programmable authenticated Universal Admission trusted-service transport readback V1",
+  "description": "A public, credential-free trusted-service attestation binding one verified Ed25519 enqueue command to one queue event returned atomically by queue-store submit and validated by the service. The serialized shape is not independently verifiable and carries no service signature or transparency anchor. It grants no review, approval, audit, safety, deployment, launch, or fund-movement authority and attests that no fund movement was performed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "admission",
+    "authentication",
+    "authority",
+    "effects",
+    "independentlyVerifiable",
+    "kind",
+    "publicDataOnly",
+    "queue",
+    "request",
+    "schemaVersion",
+    "status",
+    "verificationScope"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:authenticated-admission-transport-receipt:1.0.0" },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicationId", "digest", "revision"],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/applicationId" },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "revision": { "$ref": "#/$defs/positiveDecimal" }
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assurance",
+        "audience",
+        "keyId",
+        "keyRecordDigest",
+        "method",
+        "role",
+        "signerAuthenticated",
+        "subjectId",
+        "tenantId",
+        "trustEpoch",
+        "trustSnapshotDigest",
+        "verifiedAt"
+      ],
+      "properties": {
+        "assurance": { "enum": ["configured-subject-key", "gateway-key"] },
+        "audience": { "$ref": "#/$defs/audience" },
+        "keyId": { "$ref": "#/$defs/sha256" },
+        "keyRecordDigest": { "$ref": "#/$defs/sha256" },
+        "method": { "const": "Ed25519" },
+        "role": { "enum": ["applicant-submitter", "tenant-ingress"] },
+        "signerAuthenticated": { "const": true },
+        "subjectId": { "$ref": "#/$defs/subjectId" },
+        "tenantId": { "$ref": "#/$defs/tenantId" },
+        "trustEpoch": { "$ref": "#/$defs/positiveDecimal" },
+        "trustSnapshotDigest": { "$ref": "#/$defs/sha256" },
+        "verifiedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admissionDecisionGranted",
+        "approvalGranted",
+        "auditCompleted",
+        "deploymentPerformed",
+        "fundMovementAuthorized",
+        "fundMovementPerformed",
+        "independentAudit",
+        "launchAuthorized",
+        "repositoryOwnershipProven",
+        "reviewCompleted",
+        "safetyCertified",
+        "safetyGuaranteed"
+      ],
+      "properties": {
+        "admissionDecisionGranted": { "const": false },
+        "approvalGranted": { "const": false },
+        "auditCompleted": { "const": false },
+        "deploymentPerformed": { "const": false },
+        "fundMovementAuthorized": { "const": false },
+        "fundMovementPerformed": { "const": false },
+        "independentAudit": { "const": false },
+        "launchAuthorized": { "const": false },
+        "repositoryOwnershipProven": { "const": false },
+        "reviewCompleted": { "const": false },
+        "safetyCertified": { "const": false },
+        "safetyGuaranteed": { "const": false }
+      }
+    },
+    "effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCodeExecuted", "credentialsPersisted", "queueStoreSubmitInvoked"],
+      "properties": {
+        "candidateCodeExecuted": { "const": false },
+        "credentialsPersisted": { "const": false },
+        "queueStoreSubmitInvoked": { "const": true }
+      }
+    },
+    "independentlyVerifiable": { "const": false },
+    "kind": { "const": "programmable-authenticated-admission-transport-receipt" },
+    "publicDataOnly": { "const": true },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventIndex",
+        "eventReceiptDigest",
+        "eventType",
+        "eventPrincipalBindingDigest",
+        "idempotencyKey",
+        "jobId",
+        "protectedExpectedPolicyDigest",
+        "requestPrincipalBindingDigest",
+        "revisionBindingDigest",
+        "revisionKey"
+      ],
+      "properties": {
+        "eventIndex": { "const": "1" },
+        "eventReceiptDigest": { "$ref": "#/$defs/sha256" },
+        "eventType": { "const": "queued" },
+        "eventPrincipalBindingDigest": { "$ref": "#/$defs/sha256" },
+        "idempotencyKey": { "$ref": "#/$defs/sha256" },
+        "jobId": { "$ref": "#/$defs/sha256" },
+        "protectedExpectedPolicyDigest": { "$ref": "#/$defs/sha256" },
+        "requestPrincipalBindingDigest": { "$ref": "#/$defs/sha256" },
+        "revisionBindingDigest": { "$ref": "#/$defs/sha256" },
+        "revisionKey": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authenticatedRequestByteLength", "commandDigest", "requestId", "signedCapacityPolicyDigest"],
+      "properties": {
+        "authenticatedRequestByteLength": { "$ref": "#/$defs/authenticatedRequestByteLength" },
+        "commandDigest": { "$ref": "#/$defs/sha256" },
+        "requestId": { "pattern": "^[0-9a-f]{32}$", "type": "string" },
+        "signedCapacityPolicyDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "schemaVersion": { "const": "1.0.0" },
+    "status": { "enum": ["DUPLICATE", "QUEUED"] },
+    "verificationScope": { "const": "trusted-service-readback" }
+  },
+  "$defs": {
+    "authenticatedRequestByteLength": {
+      "pattern": "^(?:[1-9][0-9]{0,4}|1[0-9]{5}|2[0-5][0-9]{4}|26[0-5][0-9]{3}|266[0-2][0-9]{2}|26630[0-4])$",
+      "type": "string"
+    },
+    "applicationId": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "audience": {
+      "maxLength": 160,
+      "pattern": "^urn:programmable:submit-launch:universal-admission:[a-z0-9]+(?:-[a-z0-9]+)*:v1$",
+      "type": "string"
+    },
+    "positiveDecimal": { "pattern": "^[1-9][0-9]{0,30}$", "type": "string" },
+    "sha256": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "subjectId": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "tenantId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+      "type": "string"
+    }
+  }
+}

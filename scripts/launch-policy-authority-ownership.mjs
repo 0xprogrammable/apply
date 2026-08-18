@@ -91,6 +91,13 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/launch-policy.mjs",
   "scripts/registry-core.mjs",
   "scripts/release-version-core.mjs",
+  "scripts/universal-admission-command-core.mjs",
+  "scripts/universal-admission-contract-core.mjs",
+  "scripts/universal-admission-contract.mjs",
+  "scripts/universal-admission-protocol-core.mjs",
+  "scripts/universal-admission-service-core.mjs",
+  "scripts/universal-admission-sqlite-store.mjs",
+  "scripts/universal-admission-sqlite.mjs",
   "scripts/verify-open-world-v2-contracts.mjs",
   "scripts/verify-open-world-v2-package.mjs",
   "scripts/verify-open-world-v2-validation-fee.mjs",
@@ -102,6 +109,8 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/verify-public-hook-application.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-repository.mjs",
+  "scripts/universal-admission-core.mjs",
+  "scripts/universal-admission.mjs",
   "scripts/verify-workflow-canary.mjs",
   "scripts/workflow-canary-core.mjs"
 ]);

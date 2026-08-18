@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:universal-admission-trust:1.0.0",
+  "title": "Programmable Universal Admission public Ed25519 trust snapshot V1",
+  "description": "A canonical protected snapshot containing public verification and tenant-authorization material only. It contains no private key and grants no review, approval, safety, routing, deployment, or launch authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "audience", "epoch", "keys", "kind", "schemaVersion"],
+  "properties": {
+    "$schema": { "const": "urn:programmable:universal-admission-trust:1.0.0" },
+    "audience": { "$ref": "#/$defs/audience" },
+    "epoch": { "pattern": "^[1-9][0-9]{0,30}$", "type": "string" },
+    "keys": {
+      "items": { "$ref": "#/$defs/key" },
+      "maxItems": 2048,
+      "minItems": 1,
+      "type": "array"
+    },
+    "kind": { "const": "programmable-universal-admission-trust" },
+    "schemaVersion": { "const": "1.0.0" }
+  },
+  "$defs": {
+    "audience": {
+      "maxLength": 160,
+      "pattern": "^urn:programmable:submit-launch:universal-admission:[a-z0-9]+(?:-[a-z0-9]+)*:v1$",
+      "type": "string"
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "keyId",
+        "notAfter",
+        "notBefore",
+        "operations",
+        "publicKey",
+        "roles",
+        "subjectId",
+        "tenantId"
+      ],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "keyId": { "$ref": "#/$defs/sha256" },
+        "notAfter": { "$ref": "#/$defs/timestamp" },
+        "notBefore": { "$ref": "#/$defs/timestamp" },
+        "operations": {
+          "items": { "const": "enqueue" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "publicKey": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["crv", "kty", "x"],
+          "properties": {
+            "crv": { "const": "Ed25519" },
+            "kty": { "const": "OKP" },
+            "x": { "pattern": "^[A-Za-z0-9_-]{43}$", "type": "string" }
+          }
+        },
+        "revokedAt": { "$ref": "#/$defs/timestamp" },
+        "roles": {
+          "items": { "enum": ["applicant-submitter", "tenant-ingress"] },
+          "maxItems": 2,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "subjectId": { "$ref": "#/$defs/subjectId" },
+        "tenantId": { "$ref": "#/$defs/tenantId" }
+      }
+    },
+    "sha256": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "subjectId": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "tenantId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$",
+      "type": "string"
+    }
+  }
+}

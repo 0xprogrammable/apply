@@ -17,6 +17,10 @@ import {
 } from "./launch-policy-authority-ownership.mjs";
 import { canonicalJson, RegistryError, verifyGeneratedArtifacts } from "./registry-core.mjs";
 import { ReleaseVersionError, verifyReleaseVersion } from "./release-version-core.mjs";
+import {
+  UniversalAdmissionContractError,
+  verifyUniversalAdmissionContractV1
+} from "./universal-admission-contract-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -26,6 +30,7 @@ try {
     allowLegacyFallback: true,
     repositoryRoot: root
   });
+  const universalAdmissionContract = verifyUniversalAdmissionContractV1({ repositoryRoot: root });
   const authorityOwnership = verifyLaunchPolicyAuthorityOwnership({ repositoryRoot: root });
   const releaseVersion = verifyReleaseVersion({ repositoryRoot: root });
   const generated = verifyGeneratedArtifacts({ repositoryRoot: root });
@@ -36,13 +41,14 @@ try {
   }
   runNodeTests("test", (name) => name.endsWith(".test.mjs"));
   runNodeTests("scripts/test", (name) => name.startsWith("verify-public-hook-application") && name.endsWith(".test.mjs"), ["--test-concurrency=1"]);
-  process.stdout.write(`${canonicalJson({ ...generated, applicantCompatibility, authorityOwnership, checks: ["applicant-compatibility", "authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion })}\n`);
+  process.stdout.write(`${canonicalJson({ ...generated, applicantCompatibility, authorityOwnership, checks: ["applicant-compatibility", "universal-admission-contract", "authority-ownership", "release-version", "generated-launch-policy", "generated-registry", "vendor-receipt", "single-source-policy", "registry-tests", "trusted-intake-tests"], launchPolicy, ok: true, releaseVersion, universalAdmissionContract })}\n`);
 } catch (error) {
   const known = error instanceof RegistryError
     || error instanceof ApplicantCompatibilityError
     || error instanceof LaunchPolicyArtifactError
     || error instanceof LaunchPolicyAuthorityOwnershipError
-    || error instanceof ReleaseVersionError;
+    || error instanceof ReleaseVersionError
+    || error instanceof UniversalAdmissionContractError;
   const code = known ? error.code : "REPOSITORY_CHECK_FAILED";
   const message = known ? error.message : String(error?.message ?? "repository verification failed").slice(0, 1000);
   process.stdout.write(`${canonicalJson({ error: { code, message }, ok: false })}\n`);

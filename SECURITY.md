@@ -15,14 +15,18 @@ seed phrases, access tokens, production secrets, personal data, or user funds.
 - the trusted application intake and its repository, revision, tree, and source binding;
 - the public checker, policy, schemas, and decision integrity;
 - generated registry records, indexes, history, and discovery boundaries;
-- repository workflows and their permission boundaries; and
+- repository workflows and their permission boundaries;
+- Universal Admission command authentication, audience/tenant/replay binding, capacity preconditions, queue state,
+  lease fencing, retention, snapshot/GC integrity, and the private SQLite reference boundary; and
 - the pinned Hookbuilder provenance receipt and vendored-byte verification.
 
 ## Out of scope
 
 Applicant projects, Hookbuilder itself, Uniswap, wallets, RPC or infrastructure providers, the live Programmable
-platform, deployed contracts, and third-party systems retain their own security processes. A weakness in one of those
-systems is not automatically a vulnerability in Submit a Launch.
+platform, deployed contracts, and third-party systems retain their own security processes. No public Universal Admission
+service is claimed; a future deployment, remote worker plane, key-provisioning system, hosting provider, or distributed
+store would require its own reviewed scope. A weakness in one of those systems is not automatically a vulnerability in
+Submit a Launch.
 
 ## Responsible testing
 
@@ -33,6 +37,11 @@ projects, or third-party systems without separate written authorization.
 Do not access, change, retain, or destroy data you do not own. Do not move funds, obtain credentials, submit malicious
 applications, exhaust GitHub Actions or other resources, perform denial-of-service testing, use social engineering, or
 publish an unpatched exploit. Stop testing and report privately if you encounter non-public data.
+
+Run queue and load tests only against an owner-controlled local database with synthetic public data. The offline SQLite
+benchmark is not authorization to probe a future endpoint or claim production throughput. Do not place credentials,
+private key material, bearer tokens, cookies, private repository coordinates, or personal data in an Admission envelope,
+command, trust snapshot, receipt, fixture, benchmark, or bug report.
 
 ## Safe harbor
 

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:universal-admission-snapshot:1.0.0",
+  "title": "Programmable Universal Admission Snapshot V1",
+  "description": "A provider-neutral immutable gc-control-v1 manifest. Its cut covers job terminal state and GC-managed content-addressed object records only; it is not a full authoritative store snapshot and grants no review or launch authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "authority", "createdAtMs", "cutSha256", "gcCandidatesSha256", "kind", "previousSnapshotSha256", "recordScope", "schemaVersion", "serviceAudience", "shards", "totals"],
+  "properties": {
+    "$schema": { "const": "urn:programmable:universal-admission-snapshot:1.0.0" },
+    "authority": { "$ref": "#/$defs/inertAuthority" },
+    "createdAtMs": { "$ref": "#/$defs/decimal" },
+    "cutSha256": { "$ref": "#/$defs/sha256" },
+    "gcCandidatesSha256": { "$ref": "#/$defs/sha256" },
+    "kind": { "const": "programmable-universal-admission-snapshot" },
+    "previousSnapshotSha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+    "recordScope": { "const": "gc-control-v1" },
+    "schemaVersion": { "const": "1.0.0" },
+    "serviceAudience": { "type": "string", "maxLength": 160, "pattern": "^[a-z0-9]+(?:[._:-][a-z0-9]+)*$" },
+    "shards": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["prefix", "recordCount", "rootSha256"],
+        "properties": {
+          "prefix": { "type": "string", "pattern": "^[0-9a-f]{2}$" },
+          "recordCount": { "$ref": "#/$defs/positiveDecimal" },
+          "rootSha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gcCandidates", "liveObjectReferences", "records"],
+      "properties": {
+        "gcCandidates": { "$ref": "#/$defs/decimal" },
+        "liveObjectReferences": { "$ref": "#/$defs/decimal" },
+        "records": { "$ref": "#/$defs/decimal" }
+      }
+    }
+  },
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^(?:0|[1-9][0-9]{0,17})$" },
+    "positiveDecimal": { "type": "string", "pattern": "^[1-9][0-9]{0,17}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "inertAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admissionDecisionGranted", "approvalGranted", "auditCompleted", "deploymentPerformed", "fundMovementAuthorized", "fundMovementPerformed", "independentAudit", "launchAuthorized", "repositoryOwnershipProven", "reviewCompleted", "safetyCertified", "safetyGuaranteed"],
+      "properties": {
+        "admissionDecisionGranted": { "const": false },
+        "approvalGranted": { "const": false },
+        "auditCompleted": { "const": false },
+        "deploymentPerformed": { "const": false },
+        "fundMovementAuthorized": { "const": false },
+        "fundMovementPerformed": { "const": false },
+        "independentAudit": { "const": false },
+        "launchAuthorized": { "const": false },
+        "repositoryOwnershipProven": { "const": false },
+        "reviewCompleted": { "const": false },
+        "safetyCertified": { "const": false },
+        "safetyGuaranteed": { "const": false }
+      }
+    }
+  }
+}

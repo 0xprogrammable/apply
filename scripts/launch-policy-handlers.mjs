@@ -60,6 +60,9 @@ const RULE_HANDLERS_BY_POLICY_VERSION = Object.freeze({
   }),
   "1.2.0": Object.freeze({
     "ethereum-treasury-10-bps-v1": ethereumTreasuryTenBpsHandler
+  }),
+  "1.3.0": Object.freeze({
+    "ethereum-treasury-10-bps-v1": ethereumTreasuryTenBpsHandler
   })
 });
 

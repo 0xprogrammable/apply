@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:universal-admission-worker-result:1.0.0",
+  "title": "Programmable Universal Admission Worker Result V1",
+  "description": "A canonical, fence-bound worker evidence result. It cannot grant review completion, approval, safety, deployment, or launch authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "artifacts", "authority", "binding", "effects", "kind", "publicDataOnly", "reportSha256", "reviewState", "schemaVersion", "worker"],
+  "properties": {
+    "$schema": { "const": "urn:programmable:universal-admission-worker-result:1.0.0" },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["byteLength", "id", "kind", "sha256"],
+        "properties": {
+          "byteLength": { "$ref": "#/$defs/positiveDecimal" },
+          "id": { "$ref": "#/$defs/slug" },
+          "kind": { "$ref": "#/$defs/safeId" },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "authority": { "$ref": "#/$defs/inertAuthority" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admissionDigest", "attempt", "cycle", "fenceToken", "jobId", "leaseId", "revisionBindingSha256", "revisionKey"],
+      "properties": {
+        "admissionDigest": { "$ref": "#/$defs/sha256" },
+        "attempt": { "$ref": "#/$defs/positiveDecimal" },
+        "cycle": { "$ref": "#/$defs/decimal" },
+        "fenceToken": { "$ref": "#/$defs/positiveDecimal" },
+        "jobId": { "$ref": "#/$defs/sha256" },
+        "leaseId": { "$ref": "#/$defs/sha256" },
+        "revisionBindingSha256": { "$ref": "#/$defs/sha256" },
+        "revisionKey": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCodeExecuted", "externalNetworkAccessed", "externalWritesPerformed", "sandboxed"],
+      "properties": {
+        "candidateCodeExecuted": { "const": false },
+        "externalNetworkAccessed": { "type": "boolean" },
+        "externalWritesPerformed": { "const": false },
+        "sandboxed": { "const": false }
+      }
+    },
+    "kind": { "const": "programmable-universal-admission-worker-result" },
+    "publicDataOnly": { "const": true },
+    "reportSha256": { "$ref": "#/$defs/sha256" },
+    "reviewState": { "enum": ["analysis_pending", "ready_for_review"] },
+    "schemaVersion": { "const": "1.0.0" },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementationSha256", "workerBindingSha256"],
+      "properties": {
+        "implementationSha256": { "$ref": "#/$defs/sha256" },
+        "workerBindingSha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  },
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^(?:0|[1-9][0-9]{0,17})$" },
+    "positiveDecimal": { "type": "string", "pattern": "^[1-9][0-9]{0,17}$" },
+    "safeId": { "type": "string", "maxLength": 80, "pattern": "^[a-z0-9]+(?:[._:-][a-z0-9]+)*$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "slug": { "type": "string", "maxLength": 80, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "inertAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admissionDecisionGranted", "approvalGranted", "auditCompleted", "deploymentPerformed", "fundMovementAuthorized", "fundMovementPerformed", "independentAudit", "launchAuthorized", "repositoryOwnershipProven", "reviewCompleted", "safetyCertified", "safetyGuaranteed"],
+      "properties": {
+        "admissionDecisionGranted": { "const": false },
+        "approvalGranted": { "const": false },
+        "auditCompleted": { "const": false },
+        "deploymentPerformed": { "const": false },
+        "fundMovementAuthorized": { "const": false },
+        "fundMovementPerformed": { "const": false },
+        "independentAudit": { "const": false },
+        "launchAuthorized": { "const": false },
+        "repositoryOwnershipProven": { "const": false },
+        "reviewCompleted": { "const": false },
+        "safetyCertified": { "const": false },
+        "safetyGuaranteed": { "const": false }
+      }
+    }
+  }
+}

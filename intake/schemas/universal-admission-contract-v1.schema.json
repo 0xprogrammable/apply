@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:universal-admission-contract:1.0.0",
+  "title": "Programmable Universal Admission public discovery contract V1",
+  "description": "An exact-tree discovery contract for a disabled single-host reference implementation. It publishes no endpoint, trust snapshot, credential, approval, review, safety, deployment, fund-movement, or launch authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "authority",
+    "contractCore",
+    "contractPublisher",
+    "contractSchema",
+    "deployment",
+    "kind",
+    "minimumClientProtocolVersion",
+    "publicDataOnly",
+    "referenceImplementation",
+    "schemas",
+    "schemaVersion",
+    "transport",
+    "trustedRepository"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:universal-admission-contract:1.0.0" },
+    "authority": { "$ref": "#/$defs/inertAuthority" },
+    "contractCore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "scripts/universal-admission-contract-core.mjs" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "contractPublisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "scripts/universal-admission-contract.mjs" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "contractSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "intake/schemas/universal-admission-contract-v1.schema.json" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audience", "enabled", "endpoint", "state", "trustSnapshot"],
+      "properties": {
+        "audience": { "type": "null" },
+        "enabled": { "const": false },
+        "endpoint": { "type": "null" },
+        "state": { "const": "reference-only-disabled" },
+        "trustSnapshot": { "type": "null" }
+      }
+    },
+    "kind": { "const": "programmable-universal-admission-contract" },
+    "minimumClientProtocolVersion": { "const": "1.0.0" },
+    "publicDataOnly": { "const": true },
+    "referenceImplementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifacts", "distributed", "enabled", "kind", "referenceOnly", "topology"],
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "prefixItems": [
+            { "$ref": "#/$defs/commandCoreArtifact" },
+            { "$ref": "#/$defs/admissionCoreArtifact" },
+            { "$ref": "#/$defs/protocolCoreArtifact" },
+            { "$ref": "#/$defs/serviceCoreArtifact" },
+            { "$ref": "#/$defs/sqliteStoreArtifact" },
+            { "$ref": "#/$defs/sqliteCliArtifact" },
+            { "$ref": "#/$defs/losslessJsonArtifact" },
+            { "$ref": "#/$defs/primitivesArtifact" }
+          ],
+          "items": false
+        },
+        "distributed": { "const": false },
+        "enabled": { "const": false },
+        "kind": { "const": "node-sqlite-single-host-v1" },
+        "referenceOnly": { "const": true },
+        "topology": { "const": "single-host-single-writer" }
+      }
+    },
+    "schemas": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        { "$ref": "#/$defs/admissionSchema" },
+        { "$ref": "#/$defs/commandSchema" },
+        { "$ref": "#/$defs/eventReceiptSchema" },
+        { "$ref": "#/$defs/runtimePolicySchema" },
+        { "$ref": "#/$defs/snapshotSchema" },
+        { "$ref": "#/$defs/transportReceiptSchema" },
+        { "$ref": "#/$defs/trustSchema" },
+        { "$ref": "#/$defs/workerResultSchema" }
+      ],
+      "items": false
+    },
+    "schemaVersion": { "const": "1.0.0" },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authentication", "id", "operation"],
+      "properties": {
+        "authentication": { "const": "detached-ed25519" },
+        "id": { "const": "authenticated-admission-queue-v1" },
+        "operation": { "const": "enqueue" }
+      }
+    },
+    "trustedRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultBranch", "numericId"],
+      "properties": {
+        "defaultBranch": { "const": "main" },
+        "numericId": { "const": "1320171831" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "schemaBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "schemaId", "sha256"],
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" },
+        "schemaId": { "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "admissionSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "admission" }, "path": { "const": "intake/schemas/universal-admission-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission:1.0.0" } } }
+      ]
+    },
+    "commandSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "command" }, "path": { "const": "intake/schemas/universal-admission-command-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission-command:1.0.0" } } }
+      ]
+    },
+    "eventReceiptSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "event-receipt" }, "path": { "const": "intake/schemas/universal-admission-event-receipt-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission-event-receipt:1.0.0" } } }
+      ]
+    },
+    "runtimePolicySchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "runtime-policy" }, "path": { "const": "intake/schemas/universal-admission-runtime-policy-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission-runtime-policy:1.0.0" } } }
+      ]
+    },
+    "snapshotSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "snapshot" }, "path": { "const": "intake/schemas/universal-admission-snapshot-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission-snapshot:1.0.0" } } }
+      ]
+    },
+    "transportReceiptSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "transport-receipt" }, "path": { "const": "intake/schemas/authenticated-admission-transport-receipt-v1.schema.json" }, "schemaId": { "const": "urn:programmable:authenticated-admission-transport-receipt:1.0.0" } } }
+      ]
+    },
+    "trustSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "trust" }, "path": { "const": "intake/schemas/universal-admission-trust-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission-trust:1.0.0" } } }
+      ]
+    },
+    "workerResultSchema": {
+      "allOf": [
+        { "$ref": "#/$defs/schemaBinding" },
+        { "type": "object", "properties": { "id": { "const": "worker-result" }, "path": { "const": "intake/schemas/universal-admission-worker-result-v1.schema.json" }, "schemaId": { "const": "urn:programmable:universal-admission-worker-result:1.0.0" } } }
+      ]
+    },
+    "commandCoreArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "scripts/universal-admission-command-core.mjs" } } }
+      ]
+    },
+    "admissionCoreArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "scripts/universal-admission-core.mjs" } } }
+      ]
+    },
+    "protocolCoreArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "scripts/universal-admission-protocol-core.mjs" } } }
+      ]
+    },
+    "serviceCoreArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "scripts/universal-admission-service-core.mjs" } } }
+      ]
+    },
+    "sqliteStoreArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "scripts/universal-admission-sqlite-store.mjs" } } }
+      ]
+    },
+    "sqliteCliArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "scripts/universal-admission-sqlite.mjs" } } }
+      ]
+    },
+    "losslessJsonArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "vendor/programmable-applicant-validator/scripts/github-public-source-lossless-json.mjs" } } }
+      ]
+    },
+    "primitivesArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifact" },
+        { "type": "object", "properties": { "path": { "const": "vendor/programmable-applicant-validator/scripts/open-world-v2-primitives.mjs" } } }
+      ]
+    },
+    "inertAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admissionDecisionGranted",
+        "approvalGranted",
+        "auditCompleted",
+        "deploymentPerformed",
+        "fundMovementAuthorized",
+        "fundMovementPerformed",
+        "independentAudit",
+        "launchAuthorized",
+        "repositoryOwnershipProven",
+        "reviewCompleted",
+        "safetyCertified",
+        "safetyGuaranteed"
+      ],
+      "properties": {
+        "admissionDecisionGranted": { "const": false },
+        "approvalGranted": { "const": false },
+        "auditCompleted": { "const": false },
+        "deploymentPerformed": { "const": false },
+        "fundMovementAuthorized": { "const": false },
+        "fundMovementPerformed": { "const": false },
+        "independentAudit": { "const": false },
+        "launchAuthorized": { "const": false },
+        "repositoryOwnershipProven": { "const": false },
+        "reviewCompleted": { "const": false },
+        "safetyCertified": { "const": false },
+        "safetyGuaranteed": { "const": false }
+      }
+    }
+  }
+}
