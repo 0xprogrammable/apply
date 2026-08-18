@@ -42,7 +42,20 @@ function trustedReviewFixture(t) {
   const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-review-"));
   t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
   fs.mkdirSync(path.join(repositoryRoot, "policy"), { recursive: true });
-  fs.copyFileSync(policyPath, path.join(repositoryRoot, "policy/launch-policy.v1.json"));
+  // The canonical 1.3.0 rule is production-route-only. Keep the review
+  // engine's semantic-path tests deterministic with a bounded fixture that
+  // exposes the same rule to the checker-only build profile. This fixture is
+  // not the current production policy.
+  const reviewPolicy = JSON.parse(fs.readFileSync(policyPath, "utf8"));
+  reviewPolicy.rules = reviewPolicy.rules.map((rule) => ({
+    ...rule,
+    profiles: ["build", "production-launch"]
+  }));
+  fs.writeFileSync(
+    path.join(repositoryRoot, "policy/launch-policy.v1.json"),
+    `${canonicalJson(reviewPolicy)}\n`,
+    "utf8"
+  );
   runGit(repositoryRoot, ["init", "--initial-branch=main"]);
   runGit(repositoryRoot, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
   runGit(repositoryRoot, ["add", "policy/launch-policy.v1.json"]);
@@ -195,7 +208,7 @@ test("unknown evaluations are advisory only and analyzer authority must match po
   assert.throws(() => evaluate(fixture, forged), hasCode("REVIEW_ANALYZER_MISMATCH"));
 });
 
-test("the single launch requirement applies regardless of hook architecture", (t) => {
+test("an explicitly bound route rule remains architecture-agnostic", (t) => {
   const fixture = trustedReviewFixture(t);
   const input = validInput(fixture.policyRecord, "build");
   input.expectedSubject.usesUniswapV4 = false;

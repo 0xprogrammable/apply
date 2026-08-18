@@ -33,6 +33,12 @@ public repository.
 > still submit its frozen six-file legacy V2 package while the checked-in intake state remains `open`. A valid draft is
 > not reviewed, accepted, audited, deployed, available, or launched, and no intake transport grants funds authority.
 
+The low-cost universal front door is [`docs/UNIVERSAL_ADMISSION_V1.md`](docs/UNIVERSAL_ADMISSION_V1.md). Its small,
+project-agnostic envelope binds exact source identity plus execution surfaces, value flows, privileges, and
+dependencies. It accepts novel hooks, games, NFTs, prediction/oracle systems, API-backed services, and no-market
+projects without a type allowlist or mandatory audit. Unknowns become `analysis_pending`; the result is never a scam,
+safety, approval, routing, deployment, or launch claim.
+
 The [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
 creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
 An exact passing result can be compiled into a short-lived
@@ -50,10 +56,12 @@ The canonical source for Programmable launch requirements is
 [`docs/LAUNCH_POLICY.md`](docs/LAUNCH_POLICY.md) is a generated, digest-bound human projection. Edit the JSON only;
 the generated Markdown is never independent authority.
 
-> **A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury.**
+> **A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury.**
 
-That is the complete current Programmable launch requirement. Workflow transport, canonical JSON, Git identity,
-signature, path, and size checks protect the process; they are not additional launch-policy requirements.
+That is the single production-route term. The enabled `build` profile intentionally carries no semantic launch
+requirement, so any complete project can enter checker-only review regardless of category, chain, token model, or
+whether it uses a market. Workflow transport, canonical JSON, Git identity, signature, path, and size checks protect
+the process; they are not additional launch-policy requirements.
 
 [`policy/launch-policy-authority-ownership.v1.json`](policy/launch-policy-authority-ownership.v1.json) is the separate
 machine-readable ownership proof. It carries no requirement text or parameter values. It binds the closed repository
@@ -70,9 +78,9 @@ npm run policy -- validate-policy
 npm run policy -- render
 ```
 
-`build` returns the one launch requirement. `workflow-canary` intentionally returns no semantic launch requirements;
-it tests transport only. The disabled `production-launch` profile carries the same one requirement for future use but
-cannot authorize a launch. `binding` is available for an enabled profile and binds the policy at the exact committed
+`build` returns no semantic launch requirements and is checker-only. `workflow-canary` intentionally returns no
+semantic launch requirements; it tests transport only. The disabled `production-launch` profile carries the single
+Ethereum-mainnet route term for future use but cannot authorize a launch. `binding` is available for an enabled profile and binds the policy at the exact committed
 repository `HEAD`; it refuses a dirty policy projection.
 Every command reads the fixed repository-owned policy path, emits canonical JSON, and never imports or executes
 applicant code.
@@ -140,6 +148,10 @@ bounded files, and no candidate execution.
 
 ## Application intake
 
+**Universal Admission V1.** Validate a bounded, canonical envelope offline with `npm run admission -- FILE`. This is a
+cheap review-queue admission record, not a replacement for the deeper V3.1 package. It never runs candidate code or
+writes to GitHub. See the [Universal Admission contract](docs/UNIVERSAL_ADMISSION_V1.md).
+
 **Generic Application V3.1.** Submit one new immutable revision at
 `submissions/<application-id>/v3/revisions/<revision>/application.v3.json` together with exactly the application-package
 records bound by that manifest. Project kind is not allowlisted: complete no-market, tradable, hook, token, app, game,
@@ -157,8 +169,10 @@ or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the
 
 ## Fee terms
 
-The current launch policy requires **10 bps (0.10%) of trading volume to the Programmable treasury** on Ethereum. A
-verified onchain fee path is still required before a real market can satisfy that rule.
+The disabled `production-launch` route currently requires **10 bps (0.10%) of trading volume to the Programmable
+treasury** on Ethereum. This route term does not restrict checker-only admission: projects without a market, with a
+different fee model, or on another chain can still submit a complete revision for review. A verified onchain fee path
+is required only if a real market later opts into that production route.
 
 ## Discovery registry
 

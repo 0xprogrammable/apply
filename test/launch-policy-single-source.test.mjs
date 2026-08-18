@@ -213,11 +213,16 @@ test("every semantic finding and handler maps bijectively to a central Rule ID",
   const policyIds = new Set(policyRecord.policy.rules.map(({ id }) => id));
   const activeMap = manifest.semanticRuleMap.filter(({ status }) => status === "active");
   const activeIds = new Set(activeMap.map(({ ruleId }) => ruleId));
-  const currentRules = ["build", "workflow-canary"]
-    .flatMap((profileId) => rulesForProfile(policyRecord.policy, profileId));
+  const activeRules = policyRecord.policy.rules.filter(({ status }) => status === "active");
 
   assert.equal(activeIds.size, activeMap.length);
-  assert.deepEqual([...activeIds].sort(compareUtf8), currentRules.map(({ id }) => id).sort(compareUtf8));
+  assert.deepEqual([...activeIds].sort(compareUtf8), activeRules.map(({ id }) => id).sort(compareUtf8));
+
+  for (const rule of activeRules) {
+    const mapping = activeMap.find(({ ruleId }) => ruleId === rule.id);
+    assert.equal(mapping.handlerId, rule.enforcement.handlerId, rule.id);
+    assert.deepEqual(mapping.profiles, [...rule.profiles].sort(compareUtf8), rule.id);
+  }
 
   for (const profileId of ["build", "workflow-canary"]) {
     const rules = rulesForProfile(policyRecord.policy, profileId);
@@ -230,42 +235,20 @@ test("every semantic finding and handler maps bijectively to a central Rule ID",
     assert.equal(baseline.status, "passed");
     assert.deepEqual(baseline.findings, []);
 
-    for (const rule of rules) {
-      const mapping = activeMap.find(({ ruleId }) => ruleId === rule.id);
-      assert.equal(mapping.handlerId, rule.enforcement.handlerId, rule.id);
-      assert.equal(mapping.profiles.includes(profileId), true, rule.id);
-
-      const violatedInput = structuredClone(baselineInput);
-      violatedInput.evaluations.find(({ ruleId }) => ruleId === rule.id).state = "violated";
-      const violated = evaluateTrustedLaunchPolicyReview({
-        input: violatedInput,
-        repositoryRoot: root,
-        expectedBaseCommit: policyRecord.baseCommit
-      });
-      assert.equal(violated.status, "changes_requested", rule.id);
-      assert.deepEqual(violated.findings.map(({ ruleId }) => ruleId), [rule.id], rule.id);
-
-      const missingInput = structuredClone(baselineInput);
-      missingInput.evaluations = missingInput.evaluations.filter(({ ruleId }) => ruleId !== rule.id);
-      const missing = evaluateTrustedLaunchPolicyReview({
-        input: missingInput,
-        repositoryRoot: root,
-        expectedBaseCommit: policyRecord.baseCommit
-      });
-      assert.equal(missing.status, "analysis_pending", rule.id);
-      assert.deepEqual(missing.pendingRuleIds, [rule.id], rule.id);
-
-      const evidence = passedEvidenceForRules(rules);
-      for (const evidenceId of rule.evidence) delete evidence[evidenceId];
-      const direct = evaluateLaunchPolicyRules({
-        policyRecord,
-        profileId,
-        subject: { usesUniswapV4: true },
-        evidence
-      });
-      assert.deepEqual(direct.findings.map(({ ruleId }) => ruleId), [rule.id], rule.id);
-    }
+    assert.deepEqual(rules, []);
   }
+
+  // The production route remains disabled; its active rule is metadata-bound
+  // but cannot be evaluated or used as an approval path.
+  assert.throws(
+    () => evaluateLaunchPolicyRules({
+      policyRecord,
+      profileId: "production-launch",
+      subject: { usesUniswapV4: true },
+      evidence: passedEvidenceForRules(activeRules)
+    }),
+    (error) => error?.code === "LAUNCH_POLICY_PROFILE_DISABLED"
+  );
 
   const legacyDecision = evaluateOpenReview(readJson("review/examples/disclosed-high-fee.json"));
   assert.equal(legacyDecision.status, "profile_disabled");
@@ -345,12 +328,13 @@ test("public docs describe one policy chain through reviewer canary and audience
   ]) {
     assert.match(source, /policy\/launch-policy\.v1\.json/u, `${name} must name the sole authored policy`);
   }
-  assert.match(architecture, /policy → reviewer → Workflow Canary → signed audience-bound Website\s+eligibility/u);
+  assert.match(architecture, /policy → reviewer → Workflow Canary →\s*signed audience-bound Website\s+eligibility/u);
   assert.match(lifecycle, /expected Website audience from protected deployment configuration/u);
   assert.match(beta, /frozen legacy V2 transport/u);
   assert.match(beta, /cannot satisfy Workflow\s+Canary or Website eligibility/u);
   assert.match(agents, /only authored source of current Programmable-specific admission requirements/u);
-  assert.match(readme, /A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury/u);
+  assert.match(readme, /A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury/u);
+  assert.match(readme, /`build` returns no semantic launch requirements/u);
   assert.match(readme, /Three intake transports are open/u);
   assert.match(readme, /Generic Application V3\.1 accepts one immutable revision/u);
   assert.match(readme, /six-file legacy V2 package while the checked-in/u);

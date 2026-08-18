@@ -193,7 +193,7 @@ test("requirements can describe disabled production without inventing approval a
   assert.equal(output.profile.authority.launchAuthorized, false);
   assert.deepEqual(output.rules.map(({ id, requirement }) => ({ id, requirement })), [{
     id: "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
-    requirement: "A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury."
+    requirement: "A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury."
   }]);
   assert.doesNotMatch(result.stdout, /LAUNCH_APPROVED/u);
 });

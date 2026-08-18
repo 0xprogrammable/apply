@@ -8,6 +8,7 @@ import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020
 
 import {
   buildLaunchPolicyBinding,
+  canonicalJson,
   compareLaunchPolicyBindings,
   digestLaunchPolicyBytes,
   evaluateLaunchPolicyRules,
@@ -44,11 +45,15 @@ function runGit(repositoryRoot, args) {
   }).trim();
 }
 
-function trustedPolicyFixture(t) {
+function trustedPolicyFixture(t, policy = canonicalPolicyRecord().policy) {
   const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-git-"));
   t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
   fs.mkdirSync(path.join(repositoryRoot, "policy"), { recursive: true });
-  fs.copyFileSync(policyPath, path.join(repositoryRoot, "policy/launch-policy.v1.json"));
+  fs.writeFileSync(
+    path.join(repositoryRoot, "policy/launch-policy.v1.json"),
+    `${canonicalJson(policy)}\n`,
+    "utf8"
+  );
   runGit(repositoryRoot, ["init", "--initial-branch=main"]);
   runGit(repositoryRoot, ["remote", "add", "origin", "https://github.com/0xprogrammable/submit-launch.git"]);
   runGit(repositoryRoot, ["add", "policy/launch-policy.v1.json"]);
@@ -65,7 +70,7 @@ function trustedPolicyFixture(t) {
 
 test("canonical policy exposes exactly build canary and disabled production profiles", () => {
   const record = canonicalPolicyRecord();
-  assert.equal(record.policy.policyVersion, "1.2.0");
+  assert.equal(record.policy.policyVersion, "1.3.0");
   assert.deepEqual(record.policy.profiles.map(({ id }) => id), ["build", "production-launch", "workflow-canary"]);
   assert.equal(selectLaunchPolicyProfile(record.policy, "build").enabled, true);
   assert.equal(selectLaunchPolicyProfile(record.policy, "production-launch").enabled, false);
@@ -75,17 +80,22 @@ test("canonical policy exposes exactly build canary and disabled production prof
   assert.doesNotMatch(JSON.stringify(record.policy), /LAUNCH_APPROVED/u);
 });
 
-test("current admission policy is one sentence: Ethereum and the Programmable treasury 10 bps", (t) => {
+test("current production-route policy is one sentence: Ethereum and the Programmable treasury 10 bps", (t) => {
   const { policy } = canonicalPolicyRecord();
-  assert.equal(policy.policyVersion, "1.2.0");
+  assert.equal(policy.policyVersion, "1.3.0");
   assert.deepEqual(policy.rules.map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
-  assert.equal(policy.rules[0].requirement, "A launch must be on Ethereum and route 10 bps of trading volume to the Programmable treasury.");
-  assert.deepEqual(rulesForProfile(policy, "build").map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
+  assert.equal(policy.rules[0].requirement, "A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury.");
+  assert.deepEqual(rulesForProfile(policy, "build"), []);
   assert.deepEqual(rulesForProfile(policy, "production-launch").map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
   assert.deepEqual(rulesForProfile(policy, "workflow-canary"), []);
   assert.equal(policy.rules.some(({ status }) => status !== "active"), false);
 
-  const { record } = trustedPolicyFixture(t);
+  // The production profile is intentionally disabled. Exercise the deterministic
+  // handler through a bounded test-only policy that makes the same rule available
+  // to the checker-only build profile; this does not change the canonical policy.
+  const checkerPolicy = structuredClone(policy);
+  checkerPolicy.rules[0].profiles = ["build", "production-launch"];
+  const { record } = trustedPolicyFixture(t, checkerPolicy);
   const validEvidence = {
     "programmable-launch-requirement": {
       basis: "gross-canonical-pool-volume",

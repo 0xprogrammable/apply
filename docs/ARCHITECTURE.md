@@ -13,23 +13,28 @@ production facts as separate authorities.
    or indirect imported gates fail the repository check until explicitly classified and reviewed.
 4. The deterministic reviewer projects findings from those Rule IDs. Analyzer observations cannot add requirements,
    severity, enforcement, or approval authority.
-5. [`intake/schemas/public-pr-application-v3.schema.json`](../intake/schemas/public-pr-application-v3.schema.json) is
-   the central owner of the generic Application V3.1 draft contract. One immutable revision binds applicant identity,
-   exact public source, intent, evidence, policy selection, and security assessment without classifying the project by
-   a closed type or capability list.
-6. Protected-base intake validates one bounded V3.1 revision as inert untrusted data. It may emit only a valid or
+5. [`intake/schemas/universal-admission-v1.schema.json`](../intake/schemas/universal-admission-v1.schema.json) is the
+   cheap, project-agnostic front door. It binds source identity and truthful disclosure without requiring an audit,
+   a category allowlist, or a fabricated market/fee artifact. It emits only `ADMITTED_FOR_REVIEW` or
+   `ADMITTED_FOR_REVIEW_ANALYSIS_PENDING` (plus bounded transport errors).
+6. [`intake/schemas/public-pr-application-v3.schema.json`](../intake/schemas/public-pr-application-v3.schema.json) is
+   the deeper immutable Application V3.1 draft contract. A project that proceeds beyond the front door binds applicant
+   identity, exact public source, intent, evidence, policy selection, and review-package records without classifying the
+   project by a closed type or capability list.
+7. Protected-base intake validates one bounded V3.1 revision as inert untrusted data. It may emit only a valid or
    invalid draft-for-review result; it cannot record review completion, acceptance, approval, deployment, or launch.
-7. A one-file Workflow Canary may prove only the hidden, non-production GitHub handoff against that same binding.
-8. A signed audience-bound Website eligibility envelope may expose that exact Canary result only to the Website
+8. A one-file Workflow Canary may prove only the hidden, non-production GitHub handoff against that same binding.
+9. A signed audience-bound Website eligibility envelope may expose that exact Canary result only to the Website
    environment named by protected deployment configuration. It grants no public, production, funds, audit, or launch
    authority.
-9. Registry promotion, deployment, runtime verification, provider support, and public availability remain later,
+10. Registry promotion, deployment, runtime verification, provider support, and public availability remain later,
    independently evidenced facts.
 
-The public draft flow is: applicant source → immutable Application V3.1 revision → protected validation → independent
-review. The separate hidden path remains: policy → reviewer → Workflow Canary → signed audience-bound Website
-eligibility. Every step rechecks the exact policy, application, source, and prior-result identity before it can emit its
-narrower result. A changed policy fails closed as drift; it is never silently copied into a consumer.
+The public draft flow is: source → small Universal Admission envelope → optional immutable Application V3.1 revision →
+protected validation → independent review. The separate hidden path remains: policy → reviewer → Workflow Canary →
+signed audience-bound Website eligibility. Every step rechecks the exact policy, application, source, and prior-result
+identity before it can emit its narrower result. A changed policy fails closed as drift; it is never silently copied into
+a consumer.
 
 The source repository never moves into this repository. An application pull request never gains permission to edit
 policy, workflows, schemas, project records, or another application. The receipt-bound

@@ -102,6 +102,8 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/verify-public-hook-application.mjs",
   "scripts/verify-public-hook-application-core.mjs",
   "scripts/verify-repository.mjs",
+  "scripts/universal-admission-core.mjs",
+  "scripts/universal-admission.mjs",
   "scripts/verify-workflow-canary.mjs",
   "scripts/workflow-canary-core.mjs"
 ]);

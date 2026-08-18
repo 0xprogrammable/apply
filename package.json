@@ -16,6 +16,7 @@
     "policy": "node scripts/launch-policy.mjs",
     "policy:check": "node scripts/generate-launch-policy-artifacts.mjs --check",
     "policy:generate": "node scripts/generate-launch-policy-artifacts.mjs --write",
+    "admission": "node scripts/universal-admission.mjs",
     "review": "node review/cli.mjs",
     "test": "node scripts/verify-repository.mjs",
     "test:acceptance": "node --test test/canary-eligibility.test.mjs test/acceptance-entitlement.test.mjs",
