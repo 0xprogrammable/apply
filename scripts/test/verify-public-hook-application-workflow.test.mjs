@@ -26,7 +26,11 @@ const codeqlRequiredJob = codeql.slice(codeql.indexOf("  required:"));
 const publicJob = intake.slice(intake.indexOf("  public-intake:"));
 const verificationStep = publicJob.slice(
   publicJob.indexOf("- name: Verify policy-bound closed public application package"),
-  publicJob.indexOf("- name: Defer executable registry maintenance")
+  publicJob.indexOf("- name: Rebind exact open Draft metadata after Application V3 verification")
+);
+const finalDraftReadbackStep = publicJob.slice(
+  publicJob.indexOf("- name: Rebind exact open Draft metadata after Application V3 verification"),
+  publicJob.indexOf("- name: Verify policy-bound hidden workflow canary")
 );
 const fetchStep = publicJob.slice(
   publicJob.indexOf("- name: Fetch exact candidate merge as blobless data"),
@@ -35,6 +39,7 @@ const fetchStep = publicJob.slice(
 
 test("pull_request_target uses only protected base code and read-only authority", () => {
   assert.match(intake, /pull_request_target:\n\s+branches:\n\s+- main/u);
+  assert.match(intake, /types: \[opened, synchronize, reopened, converted_to_draft, ready_for_review\]/u);
   assert.doesNotMatch(intake, /\n  push:|\n  workflow_dispatch:/u);
   assert.match(intake, /\npermissions:\n  contents: read\n/u);
   assert.doesNotMatch(intake, /secrets\.|contents:\s*write|pull-requests:\s*write|id-token:/u);
@@ -66,6 +71,10 @@ test("only a closed V2 or Application V3 package is hydrated and public source l
   assert.match(verificationStep, /--expected-builder-login "\$\{\{ github\.event\.pull_request\.user\.login \}\}"/u);
   assert.match(verificationStep, /--expected-builder-user-id "\$\{\{ github\.event\.pull_request\.user\.id \}\}"/u);
   assert.doesNotMatch(verificationStep, /github\.token|secrets\./u);
+  assert.match(finalDraftReadbackStep, /--verify-bounded-application-paths/u);
+  assert.match(finalDraftReadbackStep, /CANDIDATE_READ_TOKEN: \$\{\{ github\.token \}\}/u);
+  assert.match(finalDraftReadbackStep, /--expected-base-commit "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/u);
+  assert.match(finalDraftReadbackStep, /--expected-candidate-commit "\$\{\{ github\.event\.pull_request\.head\.sha \}\}"/u);
 });
 
 test("one-file workflow canary stays policy-bound, inert, authenticated, and non-authoritative", () => {

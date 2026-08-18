@@ -28,6 +28,7 @@ import {
 } from "../launch-policy-core.mjs";
 import { validateGitHubPublicSourceRequestV1 } from "../../vendor/programmable-v4-hook-builder/scripts/github-public-source-request.mjs";
 import { createApplicationV3TestPackage } from "./application-v3-package-fixture.mjs";
+import { derivePublicPrApplicationV3PreviousBinding } from "../verify-public-application-v3-core.mjs";
 
 const PULL_REQUEST_NUMBER = "7";
 const BUILDER_USER_ID = "9007199254740993";
@@ -207,6 +208,157 @@ test("trusted intake hydrates only one immutable nested Application V3 revision"
   assert.ok(objectIds.every((objectId) => hasObjectWithoutLazyFetch(candidateData, objectId)));
   assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
   assert.equal(fs.existsSync(path.join(candidateData, "submissions")), false);
+});
+
+test("open Draft update recovers one exact unpublished V3 predecessor from authenticated head history", async (t) => {
+  const fixture = createRevisionPair(t);
+  const revision1 = makeApplicationV3Package({ applicationId: "fade" });
+  const revision1Directory = "submissions/fade/v3/revisions/1";
+  writeApplicationV3Revision(fixture.candidate, revision1Directory, revision1.packageFiles);
+  const revision1Commit = commitAll(fixture.candidate, "add unpublished revision 1");
+  const syncTree = git(fixture.candidate, ["rev-parse", `${revision1Commit}^{tree}`]);
+  const syncCommit = git(fixture.candidate, [
+    "commit-tree", syncTree,
+    "-p", revision1Commit,
+    "-p", fixture.baseCommit,
+    "-m", "sync protected base without changing applicant bytes"
+  ]);
+  git(fixture.candidate, ["reset", "--hard", syncCommit]);
+
+  const previous = deriveApplicationV3PreviousBinding(revision1.application, revision1.packageFiles);
+  const revision2 = makeApplicationV3Package({
+    applicationId: "fade",
+    applicationRevision: "2",
+    lineage: { kind: "recheck", previous }
+  });
+  const revision2Directory = "submissions/fade/v3/revisions/2";
+  writeApplicationV3Revision(fixture.candidate, revision2Directory, revision2.packageFiles);
+  const transitionCommit = commitAll(fixture.candidate, "add unpublished revision 2");
+  fs.rmSync(path.join(fixture.candidate, revision1Directory), { recursive: true });
+  const candidateCommit = commitAll(fixture.candidate, "retain only current unpublished revision");
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+
+  const hydration = await hydratePublicApplicationCandidate({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    repository: "central/repository",
+    readToken: "test-read-token"
+  }, {
+    allowFileProtocolForTests: true,
+    remoteUrlForTests: pathToFileURL(fixture.candidate).href,
+    fetchImplementation: createMultipleTreeMetadataFetch(fixture.candidate, [
+      { commit: transitionCommit, packageDirectory: revision1Directory },
+      { commit: candidateCommit, packageDirectory: revision2Directory }
+    ])
+  });
+  assert.equal(hydration.applicationRevision, "2");
+  assert.equal(hydration.continuationAuthorized, false);
+
+  const report = await verifyPublicHookApplication({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    expectedBuilderLogin: revision2.application.builder.githubLogin,
+    expectedBuilderUserId: revision2.application.builder.githubUserId,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    resolveSource: exactApplicationV3SourceResolver,
+    resolveExactObjects: exactApplicationV3ObjectResolver(revision2.sourceFiles)
+  });
+  assert.equal(report.result, "valid-public-application-v3-package");
+  assert.equal(report.applicationRevision, "2");
+  assert.equal(report.reviewState, "unreviewed");
+  assert.equal(report.approvalGranted, false);
+  assert.equal(report.acceptanceGranted, false);
+  assert.equal(report.productionDiscoveryAllowed, false);
+  assert.equal(report.publicRoutingAllowed, false);
+  assert.equal(report.realUserFundsAllowed, false);
+});
+
+test("open Draft history rejects deleted, substituted, and unrelated predecessor transport", async (t) => {
+  for (const scenario of ["deleted", "substituted", "unrelated"]) {
+    await t.test(scenario, async (subtest) => {
+      const fixture = createRevisionPair(subtest);
+      const revision1 = makeApplicationV3Package({ applicationId: "fade" });
+      const revision1Directory = "submissions/fade/v3/revisions/1";
+      writeApplicationV3Revision(fixture.candidate, revision1Directory, revision1.packageFiles);
+      commitAll(fixture.candidate, "add predecessor");
+      if (scenario === "deleted") {
+        fs.rmSync(path.join(fixture.candidate, revision1Directory), { recursive: true });
+        commitAll(fixture.candidate, "delete predecessor early");
+        writeApplicationV3Revision(fixture.candidate, revision1Directory, revision1.packageFiles);
+        commitAll(fixture.candidate, "re-add predecessor");
+      } else if (scenario === "substituted") {
+        writeFile(fixture.candidate, `${revision1Directory}/PROPOSAL.md`, Buffer.from("# substituted\n"));
+        commitAll(fixture.candidate, "substitute predecessor bytes");
+      } else {
+        writeFile(fixture.candidate, "submissions/fade/application.json", jsonBytes({ schemaVersion: 2 }));
+        commitAll(fixture.candidate, "mix unrelated legacy history");
+      }
+      const previous = deriveApplicationV3PreviousBinding(revision1.application, revision1.packageFiles);
+      const revision2 = makeApplicationV3Package({
+        applicationId: "fade",
+        applicationRevision: "2",
+        lineage: { kind: "recheck", previous }
+      });
+      const revision2Directory = "submissions/fade/v3/revisions/2";
+      writeApplicationV3Revision(fixture.candidate, revision2Directory, revision2.packageFiles);
+      commitAll(fixture.candidate, "add current revision");
+      fs.rmSync(path.join(fixture.candidate, revision1Directory), { recursive: true, force: true });
+      fs.rmSync(path.join(fixture.candidate, "submissions/fade/application.json"), { force: true });
+      const candidateCommit = commitAll(fixture.candidate, "close final visible revision");
+      const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+      const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+      assert.throws(
+        () => classifyPublicIntakePullRequest({
+          baseRoot: fixture.base,
+          candidateRoot: candidateData,
+          expectedBaseCommit: fixture.baseCommit,
+          expectedCandidateCommit: candidateCommit,
+          expectedMergeCommit: mergeCommit
+        }),
+        (error) => error?.code === "APPLICATION_V3_DRAFT_HISTORY_INVALID"
+      );
+    });
+  }
+});
+
+test("Application V3 metadata fails closed for closed, non-Draft, base, and head drift", async (t) => {
+  const fixture = createRevisionPair(t);
+  const files = [{
+    filename: "submissions/fade/v3/revisions/1/application.v3.json",
+    status: "added"
+  }];
+  for (const scenario of ["closed", "non-draft", "base-drift", "head-drift"]) {
+    const baseCommit = scenario === "base-drift" ? "a".repeat(40) : fixture.baseCommit;
+    const candidateCommit = scenario === "head-drift" ? "b".repeat(40) : "c".repeat(40);
+    await assert.rejects(
+      verifyBoundedApplicationPullRequestPaths({
+        repository: "central/repository",
+        pullRequestNumber: PULL_REQUEST_NUMBER,
+        expectedBaseCommit: fixture.baseCommit,
+        expectedCandidateCommit: "c".repeat(40),
+        readToken: "test-read-token"
+      }, {
+        fetchImplementation: createPullRequestMetadataFetch({
+          baseCommit,
+          candidateCommit,
+          files,
+          state: scenario === "closed" ? "closed" : "open",
+          draft: scenario !== "non-draft"
+        })
+      }),
+      (error) => scenario === "non-draft"
+        ? error?.code === "APPLICATION_V3_DRAFT_REQUIRED" && error?.kind === "candidate"
+        : error?.code === "CANDIDATE_PREFLIGHT_ID_MISMATCH" && error?.kind === "system"
+    );
+  }
 });
 
 test("protected dispatch validates no-fee proposal and prototype Application V3 packages without executing candidate code", async (t) => {
@@ -1102,7 +1254,12 @@ test("initial candidate fetch derives the merge id and immediately binds the eve
       readToken: "test-read-token"
     }, {
       remoteUrlForTests: pathToFileURL(fixture.candidate).href,
-      allowFileProtocolForTests: true
+      allowFileProtocolForTests: true,
+      fetchImplementation: createPullRequestMetadataFetch({
+        baseCommit: fixture.baseCommit,
+        candidateCommit: "d".repeat(40),
+        files: pullRequestChangedFiles(fixture.candidate, fixture.baseCommit, candidateCommit)
+      })
     }),
     (error) => error?.code === "PR_MERGE_PARENT_MISMATCH" && error?.kind === "system"
   );
@@ -1136,6 +1293,11 @@ test("initial candidate fetch rejects a giant pack and removes the token-bearing
       readToken: "test-read-token"
     }, {
       remoteUrlForTests: "https://github.com/central/repository.git",
+      fetchImplementation: createPullRequestMetadataFetch({
+        baseCommit,
+        candidateCommit: "b".repeat(40),
+        files: []
+      }),
       maximumFileSizeBytes: 64 * 1024,
       maximumRepositoryBytes: 2 * 1024 * 1024,
       runFetch(parameters) {
@@ -1353,6 +1515,42 @@ function makeApplicationV3Package(options = {}) {
     sourceFiles: fixture.sourceFiles
   };
 }
+
+function writeApplicationV3Revision(repository, packageDirectory, packageFiles) {
+  for (const [relativePath, bytes] of packageFiles) {
+    writeFile(repository, `${packageDirectory}/${relativePath}`, bytes);
+  }
+}
+
+function deriveApplicationV3PreviousBinding(application, packageFiles) {
+  const applicationBytes = packageFiles.get("application.v3.json");
+  const targetDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+  const files = [{
+    path: `${targetDirectory}/application.v3.json`,
+    mediaType: "application/json",
+    byteLength: applicationBytes.length,
+    sha256: sha256Bytes(applicationBytes)
+  }, ...application.reviewPackage.records
+    .filter((record) => record.source === "application-package")
+    .map((record) => ({
+      path: `${targetDirectory}/${record.path}`,
+      mediaType: record.mediaType,
+      byteLength: record.byteLength,
+      sha256: record.sha256
+    }))]
+    .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  return derivePublicPrApplicationV3PreviousBinding({
+    application,
+    applicationSha256: sha256Bytes(applicationBytes),
+    packageSha256: sha256Bytes(Buffer.from(canonicalJson({
+      contract: "public-pr-application-v3-package",
+      applicationId: application.applicationId,
+      applicationRevision: application.applicationRevision,
+      targetDirectory,
+      files
+    }), "utf8"))
+  });
+}
 async function exactApplicationV3SourceResolver(request) {
   const primary = request.primary;
   return {
@@ -1543,6 +1741,7 @@ function createPullRequestMerge(fixture, candidateCommit) {
 async function fetchBloblessPullRequestMerge(fixture, mergeCommit) {
   const candidateData = path.join(fixture.root, "candidate.git");
   const candidateCommit = git(fixture.candidate, ["rev-parse", `${mergeCommit}^2`]);
+  const files = pullRequestChangedFiles(fixture.candidate, fixture.baseCommit, candidateCommit);
   git(fixture.candidate, ["update-ref", `refs/pull/${PULL_REQUEST_NUMBER}/merge`, mergeCommit]);
   git(fixture.candidate, ["config", "uploadpack.allowFilter", "true"]);
   const report = await fetchPublicApplicationCandidate({
@@ -1555,7 +1754,12 @@ async function fetchBloblessPullRequestMerge(fixture, mergeCommit) {
     readToken: "test-read-token"
   }, {
     remoteUrlForTests: pathToFileURL(fixture.candidate).href,
-    allowFileProtocolForTests: true
+    allowFileProtocolForTests: true,
+    fetchImplementation: createPullRequestMetadataFetch({
+      baseCommit: fixture.baseCommit,
+      candidateCommit,
+      files
+    })
   });
   assert.equal(report.result, "exact-blobless-candidate-fetched");
   assert.equal(report.mergeCommit, mergeCommit);
@@ -1590,12 +1794,13 @@ function fetchBloblessPullRequestMergeWithoutIntake(fixture, mergeCommit) {
   return candidateData;
 }
 
-function createPullRequestMetadataFetch({ baseCommit, candidateCommit, files }) {
+function createPullRequestMetadataFetch({ baseCommit, candidateCommit, files, draft = true, state = "open" }) {
   const pullRequestUrl = `https://api.github.com/repos/central/repository/pulls/${PULL_REQUEST_NUMBER}`;
   const documents = new Map([
     [pullRequestUrl, {
       number: Number(PULL_REQUEST_NUMBER),
-      state: "open",
+      state,
+      draft,
       base: { sha: baseCommit, repo: { full_name: "central/repository" } },
       head: { sha: candidateCommit },
       changed_files: files.length
@@ -1618,6 +1823,18 @@ function createPullRequestMetadataFetch({ baseCommit, candidateCommit, files }) 
       async arrayBuffer() { return body; }
     };
   };
+}
+
+function pullRequestChangedFiles(repository, baseCommit, candidateCommit) {
+  const statusNames = new Map([["A", "added"], ["M", "modified"], ["D", "removed"]]);
+  return git(repository, ["diff", "--name-status", "--no-renames", baseCommit, candidateCommit])
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [status, filename] = line.split("\t");
+      assert.ok(statusNames.has(status), `unexpected GitHub fixture status: ${line}`);
+      return { filename, status: statusNames.get(status) };
+    });
 }
 
 function writePackage(repository, files, applicationId = "example-hook") {
@@ -1719,6 +1936,50 @@ function createTreeMetadataFetch(repository, packageDirectory = "submissions/exa
     assert.equal(options.method, "GET");
     assert.equal(options.redirect, "error");
     assert.equal(options.headers.Authorization, "Bearer test-read-token");
+    return {
+      status: 200,
+      redirected: false,
+      url,
+      headers: { get(name) { return name.toLowerCase() === "content-length" ? String(body.length) : null; } },
+      body: null,
+      async arrayBuffer() { return body; }
+    };
+  };
+}
+
+function createMultipleTreeMetadataFetch(repository, plans) {
+  const documents = new Map();
+  for (const { commit, packageDirectory } of plans) {
+    const packageTreeObjectId = git(repository, ["rev-parse", `${commit}:${packageDirectory}`]);
+    const records = git(repository, ["ls-tree", "-r", "-l", `${commit}:${packageDirectory}`])
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const match = /^([0-7]{6}) (blob|tree|commit) ([a-f0-9]{40})\s+([0-9-]+)\t(.+)$/u.exec(line);
+        assert.ok(match, `unexpected historical ls-tree metadata: ${line}`);
+        return {
+          path: match[5],
+          mode: match[1],
+          type: match[2],
+          sha: match[3],
+          size: Number(match[4]),
+          url: `https://api.github.com/repos/central/repository/git/blobs/${match[3]}`
+        };
+      });
+    const url = `https://api.github.com/repos/central/repository/git/trees/${packageTreeObjectId}?recursive=1`;
+    documents.set(url, Buffer.from(JSON.stringify({
+      sha: packageTreeObjectId,
+      url: url.slice(0, -"?recursive=1".length),
+      truncated: false,
+      tree: records
+    })));
+  }
+  return async (url, options) => {
+    assert.equal(options.method, "GET");
+    assert.equal(options.redirect, "error");
+    assert.equal(options.headers.Authorization, "Bearer test-read-token");
+    assert.ok(documents.has(url), `unexpected historical tree URL: ${url}`);
+    const body = documents.get(url);
     return {
       status: 200,
       redirected: false,
