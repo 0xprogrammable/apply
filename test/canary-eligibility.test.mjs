@@ -498,6 +498,52 @@ test("exact canary and Applicant compatibility maintenance paths are bounded whi
   );
 });
 
+test("exact Universal Admission maintenance paths are closed while adjacent paths fail", (t) => {
+  const exactPaths = [
+    ".programmable/universal-admission-contract.v1.json",
+    "scripts/benchmark-universal-admission-sqlite.mjs",
+    "scripts/universal-admission-command-core.mjs",
+    "scripts/universal-admission-contract-core.mjs",
+    "scripts/universal-admission-contract.mjs",
+    "scripts/universal-admission-core.mjs",
+    "scripts/universal-admission-protocol-core.mjs",
+    "scripts/universal-admission-service-core.mjs",
+    "scripts/universal-admission-sqlite-store.mjs",
+    "scripts/universal-admission-sqlite.mjs",
+    "scripts/universal-admission.mjs"
+  ];
+  for (const entryPath of exactPaths) {
+    const fixture = createPolicyRepository(t);
+    writeFile(fixture.candidate, entryPath, `maintenance fixture for ${entryPath}\n`);
+    const head = commitAll(fixture.candidate, `maintain ${entryPath}`);
+    const merge = createMergeCommit(fixture.candidate, fixture.baseCommit, head);
+    assert.equal(
+      classifyPublicIntakePullRequest(classificationInput(fixture, head, merge)).mode,
+      "registry-maintenance",
+      entryPath
+    );
+  }
+
+  for (const entryPath of [
+    ".programmable/universal-admission-contract.v2.json",
+    ".programmable/universal-admission-private.json",
+    "scripts/benchmark-universal-admission-private.mjs",
+    "scripts/universal-admission-command-helper.mjs",
+    "scripts/universal-admission-core-private.mjs",
+    "scripts/universal-admission-private.mjs"
+  ]) {
+    const fixture = createPolicyRepository(t);
+    writeFile(fixture.candidate, entryPath, "unreviewed Universal Admission maintenance path\n");
+    const head = commitAll(fixture.candidate, `reject ${entryPath}`);
+    const merge = createMergeCommit(fixture.candidate, fixture.baseCommit, head);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInput(fixture, head, merge)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED"),
+      entryPath
+    );
+  }
+});
+
 async function createEligibilityFixture(t, { applicationRevision = 1, source = SOURCE } = {}) {
   const repository = createPolicyRepository(t);
   const application = makeApplication(repository.policyBinding, { applicationRevision, source });
