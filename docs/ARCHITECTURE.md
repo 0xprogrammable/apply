@@ -16,7 +16,9 @@ production facts as separate authorities.
 5. [`intake/schemas/universal-admission-v1.schema.json`](../intake/schemas/universal-admission-v1.schema.json) is the
    cheap, project-agnostic front door. It binds source identity and truthful disclosure without requiring an audit,
    a category allowlist, or a fabricated market/fee artifact. It emits only `ADMITTED_FOR_REVIEW` or
-   `ADMITTED_FOR_REVIEW_ANALYSIS_PENDING` (plus bounded transport errors).
+   `ADMITTED_FOR_REVIEW_ANALYSIS_PENDING` (plus bounded transport errors). Its optional local CAS/spool reference
+   validates first and then creates fixed-depth digest shards with an atomic first-writer marker. It provides neither
+   caller authentication nor production quota, fairness, worker, or deployment infrastructure.
 6. [`intake/schemas/public-pr-application-v3.schema.json`](../intake/schemas/public-pr-application-v3.schema.json) is
    the deeper immutable Application V3.1 draft contract. A project that proceeds beyond the front door binds applicant
    identity, exact public source, intent, evidence, policy selection, and review-package records without classifying the

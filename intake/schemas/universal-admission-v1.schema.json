@@ -25,7 +25,7 @@
         "revision": { "pattern": "^[1-9][0-9]{0,30}$", "type": "string" },
         "stage": { "enum": ["proposal", "prototype", "launch-request"] },
         "requestedRoute": { "enum": ["none", "programmable-ethereum-mainnet", "other"] },
-        "projectLabel": { "maxLength": 160, "minLength": 1, "type": "string" }
+        "projectLabel": { "maxLength": 160, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" }
       }
     },
     "attestation": {
@@ -91,7 +91,7 @@
       "additionalProperties": false,
       "required": ["repositoryUrl", "commit", "tree", "path", "packageSha256"],
       "properties": {
-        "repositoryUrl": { "maxLength": 2048, "pattern": "^https://[^\\s]+$", "type": "string" },
+        "repositoryUrl": { "maxLength": 2048, "minLength": 12, "pattern": "^https://[^\\s\\u0000\\r\\n@/?#]+(?:/[^\\s\\u0000\\r\\n?#]*)?$", "type": "string" },
         "repositoryId": { "maxLength": 32, "pattern": "^[0-9]{1,32}$", "type": "string" },
         "commit": { "$ref": "#/$defs/objectId" },
         "tree": { "$ref": "#/$defs/objectId" },
@@ -109,7 +109,7 @@
         "id": { "$ref": "#/$defs/id" },
         "kind": { "$ref": "#/$defs/label" },
         "status": { "$ref": "#/$defs/status" },
-        "failureMode": { "maxLength": 600, "minLength": 1, "type": "string" },
+        "failureMode": { "maxLength": 600, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
         "sourceRefs": { "$ref": "#/$defs/sourceRefs" }
       }
     },
@@ -120,7 +120,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "enum": ["source", "test", "observed", "external", "self-reported"] },
-        "ref": { "maxLength": 512, "minLength": 1, "type": "string" },
+        "ref": { "maxLength": 512, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
         "status": { "enum": ["declared", "observed", "independently-verified", "unknown"] },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
@@ -134,14 +134,14 @@
     "label": {
       "maxLength": 120,
       "minLength": 1,
-      "pattern": "^[^\\u0000\\r\\n]+$",
+      "pattern": "^[^\\s\\u0000\\r\\n]+(?:[ \\t]+[^\\s\\u0000\\r\\n]+)*$",
       "type": "string"
     },
     "objectId": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
     "path": {
       "maxLength": 256,
       "minLength": 1,
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!\\.git(?:/|$))[^\\\\\\u0000\\r\\n]+$",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.[gG][iI][tT](?:/|$))[^\\\\\\u0000\\r\\n]+$",
       "type": "string"
     },
     "privilege": {
@@ -152,7 +152,7 @@
         "id": { "$ref": "#/$defs/id" },
         "kind": { "$ref": "#/$defs/label" },
         "status": { "$ref": "#/$defs/status" },
-        "summary": { "maxLength": 600, "minLength": 1, "type": "string" },
+        "summary": { "maxLength": 600, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
         "sourceRefs": { "$ref": "#/$defs/sourceRefs" }
       }
     },
@@ -171,21 +171,28 @@
         "id": { "$ref": "#/$defs/id" },
         "kind": { "$ref": "#/$defs/label" },
         "status": { "$ref": "#/$defs/status" },
-        "summary": { "maxLength": 1000, "minLength": 1, "type": "string" },
+        "summary": { "maxLength": 1000, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
         "sourceRefs": { "$ref": "#/$defs/sourceRefs" }
       }
     },
     "valueFlow": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [{
+        "if": {
+          "properties": { "kind": { "const": "none" }, "status": { "const": "declared" } },
+          "required": ["kind", "status"]
+        },
+        "then": { "properties": { "from": { "const": "none" }, "to": { "const": "none" } } }
+      }],
       "required": ["id", "kind", "status", "from", "to", "basis", "sourceRefs"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "enum": ["none", "swap", "fee", "reward", "custody", "other"] },
         "status": { "$ref": "#/$defs/status" },
-        "from": { "maxLength": 160, "minLength": 1, "type": "string" },
-        "to": { "maxLength": 160, "minLength": 1, "type": "string" },
-        "basis": { "maxLength": 320, "minLength": 1, "type": "string" },
+        "from": { "maxLength": 160, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
+        "to": { "maxLength": 160, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
+        "basis": { "maxLength": 320, "minLength": 1, "pattern": "^[^\\u0000\\r\\n]+$", "type": "string" },
         "sourceRefs": { "$ref": "#/$defs/sourceRefs" }
       }
     },
