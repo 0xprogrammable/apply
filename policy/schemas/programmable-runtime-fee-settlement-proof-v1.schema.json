@@ -1,0 +1,873 @@
+{
+  "$id": "https://programmable.money/schemas/programmable-runtime-fee-settlement-proof-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A closed structural assertion for one exact Fee Conformance V1 scope, asset, and inclusive Ethereum observation range. Version 1 deliberately remains analysis-pending: the repository has no separately pinned Ethereum finality/checkpoint trust root or protected verifier that reproduces headers, receipts, logs, runtime state, and treasury balance changes. Repository membership, provider labels, booleans, and digests are not finalized settlement proof. The assertion grants no future-payment, monitoring, safety, launch, funds, or Registry authority.",
+  "properties": {
+    "$schema": {
+      "const": "urn:programmable:runtime-fee-settlement-observation-assertion-v1:1.0.0"
+    },
+    "assurance": {
+      "const": "protected-accounting-assertion-not-finality-or-settlement-proof",
+      "description": "This artifact binds a claimed observation for later verification; it does not prove Ethereum finality or treasury settlement."
+    },
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "application": {
+          "additionalProperties": false,
+          "properties": {
+            "applicationId": {
+              "$ref": "#/$defs/slug"
+            },
+            "applicationRevision": {
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "applicationSha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            },
+            "packageSha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            }
+          },
+          "required": [
+            "applicationId",
+            "applicationRevision",
+            "applicationSha256",
+            "packageSha256"
+          ],
+          "type": "object"
+        },
+        "feeConformance": {
+          "additionalProperties": false,
+          "description": "Content-carrying binding to the existing applicant-side Fee Conformance Receipt V1. That receipt remains structural prelaunch evidence and is not itself deployment or runtime proof.",
+          "properties": {
+            "assurance": {
+              "const": "structural-only-not-audit-deployment-or-approval"
+            },
+            "collectionProfile": {
+              "enum": [
+                "async-fill-batch",
+                "custom-reviewed",
+                "standard-amm",
+                "sync-custom-zero-amm"
+              ]
+            },
+            "contractId": {
+              "const": "fee-conformance-receipt-v1"
+            },
+            "feeScopeId": {
+              "$ref": "#/$defs/slug"
+            },
+            "implementation": {
+              "$ref": "#/$defs/implementation"
+            },
+            "marketRef": {
+              "$ref": "#/$defs/slug"
+            },
+            "path": {
+              "$ref": "#/$defs/repositoryPath"
+            },
+            "poolId": {
+              "$ref": "#/$defs/nonzeroBytes32"
+            },
+            "quoteCurrency": {
+              "$ref": "#/$defs/address"
+            },
+            "receiptBytes": {
+              "$ref": "#/$defs/canonicalBytes"
+            },
+            "receiptSha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            },
+            "vectorSetSha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            }
+          },
+          "required": [
+            "assurance",
+            "collectionProfile",
+            "contractId",
+            "feeScopeId",
+            "implementation",
+            "marketRef",
+            "path",
+            "poolId",
+            "quoteCurrency",
+            "receiptBytes",
+            "receiptSha256",
+            "vectorSetSha256"
+          ],
+          "type": "object"
+        },
+        "promotion": {
+          "additionalProperties": false,
+          "properties": {
+            "launchReadinessDecisionSha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            },
+            "path": {
+              "pattern": "^registry/promotions/[a-z0-9]+(?:-[a-z0-9]+)*/0x[0-9a-f]{64}\\.json$",
+              "type": "string"
+            },
+            "routerPromotionEvidenceSha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            },
+            "sha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            }
+          },
+          "required": [
+            "launchReadinessDecisionSha256",
+            "path",
+            "routerPromotionEvidenceSha256",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "commit": {
+              "$ref": "#/$defs/gitObject"
+            },
+            "configurationHash": {
+              "$ref": "#/$defs/nonzeroSha256"
+            },
+            "numericRepositoryId": {
+              "pattern": "^[1-9][0-9]{0,63}$",
+              "type": "string"
+            },
+            "repository": {
+              "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+$",
+              "type": "string"
+            },
+            "tree": {
+              "$ref": "#/$defs/gitObject"
+            }
+          },
+          "required": [
+            "commit",
+            "configurationHash",
+            "numericRepositoryId",
+            "repository",
+            "tree"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "application",
+        "feeConformance",
+        "promotion",
+        "source"
+      ],
+      "type": "object"
+    },
+    "evidence": {
+      "additionalProperties": false,
+      "description": "Content-addressed claimed observer material. V1 binds the bytes but does not interpret them against an independent Ethereum trust root; all claim booleans remain non-authoritative.",
+      "properties": {
+        "applicantControlled": {
+          "const": false
+        },
+        "bundle": {
+          "additionalProperties": false,
+          "properties": {
+            "byteLength": {
+              "maximum": 16777216,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "gitBlobOid": {
+              "$ref": "#/$defs/gitObject"
+            },
+            "mediaType": {
+              "const": "application/json"
+            },
+            "path": {
+              "pattern": "^platform-evidence/runtime-fee-settlement/bundles/[0-9a-f]{64}\\.json$",
+              "type": "string"
+            },
+            "sha256": {
+              "$ref": "#/$defs/nonzeroSha256"
+            }
+          },
+          "required": [
+            "byteLength",
+            "gitBlobOid",
+            "mediaType",
+            "path",
+            "sha256"
+          ],
+          "type": "object"
+        },
+        "finalityCheckpointSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "headerChainSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "observerConfigurationSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "observerId": {
+          "const": "programmable-protected-runtime-fee-observer-v1"
+        },
+        "receiptSetSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "runtimeStateProofSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "verificationProfile": {
+          "const": "ethereum-finalized-fee-settlement-v1"
+        },
+        "claimedCompleteHeaderChain": {
+          "const": true,
+          "description": "Untrusted observer claim retained for future independent reproduction."
+        },
+        "claimedCompleteReceiptSet": {
+          "const": true,
+          "description": "Untrusted observer claim retained for future independent reproduction."
+        },
+        "claimedConsensusFinality": {
+          "const": true,
+          "description": "Untrusted observer claim retained for future independent reproduction."
+        },
+        "claimedReceiptRootsRecomputed": {
+          "const": true,
+          "description": "Untrusted observer claim retained for future independent reproduction."
+        },
+        "claimedRuntimeClosureCheckedEveryFeeRelevantBlock": {
+          "const": true,
+          "description": "Untrusted observer claim retained for future independent reproduction."
+        }
+      },
+      "required": [
+        "applicantControlled",
+        "bundle",
+        "claimedCompleteHeaderChain",
+        "claimedCompleteReceiptSet",
+        "claimedConsensusFinality",
+        "claimedReceiptRootsRecomputed",
+        "claimedRuntimeClosureCheckedEveryFeeRelevantBlock",
+        "finalityCheckpointSha256",
+        "headerChainSha256",
+        "observerConfigurationSha256",
+        "observerId",
+        "receiptSetSha256",
+        "runtimeStateProofSha256",
+        "verificationProfile"
+      ],
+      "type": "object"
+    },
+    "kind": {
+      "const": "programmable-runtime-fee-settlement-observation-assertion"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "description": "All authority and forward-looking claims remain false. Structural validation and repository binding cannot authorize production or prove payment.",
+      "properties": {
+        "applicantAssertionAccepted": {
+          "const": false
+        },
+        "auditClaim": {
+          "const": false
+        },
+        "continuousMonitoringClaim": {
+          "const": false
+        },
+        "coverage": {
+          "const": "one-fee-scope-one-asset-one-inclusive-finalized-range"
+        },
+        "currentLiquidityClaim": {
+          "const": false
+        },
+        "currentTradabilityClaim": {
+          "const": false
+        },
+        "fundsAuthority": {
+          "const": false
+        },
+        "futureCollectionClaim": {
+          "const": false
+        },
+        "futureSettlementClaim": {
+          "const": false
+        },
+        "launchAuthority": {
+          "const": false
+        },
+        "providerAssertionAccepted": {
+          "const": false
+        },
+        "registryWriteAuthority": {
+          "const": false
+        },
+        "safetyClaim": {
+          "const": false
+        },
+        "sellabilityClaim": {
+          "const": false
+        },
+        "terminalSupportClaim": {
+          "const": false
+        }
+      },
+      "required": [
+        "applicantAssertionAccepted",
+        "auditClaim",
+        "continuousMonitoringClaim",
+        "coverage",
+        "currentLiquidityClaim",
+        "currentTradabilityClaim",
+        "fundsAuthority",
+        "futureCollectionClaim",
+        "futureSettlementClaim",
+        "launchAuthority",
+        "providerAssertionAccepted",
+        "registryWriteAuthority",
+        "safetyClaim",
+        "sellabilityClaim",
+        "terminalSupportClaim"
+      ],
+      "type": "object"
+    },
+    "proofId": {
+      "$ref": "#/$defs/slug"
+    },
+    "range": {
+      "additionalProperties": false,
+      "description": "Claimed inclusive initial observation range from fee activation. The structural validator checks ordering and bindings but does not establish canonicality or consensus finality.",
+      "properties": {
+        "finalityMode": {
+          "const": "ethereum-consensus-finalized"
+        },
+        "finalizedAtBlock": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "finalizedAtBlockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "fromBlock": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "fromBlockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "fromDeployment": {
+          "const": true
+        },
+        "previousProofSha256": {
+          "type": "null"
+        },
+        "toBlock": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "toBlockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "claimedCanonicalFinalized": {
+          "const": true,
+          "description": "Untrusted claim retained for later independent reproduction; this boolean is never accepted as finality proof."
+        }
+      },
+      "required": [
+        "claimedCanonicalFinalized",
+        "finalityMode",
+        "finalizedAtBlock",
+        "finalizedAtBlockHash",
+        "fromBlock",
+        "fromBlockHash",
+        "fromDeployment",
+        "previousProofSha256",
+        "toBlock",
+        "toBlockHash"
+      ],
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "activationBlockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "activationBlockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "activationTransactionHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "activationTransactionIndex": {
+          "$ref": "#/$defs/decimal"
+        },
+        "chainId": {
+          "const": 1
+        },
+        "feeDeploymentBindingSha256": {
+          "$ref": "#/$defs/nonzeroSha256",
+          "description": "Source-to-runtime binding for the reviewed fee implementation, including exact build inputs, libraries, constructor and immutable configuration, deployed address, runtime code, and value-bearing components. It is distinct from Router deployment evidence."
+        },
+        "feeRuntimeAddress": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "feeRuntimeCodeHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "genesisHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "launchId": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "launchKind": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "launchTransactionHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "poolId": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "poolManager": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "reviewedImplementationArtifactSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "routerAddress": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "routerRuntimeCodeHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "runtimeClosureSha256": {
+          "$ref": "#/$defs/nonzeroSha256",
+          "description": "Binds every fee-relevant runtime component and mutable proxy or configuration slot for the full range; endpoint-only upgrade checks are insufficient."
+        },
+        "runtimeVerifierSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "treasury": {
+          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        }
+      },
+      "required": [
+        "activationBlockHash",
+        "activationBlockNumber",
+        "activationTransactionHash",
+        "activationTransactionIndex",
+        "chainId",
+        "feeDeploymentBindingSha256",
+        "feeRuntimeAddress",
+        "feeRuntimeCodeHash",
+        "genesisHash",
+        "launchId",
+        "launchKind",
+        "launchTransactionHash",
+        "poolId",
+        "poolManager",
+        "reviewedImplementationArtifactSha256",
+        "routerAddress",
+        "routerRuntimeCodeHash",
+        "runtimeClosureSha256",
+        "runtimeVerifierSha256",
+        "treasury"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "settlement": {
+      "additionalProperties": false,
+      "description": "Integer base-unit accounting assertion. V1 recomputes internal carry and liability arithmetic, but actual pool volume and treasury receipt remain unverified until a future protected observer validates the bound Ethereum evidence against an independent trust root.",
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/asset"
+        },
+        "basis": {
+          "const": "gross-canonical-pool-volume"
+        },
+        "closingLiabilityAtomic": {
+          "const": "0"
+        },
+        "closingRemainderNumerator": {
+          "$ref": "#/$defs/decimal"
+        },
+        "executionCount": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "executions": {
+          "items": {
+            "$ref": "#/$defs/execution"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "expectedFeeAtomic": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "feeScopeId": {
+          "$ref": "#/$defs/slug"
+        },
+        "grossCanonicalVolumeAtomic": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "hundredthsOfBip": {
+          "const": 1000
+        },
+        "openingLiabilityAtomic": {
+          "const": "0"
+        },
+        "openingRemainderNumerator": {
+          "const": "0"
+        },
+        "rateDenominator": {
+          "const": 1000000
+        },
+        "settledTreasuryAtomic": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "settlementCount": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "settlements": {
+          "items": {
+            "$ref": "#/$defs/settlement"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "asset",
+        "basis",
+        "closingLiabilityAtomic",
+        "closingRemainderNumerator",
+        "executionCount",
+        "executions",
+        "expectedFeeAtomic",
+        "feeScopeId",
+        "grossCanonicalVolumeAtomic",
+        "hundredthsOfBip",
+        "openingLiabilityAtomic",
+        "openingRemainderNumerator",
+        "rateDenominator",
+        "settledTreasuryAtomic",
+        "settlementCount",
+        "settlements"
+      ],
+      "type": "object"
+    },
+    "subject": {
+      "additionalProperties": false,
+      "properties": {
+        "applicationId": {
+          "$ref": "#/$defs/slug"
+        },
+        "applicationRevision": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "projectId": {
+          "$ref": "#/$defs/slug"
+        }
+      },
+      "required": [
+        "applicationId",
+        "applicationRevision",
+        "projectId"
+      ],
+      "type": "object"
+    },
+    "reasonCode": {
+      "const": "runtime-fee-verifier-trust-root-unavailable",
+      "description": "A future versioned platform verifier and independent Ethereum trust root are required before this production rule can pass."
+    },
+    "status": {
+      "const": "analysis-pending"
+    }
+  },
+  "required": [
+    "$schema",
+    "assurance",
+    "bindings",
+    "evidence",
+    "kind",
+    "limits",
+    "proofId",
+    "range",
+    "reasonCode",
+    "runtime",
+    "schemaVersion",
+    "settlement",
+    "status",
+    "subject"
+  ],
+  "title": "Programmable Runtime Fee Settlement Observation Assertion V1",
+  "type": "object",
+  "$defs": {
+    "address": {
+      "pattern": "^0x[0-9A-Fa-f]{40}$",
+      "type": "string"
+    },
+    "asset": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "kind": {
+          "enum": [
+            "erc20",
+            "native"
+          ]
+        }
+      },
+      "required": [
+        "address",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "canonicalBytes": {
+      "additionalProperties": false,
+      "properties": {
+        "base64": {
+          "maxLength": 699052,
+          "minLength": 4,
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+          "type": "string"
+        },
+        "byteLength": {
+          "maximum": 524288,
+          "minimum": 2,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "base64",
+        "byteLength"
+      ],
+      "type": "object"
+    },
+    "decimal": {
+      "description": "Canonical base-10 uint256; semantic validation enforces the upper bound.",
+      "maxLength": 78,
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "eventLocation": {
+      "properties": {
+        "blockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "transactionIndex": {
+          "$ref": "#/$defs/decimal"
+        }
+      }
+    },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "blockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "evidenceSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "expectedFeeAtomic": {
+          "$ref": "#/$defs/decimal"
+        },
+        "grossCanonicalVolumeAtomic": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "logIndex": {
+          "$ref": "#/$defs/decimal"
+        },
+        "poolId": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "remainderAfterNumerator": {
+          "$ref": "#/$defs/decimal"
+        },
+        "remainderBeforeNumerator": {
+          "$ref": "#/$defs/decimal"
+        },
+        "runtimeAddress": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "transactionIndex": {
+          "$ref": "#/$defs/decimal"
+        }
+      },
+      "required": [
+        "blockHash",
+        "blockNumber",
+        "evidenceSha256",
+        "expectedFeeAtomic",
+        "grossCanonicalVolumeAtomic",
+        "logIndex",
+        "poolId",
+        "remainderAfterNumerator",
+        "remainderBeforeNumerator",
+        "runtimeAddress",
+        "transactionHash",
+        "transactionIndex"
+      ],
+      "type": "object"
+    },
+    "gitObject": {
+      "not": {
+        "const": "0000000000000000000000000000000000000000"
+      },
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "implementation": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/$defs/slug"
+        },
+        "artifactSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "revisionObjectId": {
+          "$ref": "#/$defs/gitObject"
+        },
+        "sourceRef": {
+          "$ref": "#/$defs/slug"
+        },
+        "treeObjectId": {
+          "$ref": "#/$defs/gitObject"
+        }
+      },
+      "required": [
+        "artifactRef",
+        "artifactSha256",
+        "path",
+        "revisionObjectId",
+        "sourceRef",
+        "treeObjectId"
+      ],
+      "type": "object"
+    },
+    "nonzeroAddress": {
+      "not": {
+        "const": "0x0000000000000000000000000000000000000000"
+      },
+      "pattern": "^0x[0-9A-Fa-f]{40}$",
+      "type": "string"
+    },
+    "nonzeroBytes32": {
+      "not": {
+        "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "pattern": "^0x[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "nonzeroSha256": {
+      "not": {
+        "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "positiveDecimal": {
+      "description": "Canonical positive base-10 uint256; semantic validation enforces the upper bound.",
+      "maxLength": 78,
+      "pattern": "^[1-9][0-9]*$",
+      "type": "string"
+    },
+    "repositoryPath": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[A-Za-z0-9._/-]+$",
+      "type": "string"
+    },
+    "settlement": {
+      "additionalProperties": false,
+      "properties": {
+        "amountAtomic": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "assetAddress": {
+          "$ref": "#/$defs/address"
+        },
+        "balanceDeltaEvidenceSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "evidenceSha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "logOrTraceIndex": {
+          "$ref": "#/$defs/decimal"
+        },
+        "runtimeAddress": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/nonzeroBytes32"
+        },
+        "transactionIndex": {
+          "$ref": "#/$defs/decimal"
+        },
+        "treasury": {
+          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        }
+      },
+      "required": [
+        "amountAtomic",
+        "assetAddress",
+        "balanceDeltaEvidenceSha256",
+        "blockHash",
+        "blockNumber",
+        "evidenceSha256",
+        "logOrTraceIndex",
+        "runtimeAddress",
+        "transactionHash",
+        "transactionIndex",
+        "treasury"
+      ],
+      "type": "object"
+    },
+    "slug": {
+      "maxLength": 160,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    }
+  }
+}

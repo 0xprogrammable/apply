@@ -298,7 +298,7 @@ function validateProfiles(profiles, policyVersion) {
   const legacy = new Set(["1.0.0", "1.1.0", "1.2.0", "1.3.0"]).has(policyVersion);
   const expectedProfileIds = legacy
     ? ["build", "production-launch", "workflow-canary"]
-    : policyVersion === "2.0.0"
+    : new Set(["2.0.0", "2.1.0"]).has(policyVersion)
       ? ["build", "launch-readiness", "production-launch", "workflow-canary"]
       : null;
   if (expectedProfileIds === null) {

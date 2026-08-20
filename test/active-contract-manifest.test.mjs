@@ -147,10 +147,15 @@ test("the generator publishes a V1 compatibility envelope bound to the complete 
     "intake/schemas/programmable-launch-router-readiness-v1.schema.json",
     "intake/schemas/public-pr-application-v3.2.schema.json",
     "intake/schemas/trade-capability-manifest-v2.schema.json",
+    "policy/schemas/programmable-runtime-fee-settlement-proof-v1.schema.json",
     "registry/schema/launch-stamp-promotion-v1.schema.json",
     "scripts/active-contract-manifest-core.mjs",
+    "scripts/applicant-v3_2-scaffold-core.mjs",
+    "scripts/applicant-v3_2-scaffold.mjs",
     "scripts/programmable-launch-router-readiness-core.mjs",
-    "scripts/programmable-launch-router-readiness.mjs"
+    "scripts/programmable-launch-router-readiness.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof-core.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof-validation.mjs"
   ]) {
     assert.equal(
       Object.values(v2.artifacts).flat().filter(({ path: artifactPath }) => artifactPath === requiredCurrentPath).length,

@@ -5,10 +5,14 @@ policy. The sole normative source of Programmable-specific requirements is
 [`policy/launch-policy.v1.json`](../policy/launch-policy.v1.json) at one exact protected `submit-launch:main` commit and
 tree. If this guide and that file differ, stop and follow the canonical policy.
 
-The current machine identity in this tree is policy ID `programmable-central-launch-policy`, version `2.0.0`. Do not
+The current machine identity in this tree is policy ID `programmable-central-launch-policy`, version `2.1.0`. Do not
 infer future requirements from that label alone; always bind the exact policy bytes and Git identity.
 
 ## Start here
+
+Hookbuilder is optional. You may use it, another tool or agent, or prepare the application manually. In every case,
+resolve Applicant Compatibility V2 and the canonical policy from the same exact protected Submit a Launch commit.
+Node.js 24.12 or newer is required for the repository tools.
 
 From an exact Submit a Launch checkout, inspect and bind the current policy:
 
@@ -30,11 +34,12 @@ Do not classify a project from its name, project kind, use of Uniswap v4, or sim
 exact bound application and route state.
 
 Applicants never set the canonical policy predicate `subject.routerProvenanceRequired`. A protected V3.2
-package-and-source verifier must mint an opaque decision: exact `none` or `other` is `not-applicable`; an official
-route without complete exact source and readiness verification is `analysis-pending`; only complete verification is
-`required`. The protected policy compiler must map `not-applicable` to `routerProvenanceRequired: false` and both
-`analysis-pending` and `required` to `true`, with pending evidence unable to pass. Missing evidence must never become a
-caller-selected `false` or exemption.
+package-and-source verifier must mint the opaque decision. `launchRequest.requestedRoute` is an applicant declaration,
+not an exemption: verified no-market and external-route state is `not-applicable`; incomplete, conflicting, or
+unresolved source or trade state is `analysis-pending`, including when the applicant requested `none` or `other`; and a
+completely verified official route is `required`. The protected policy compiler maps `not-applicable` to
+`routerProvenanceRequired: false` and both `analysis-pending` and `required` to `true`, with pending evidence unable to
+pass. Missing evidence must never become a caller-selected `false` or exemption.
 
 In V3.2, `launchRequest.requestedRoute` is exactly `none`, `other`, or `programmable-ethereum-mainnet`. Only the last
 value requires `stage: "prototype"` and binds the matching pair `category: "custom"` with `launchKind: 1` or
@@ -43,9 +48,9 @@ document is `analysis-pending` until the exact prelaunch plan can become `prelau
 
 | Exact state | Application result | Router readiness | Registry, API, or terminal promotion |
 | --- | --- | --- | --- |
-| No market | Eligible for the same open-world intake | `not-applicable`; no Router plan is required | No launch-stamp promotion is required |
+| Verified no market | Eligible for the same open-world intake | `not-applicable`; no Router plan is required | No launch-stamp promotion is required |
 | Route or market is unresolved | Eligible as an honest draft | `analysis-pending`; never silently exempt | Cannot be promoted as a verified Programmable launch while unresolved |
-| Tradable but not requesting the Programmable Ethereum route | Eligible for review | The Programmable Router rules are not selected | Must not receive a Programmable Classic or Custom label |
+| Verified external market route | Eligible for review | `not-applicable`; the Programmable Router rules are not selected | Must not receive a Programmable Classic or Custom label |
 | Programmable Ethereum market | Must use Application V3.2 and Submission 2.1 | Exact fee terms and a canonical Router plan are mandatory before launch | A finalized canonical stamp and proof are mandatory before promotion |
 | V3.1 compatibility draft | New and existing drafts remain accepted under unchanged V3.1 semantics | Cannot establish `launch-readiness` or the official Programmable route | Migrate by adding a new V3.2 revision before an official Ethereum market launch |
 
@@ -62,6 +67,7 @@ membership come from the canonical policy bytes.
 | `LAUNCH.ETHEREUM_AND_TREASURY_10_BPS` | A selected Programmable Ethereum market routes exactly 10 bps of gross canonical-pool volume to the Programmable treasury | `programmable-launch-requirement` |
 | `LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS` | Before launch, the exact route plan binds the manifest-resolved canonical Router and required commitments | `programmable-router-readiness` |
 | `LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION` | Before Registry, API, or terminal promotion, the launched market has one finalized, internally consistent canonical Router stamp and proof | `programmable-router-promotion` |
+| `LAUNCH.ETHEREUM_FINALIZED_RUNTIME_FEE_SETTLEMENT_BEFORE_PROMOTION` | Before production promotion, each applicable deployed fee scope and asset has exact 10 bps settlement evidence for one inclusive finalized historical block range | `programmable-runtime-fee-settlement` |
 
 The exact fee tuple is:
 
@@ -72,12 +78,15 @@ The exact fee tuple is:
 | Basis | `gross-canonical-pool-volume` |
 | Treasury | `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` |
 
-Do not reinterpret this as 10% or as an optional creator fee. Do not apply it to a no-market or unresolved draft merely
-because the project uses v4.
+This table is a human map of
+[`LAUNCH.ETHEREUM_AND_TREASURY_10_BPS`](../policy/launch-policy.v1.json), not a second source. Do not reinterpret the
+rule as 10% or as an optional creator fee. Do not apply it to a no-market or unresolved draft merely because the project
+uses v4.
 
 ## Prepare the current application
 
-The complete official-route contract is Application V3.2:
+The complete current contract is Application V3.2. It serves all four routes and is required for the official
+Programmable Ethereum path:
 
 - schema: [`intake/schemas/public-pr-application-v3.2.schema.json`](../intake/schemas/public-pr-application-v3.2.schema.json);
 - contract ID: `public-pr-application-v3`, version `3.2.0`;
@@ -90,6 +99,22 @@ The complete official-route contract is Application V3.2:
 
 Submission 2.1 is the common source contract. Bind one Trade Capability Manifest V2 for each selected tradable market;
 a no-market project or a proposal with no selected tradable market must not fabricate one.
+
+To start a bounded standalone draft, choose one honest route:
+
+```bash
+npm run --silent applicant:scaffold -- --route no-market --application-id my-project
+npm run --silent applicant:scaffold -- --route external --application-id my-project
+npm run --silent applicant:scaffold -- --route unresolved --application-id my-project
+npm run --silent applicant:scaffold -- --route official --category custom --application-id my-project
+```
+
+Use `--category classic` instead for an official Classic launch. Without `--output`, the command prints canonical
+scaffold JSON. Add `--output <new-directory>` for a no-overwrite draft package; place real artifacts under its
+`application-package/` and `source-repositories/` directories, then use
+`npm run --silent applicant:scaffold -- --check <directory>`. The scaffold stays `draft-pending` with
+`submitReady: false` and cannot make itself submit-ready, mint a readiness decision, or invent deployment, trade, or
+settlement evidence.
 
 Machine-discover those current and compatibility contracts through
 [`applicant-compatibility.v2.json`](../.programmable/applicant-compatibility.v2.json), validated by
@@ -151,6 +176,13 @@ That public command validates the readiness document only. It cannot mint the op
 policy-review result; the protected compiler combines the exact verified V3.2 package, source closure, and readiness
 record.
 
+A readiness pass proves only that the exact checked launch plan binds the canonical Router and mandatory fee
+configuration. It does not prove an executed or settled runtime money flow. Before a later production or promotion
+decision, the platform needs separate protected, finalized deployment, runtime, and settlement evidence for the
+specific observed blocks, logs, and assets. That evidence does not promise future payment; ongoing monitoring remains
+separate. The repository-side V1 settlement assertion is deliberately `analysis-pending`: only a future independently
+anchored observer verifier may mint a passed settlement proof.
+
 The checker is offline: it performs no RPC or network access, executes no applicant code, writes no files, signs
 nothing, and sends no transaction. It verifies the exact supplied manifest snapshot bytes against the pinned official
 Developer artifact; it does not fetch the endpoint or independently prove endpoint freshness. A `prelaunch-bound` plan
@@ -164,8 +196,8 @@ offline command is not a fetch or generation service. Never treat one address co
 source code, token metadata, a topic, or an API response as an eternal Router address. Start from the
 [Developer discovery document](https://developers.programmable.family/.well-known/programmable.json), follow its
 `manifestUrl`, and validate the live `launchStampRouter` tuple, runtime-code hash, ABI URL, ABI SHA-256, activation
-range, immutable bindings, and finality policy. Read the complete
-[Launch stamp reference](https://developers.programmable.family/reference/launch-stamp/).
+range, immutable bindings, and finality policy. Read the current
+[Launch Stamps documentation](https://programmable.family/docs/infrastructure/launch-stamps).
 
 The only canonical Router V1 market-bearing entry point is `launchAndStampV1`, selector `0xe5f6b8cd`. A direct Classic
 Factory, Graph Factory, or Single Factory call is not canonical Router provenance and must not be labeled
@@ -276,7 +308,8 @@ stamp proves only the documented atomic Router provenance and recorded identitie
 
 Publishing the verification contract makes integration possible; it does not guarantee that GMGN, Axiom, FOMO, or any
 other terminal has adopted the Programmable labels. Each terminal controls its own indexing and product UI. Read the
-[terminal and scanner guide](https://developers.programmable.family/guides/terminals-and-scanners/) before integrating.
+[pinned terminal and scanner integration guide](https://github.com/0xprogrammable/developers/blob/79f14e9c57cb6668bb33f66ef636c1c8c5ff2c56/docs/guides/terminals-and-scanners.md)
+before integrating, then resolve the current Developer manifest rather than assuming adoption or a permanent Router.
 
 The authenticated Universal Admission queue remains `reference-only-disabled`. It has no public endpoint, audience,
 trust snapshot, worker plane, production capacity, or launch authority. Use the public GitHub application path; do not

@@ -1,6 +1,6 @@
 {
   "name": "@programmable/submit-launch",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,6 +10,7 @@
     "admission:contract:check": "node scripts/universal-admission-contract.mjs --check",
     "admission:contract:write": "node scripts/universal-admission-contract.mjs --write",
     "admission:reference:benchmark": "node scripts/benchmark-universal-admission-sqlite.mjs",
+    "applicant:scaffold": "node scripts/applicant-v3_2-scaffold.mjs",
     "authority:check": "node scripts/launch-policy-authority-ownership.mjs --check",
     "authority:write": "node scripts/launch-policy-authority-ownership.mjs --write",
     "compile:canary-eligibility": "node scripts/compile-canary-eligibility.mjs",

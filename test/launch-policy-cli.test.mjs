@@ -48,6 +48,8 @@ function isolatedCliFixture(t, policyBytes) {
     "scripts/launch-policy.mjs",
     "scripts/launch-policy-core.mjs",
     "scripts/launch-policy-handlers.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof-core.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof-validation.mjs",
     "vendor/programmable-v4-hook-builder/scripts/github-public-source-lossless-json.mjs"
   ]) {
     const target = path.join(fixtureRoot, relativePath);
@@ -57,6 +59,11 @@ function isolatedCliFixture(t, policyBytes) {
   fs.cpSync(
     path.join(root, "vendor/programmable-applicant-validator"),
     path.join(fixtureRoot, "vendor/programmable-applicant-validator"),
+    { recursive: true }
+  );
+  fs.cpSync(
+    path.join(root, "vendor/programmable-v4-hook-builder"),
+    path.join(fixtureRoot, "vendor/programmable-v4-hook-builder"),
     { recursive: true }
   );
   if (policyBytes !== null) {
@@ -185,6 +192,7 @@ test("requirements can describe disabled production without inventing approval a
   assert.deepEqual(output.rules.map(({ id }) => id), [
     "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
     "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
+    "LAUNCH.ETHEREUM_FINALIZED_RUNTIME_FEE_SETTLEMENT_BEFORE_PROMOTION",
     "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
   ]);
   assert.doesNotMatch(result.stdout, /LAUNCH_APPROVED/u);

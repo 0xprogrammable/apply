@@ -90,6 +90,8 @@ const MODULE_OWNERSHIP_ROLES = new Set([
 const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/active-contract-manifest-core.mjs",
   "scripts/applicant-compatibility-core.mjs",
+  "scripts/applicant-v3_2-scaffold-core.mjs",
+  "scripts/applicant-v3_2-scaffold.mjs",
   "review/cli.mjs",
   "review/open-review-engine.mjs",
   "scripts/acceptance-entitlement-core.mjs",
