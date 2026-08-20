@@ -141,6 +141,7 @@ const REGISTRY_MAINTENANCE_FILES = new Set([
   "policy/schemas/launch-policy-authority-ownership.v1.schema.json",
   "policy/schemas/launch-policy-binding.v1.schema.json",
   "policy/schemas/launch-policy.v1.schema.json",
+  "policy/schemas/programmable-runtime-fee-settlement-proof-v1.schema.json",
   "canary/schemas/workflow-canary-application-v1.schema.json",
   "canary/schemas/workflow-canary-result-v1.schema.json",
   "scripts/acceptance-entitlement-core.mjs",
