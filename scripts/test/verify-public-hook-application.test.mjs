@@ -1004,6 +1004,8 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "CONTRIBUTING.md",
     "LICENSE",
     ".programmable/active-contract.json",
+    ".programmable/active-contract.v2.json",
+    ".programmable/applicant-compatibility.v2.json",
     "policy/launch-policy.v1.json",
     "README.md",
     "SECURITY.md",
@@ -1019,6 +1021,7 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "registry/schema/project.schema.json",
     "review/launch-policy-review-core.mjs",
     "scripts/acceptance-entitlement-core.mjs",
+    "scripts/active-contract-manifest-core.mjs",
     "scripts/compile-launch-entitlement.mjs",
     "scripts/test/application-v3-package-fixture.mjs",
     "scripts/test/fixtures/public-pr-application-v3.1.example.json",
@@ -1027,9 +1030,13 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
     "scripts/test/verify-public-hook-application-maintained.test.mjs",
     "scripts/test/verify-public-hook-application-workflow.test.mjs",
     "scripts/generate-registry.mjs",
+    "scripts/programmable-launch-router-readiness-core.mjs",
+    "scripts/programmable-launch-router-readiness.mjs",
     "scripts/registry-core.mjs",
+    "scripts/test/verify-open-world-v2-trade-manifest-v2.test.mjs",
     "scripts/verify-open-world-v2-contracts.mjs",
     "scripts/verify-open-world-v2-package.mjs",
+    "scripts/verify-open-world-v2-trade-manifest-v2.mjs",
     "scripts/verify-open-world-v2-validation-fee.mjs",
     "scripts/verify-open-world-v2-validation-intake.mjs",
     "scripts/verify-open-world-v2-validation-intent.mjs",
@@ -1048,6 +1055,45 @@ test("first-party Registry infrastructure classifies as registry maintenance", (
   const candidateCommit = commitAll(fixture.candidate, "registry maintenance change");
   const result = classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit));
   assert.equal(result.mode, "registry-maintenance");
+});
+
+test("exact current Router-readiness and policy-neutral trade paths are maintenance while adjacent paths stay closed", (t) => {
+  for (const relativePath of [
+    ".programmable/active-contract.v2.json",
+    ".programmable/applicant-compatibility.v2.json",
+    "scripts/active-contract-manifest-core.mjs",
+    "scripts/programmable-launch-router-readiness-core.mjs",
+    "scripts/programmable-launch-router-readiness.mjs",
+    "scripts/test/verify-open-world-v2-trade-manifest-v2.test.mjs",
+    "scripts/verify-open-world-v2-trade-manifest-v2.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, `maintenance fixture for ${relativePath}\n`);
+    const candidateCommit = commitAll(fixture.candidate, `maintain ${relativePath}`);
+    assert.equal(
+      classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)).mode,
+      "registry-maintenance",
+      relativePath
+    );
+  }
+
+  for (const relativePath of [
+    ".programmable/active-contract.v3.json",
+    ".programmable/applicant-compatibility.v3.json",
+    "scripts/active-contract-manifest-private.mjs",
+    "scripts/programmable-launch-router-readiness-private.mjs",
+    "scripts/verify-open-world-v2-trade-manifest-v3.mjs",
+    "scripts/test/verify-open-world-v2-trade-manifest-private.test.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, "unreviewed Router-readiness maintenance path\n");
+    const candidateCommit = commitAll(fixture.candidate, `reject ${relativePath}`);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED"),
+      relativePath
+    );
+  }
 });
 
 test("all exact central policy Canary and release scripts are maintenance while adjacent paths stay closed", (t) => {

@@ -455,6 +455,7 @@ test("exact canary and Applicant compatibility maintenance paths are bounded whi
 
   for (const entryPath of [
     ".programmable/applicant-compatibility.v1.json",
+    ".programmable/applicant-compatibility.v2.json",
     "vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs"
   ]) {
     git(fixture.candidate, ["checkout", "--quiet", "--detach", fixture.baseCommit]);
@@ -474,7 +475,6 @@ test("exact canary and Applicant compatibility maintenance paths are bounded whi
   );
 
   for (const entryPath of [
-    ".programmable/applicant-compatibility.v2.json",
     "vendor/programmable-applicant-validator-private/scripts/public-applicant-validator.mjs"
   ]) {
     git(fixture.candidate, ["checkout", "--quiet", "--detach", fixture.baseCommit]);
