@@ -103,7 +103,7 @@ export function generatePublicPrApplicationV3({
     add("blocker", "APPLICATION_GENERATOR_INPUT_INVALID", "$.application", "Application input must be one closed v3 object.", "Assemble the exact application contract before materialization.", "application-contract");
   }
   if (!new Set(["proposal", "prototype"]).has(generatedApplication?.stage)) {
-    add("blocker", "APPLICATION_GENERATOR_STAGE_INVALID", "$.application.stage", "A public Application V3.1 draft must be an exact source-backed proposal or prototype.", "Use proposal for an unreviewed architecture-review draft or prototype for the complete prototype evidence path.", "review-readiness");
+    add("blocker", "APPLICATION_GENERATOR_STAGE_INVALID", "$.application.stage", "A public Application V3 draft must be an exact source-backed proposal or prototype.", "Use proposal for an unreviewed architecture-review draft or prototype for the complete prototype evidence path.", "review-readiness");
   }
 
   const securityIssues = validateOpenWorldSecurityInput(securityAssessment);
@@ -211,6 +211,9 @@ export function generatePublicPrApplicationV3({
   const securityReviewRequired = securityAnalysis.findings.length > 0 && confirmedIntentRedesign.length === 0;
   const generatedReport = finalizeReport("public-pr-application-v3-generation", findings, {
     applicationContract: "public-pr-application-v3",
+    ...(generatedApplication?.contract?.version === "3.2.0"
+      ? { applicationContractVersion: "3.2.0" }
+      : {}),
     ideaEligibility: "ELIGIBLE_FOR_REVIEW",
     publicApplicationEligibility: privacyHeld ? "HELD_FOR_PRIVACY_REDACTION" : "ELIGIBLE_FOR_REVIEW",
     approvalGranted: false,

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:active-contract-manifest:2.0.0",
+  "title": "Programmable Active Contract Manifest V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "artifacts",
+    "contractId",
+    "defaultBranch",
+    "kind",
+    "schemaVersion"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:programmable:active-contract-manifest:2.0.0"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "policy",
+        "validator",
+        "workflow"
+      ],
+      "properties": {
+        "package": { "$ref": "#/$defs/artifactRole" },
+        "policy": { "$ref": "#/$defs/artifactRole" },
+        "validator": { "$ref": "#/$defs/artifactRole" },
+        "workflow": { "$ref": "#/$defs/artifactRole" }
+      }
+    },
+    "contractId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "defaultBranch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^(?!/)(?!.*//)(?!.*\\.\\.)(?!.*[\\\\ ~^:?*\\[\\]\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069])(?!.*\\.$)(?!.*\\.lock$)(?!.*\\/$).+$"
+    },
+    "kind": {
+      "const": "programmable-active-contract"
+    },
+    "schemaVersion": {
+      "const": "2.0.0"
+    }
+  },
+  "$defs": {
+    "artifactRole": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/artifactBinding"
+      }
+    },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*//)(?!.*\\\\)(?!.*%2[fF]|.*%5[cC])(?!.*(?:^|/)(?:\\.{1,2}|\\.[gG][iI][tT])(?:/|$))(?!.*\\/$)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "$comment": "The V2 core additionally enforces NFC, UTF-8 byte and depth bounds, cross-role path uniqueness, and the 128-artifact aggregate cap."
+}

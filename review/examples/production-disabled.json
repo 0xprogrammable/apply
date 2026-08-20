@@ -8,6 +8,7 @@
     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "routerProvenanceRequired": true,
     "usesUniswapV4": true
   },
   "currentSubject": {
@@ -16,6 +17,7 @@
     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "configurationHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "routerProvenanceRequired": true,
     "usesUniswapV4": true
   },
   "evaluations": [],

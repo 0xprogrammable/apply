@@ -1,0 +1,868 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:launch-router-readiness:1.0.0",
+  "title": "Programmable Launch Router Readiness v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "applicability",
+    "authority",
+    "developerReference",
+    "feeConfiguration",
+    "kind",
+    "manifestSnapshot",
+    "resolvedRouter",
+    "route",
+    "schemaVersion",
+    "state",
+    "subject"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:programmable:launch-router-readiness:1.0.0"
+    },
+    "applicability": {
+      "oneOf": [
+        { "$ref": "#/$defs/notApplicableApplicability" },
+        { "$ref": "#/$defs/pendingApplicability" },
+        { "$ref": "#/$defs/prelaunchApplicability" }
+      ]
+    },
+    "authority": {
+      "$ref": "#/$defs/inertAuthority"
+    },
+    "developerReference": {
+      "oneOf": [
+        { "$ref": "#/$defs/developerReference" },
+        { "type": "null" }
+      ]
+    },
+    "feeConfiguration": {
+      "oneOf": [
+        { "$ref": "#/$defs/feeConfiguration" },
+        { "type": "null" }
+      ]
+    },
+    "kind": {
+      "const": "programmable-launch-router-readiness"
+    },
+    "manifestSnapshot": {
+      "oneOf": [
+        { "$ref": "#/$defs/manifestSnapshot" },
+        { "type": "null" }
+      ]
+    },
+    "resolvedRouter": {
+      "oneOf": [
+        { "$ref": "#/$defs/resolvedRouter" },
+        { "type": "null" }
+      ]
+    },
+    "route": {
+      "oneOf": [
+        { "$ref": "#/$defs/route" },
+        { "type": "null" }
+      ]
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "state": {
+      "enum": [
+        "not-applicable",
+        "analysis-pending",
+        "prelaunch-bound"
+      ]
+    },
+    "subject": {
+      "$ref": "#/$defs/subject"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "state": { "const": "not-applicable" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "applicability": { "$ref": "#/$defs/notApplicableApplicability" },
+          "developerReference": { "type": "null" },
+          "feeConfiguration": { "type": "null" },
+          "manifestSnapshot": { "type": "null" },
+          "resolvedRouter": { "type": "null" },
+          "route": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "analysis-pending" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "applicability": { "$ref": "#/$defs/pendingApplicability" },
+          "developerReference": { "type": "null" },
+          "feeConfiguration": { "type": "null" },
+          "manifestSnapshot": { "type": "null" },
+          "resolvedRouter": { "type": "null" },
+          "route": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "prelaunch-bound" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "applicability": { "$ref": "#/$defs/prelaunchApplicability" },
+          "developerReference": { "$ref": "#/$defs/developerReference" },
+          "feeConfiguration": { "$ref": "#/$defs/feeConfiguration" },
+          "manifestSnapshot": { "$ref": "#/$defs/manifestSnapshot" },
+          "resolvedRouter": { "$ref": "#/$defs/resolvedRouter" },
+          "route": { "$ref": "#/$defs/route" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "address": {
+      "pattern": "^0x[0-9A-Fa-f]{40}$",
+      "type": "string"
+    },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byteLength",
+        "gitBlobOid",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byteLength": {
+          "minimum": 1,
+          "maximum": 16777216,
+          "type": "integer"
+        },
+        "gitBlobOid": { "$ref": "#/$defs/objectId" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "base64Bytes": {
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+      "maxLength": 349528,
+      "minLength": 4,
+      "type": "string"
+    },
+    "routeBase64Bytes": {
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+      "maxLength": 709676,
+      "minLength": 4,
+      "type": "string"
+    },
+    "routePayloadCommitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byteLength",
+        "contentBase64",
+        "encoding",
+        "keccak256",
+        "sha256"
+      ],
+      "properties": {
+        "byteLength": {
+          "minimum": 1,
+          "maximum": 532256,
+          "type": "integer"
+        },
+        "contentBase64": { "$ref": "#/$defs/routeBase64Bytes" },
+        "encoding": {
+          "enum": [
+            "abi.encode(CustomGraphRouteV1)",
+            "abi.encode(ClassicRouteV1)"
+          ]
+        },
+        "keccak256": { "$ref": "#/$defs/nonzeroBytes32" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "expectedResultCommitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "derivationMode",
+        "hash",
+        "routePayloadSha256"
+      ],
+      "properties": {
+        "derivationMode": { "const": "router-v1-route-kind-specific-typed-hash" },
+        "hash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "routePayloadSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "developerReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "deploymentManifest",
+        "launchStampReference",
+        "manifestSchema",
+        "numericRepositoryId",
+        "repository",
+        "routerAbi",
+        "terminalGuide",
+        "tree"
+      ],
+      "properties": {
+        "commit": {
+          "const": "79f14e9c57cb6668bb33f66ef636c1c8c5ff2c56"
+        },
+        "deploymentManifest": {
+          "const": {
+            "byteLength": 21102,
+            "gitBlobOid": "1a2411f2080ad330a02971b1b4104b7d2f5c3499",
+            "path": "deployments/ethereum-v2.json",
+            "sha256": "sha256:15af12e7efee7f48a40132bc2d234f6494b90746cf84a1a258e29d4f995311eb"
+          }
+        },
+        "launchStampReference": {
+          "const": {
+            "byteLength": 22849,
+            "gitBlobOid": "fb2ad8f43d0407a99ea8b16c5adc11145c6b02c6",
+            "path": "docs/reference/launch-stamp.md",
+            "sha256": "sha256:8f33b7446b5f0ca4a169a920fcb7d8d4c1443e77ebd5dd5d491d289a86e78e0b"
+          }
+        },
+        "manifestSchema": {
+          "const": {
+            "byteLength": 48089,
+            "gitBlobOid": "dc728f220aa5e77972f87bc2f371f4c4392bc1e7",
+            "path": "schemas/v2/manifest.schema.json",
+            "sha256": "sha256:6f3b87eabf4c44c07dc8cfcb9ecb2e4e4a662f2375e7e149ee170860f0a0c4c9"
+          }
+        },
+        "numericRepositoryId": {
+          "const": "1322379959"
+        },
+        "repository": {
+          "const": "0xprogrammable/developers"
+        },
+        "routerAbi": {
+          "const": {
+            "byteLength": 26541,
+            "gitBlobOid": "b6e14bd7db9c701bd3b10e65561a985d7fcdb991",
+            "path": "abis/ethereum/programmable-launch-stamp-router-v1.json",
+            "sha256": "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86"
+          }
+        },
+        "terminalGuide": {
+          "const": {
+            "byteLength": 14321,
+            "gitBlobOid": "b3181c29960d11a0d799f7348408dc39fbc5f956",
+            "path": "docs/guides/terminals-and-scanners.md",
+            "sha256": "sha256:433de062adea4771dd0678ebb4a53be753e64d22fca99957bdd5d9dd26edd85a"
+          }
+        },
+        "tree": {
+          "const": "021691684291fd7958d60e039504ce51455c638b"
+        }
+      }
+    },
+    "feeConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis",
+        "bps",
+        "chainId",
+        "configurationSha256",
+        "doubleChargeAllowed",
+        "enforcementMode",
+        "hundredthsOfBip",
+        "implementationArtifact",
+        "network",
+        "ratePpm",
+        "scope",
+        "treasury"
+      ],
+      "properties": {
+        "basis": { "const": "gross-canonical-pool-volume" },
+        "bps": { "const": 10 },
+        "chainId": { "const": 1 },
+        "configurationSha256": { "$ref": "#/$defs/sha256" },
+        "doubleChargeAllowed": { "const": false },
+        "enforcementMode": { "const": "route-bound" },
+        "hundredthsOfBip": { "const": 1000 },
+        "implementationArtifact": { "$ref": "#/$defs/sourceArtifactBinding" },
+        "network": { "const": "ethereum-mainnet" },
+        "ratePpm": { "const": 1000 },
+        "scope": { "const": "official-programmable-market-path" },
+        "treasury": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" }
+      }
+    },
+    "inertAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalGranted",
+        "candidateCodeExecuted",
+        "credentialsUsed",
+        "externalWritesPerformed",
+        "launchAuthorized",
+        "networkAccessed",
+        "publicDiscoveryAuthorized",
+        "realUserFundsAuthorized",
+        "rpcAccessed"
+      ],
+      "properties": {
+        "approvalGranted": { "const": false },
+        "candidateCodeExecuted": { "const": false },
+        "credentialsUsed": { "const": false },
+        "externalWritesPerformed": { "const": false },
+        "launchAuthorized": { "const": false },
+        "networkAccessed": { "const": false },
+        "publicDiscoveryAuthorized": { "const": false },
+        "realUserFundsAuthorized": { "const": false },
+        "rpcAccessed": { "const": false }
+      }
+    },
+    "launchPermitV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingState",
+        "chainId",
+        "deadline",
+        "domainName",
+        "domainVersion",
+        "expectedResultHash",
+        "kind",
+        "launchWallet",
+        "nonce",
+        "permitDigest",
+        "primaryType",
+        "routePayloadHash",
+        "router",
+        "signature",
+        "stampRequestHash",
+        "typeHash",
+        "typeSignature",
+        "validAfter",
+        "value"
+      ],
+      "properties": {
+        "bindingState": { "const": "wallet-and-validity-window-late-bound-before-signing" },
+        "chainId": { "const": 1 },
+        "deadline": { "type": "null" },
+        "domainName": { "const": "ProgrammableLaunchStampRouter" },
+        "domainVersion": { "const": "1" },
+        "expectedResultHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "kind": { "enum": [1, 2] },
+        "launchWallet": { "type": "null" },
+        "nonce": { "$ref": "#/$defs/nonzeroBytes32" },
+        "permitDigest": { "type": "null" },
+        "primaryType": { "const": "ProgrammableLaunchPermitV1" },
+        "routePayloadHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "router": { "const": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56" },
+        "signature": { "type": "null" },
+        "stampRequestHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "typeHash": { "const": "0x5147473bd302ad67f9ef14ef9262d1b0f8d4f7155081bc8c508195b647413761" },
+        "typeSignature": { "const": "ProgrammableLaunchPermitV1(uint256 chainId,address router,address launchWallet,uint8 kind,bytes32 routePayloadHash,bytes32 expectedResultHash,bytes32 stampRequestHash,bytes32 nonce,uint64 validAfter,uint64 deadline,uint256 value)" },
+        "validAfter": { "type": "null" },
+        "value": { "$ref": "#/$defs/decimal" }
+      }
+    },
+    "launchWallet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "bindingState",
+        "immutableAfterPermitSigning",
+        "mustEqualTransactionSender"
+      ],
+      "properties": {
+        "address": { "type": "null" },
+        "bindingState": { "const": "late-bound-before-permit-signing" },
+        "immutableAfterPermitSigning": { "const": true },
+        "mustEqualTransactionSender": { "const": true }
+      }
+    },
+    "manifestSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discoveryDocumentUrl",
+        "liveResponseBase64",
+        "liveResponseBindingScope",
+        "liveResponseByteLength",
+        "liveResponseContentKind",
+        "liveResponseSha256",
+        "manifestPointer",
+        "manifestSourceGitBlobOid",
+        "manifestSourceSha256",
+        "manifestUrl",
+        "manifestVersion",
+        "observedAt",
+        "schemaVersion"
+      ],
+      "properties": {
+        "discoveryDocumentUrl": { "const": "https://developers.programmable.family/.well-known/programmable.json" },
+        "liveResponseBase64": { "$ref": "#/$defs/base64Bytes" },
+        "liveResponseBindingScope": { "const": "time-bound-pointer-projection-not-origin-or-freshness-proof" },
+        "liveResponseByteLength": {
+          "minimum": 3,
+          "maximum": 262144,
+          "type": "integer"
+        },
+        "liveResponseContentKind": { "const": "canonical-json-pointer-projection-v1" },
+        "liveResponseSha256": { "$ref": "#/$defs/sha256" },
+        "manifestPointer": { "const": "/launchStampRouter" },
+        "manifestSourceGitBlobOid": { "const": "1a2411f2080ad330a02971b1b4104b7d2f5c3499" },
+        "manifestSourceSha256": { "const": "sha256:15af12e7efee7f48a40132bc2d234f6494b90746cf84a1a258e29d4f995311eb" },
+        "manifestUrl": { "const": "https://developers.programmable.family/api/v2/manifest" },
+        "manifestVersion": { "const": "3" },
+        "observedAt": { "$ref": "#/$defs/canonicalTimestamp" },
+        "schemaVersion": { "const": "2.0.0" }
+      }
+    },
+    "notApplicableApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routeMode",
+        "trustedDeclaration"
+      ],
+      "properties": {
+        "routeMode": {
+          "enum": ["no-market", "external-route"]
+        },
+        "trustedDeclaration": {
+          "$ref": "#/$defs/trustedApplicabilityDeclaration"
+        }
+      }
+    },
+    "nonzeroBytes32": {
+      "allOf": [
+        { "$ref": "#/$defs/bytes32" },
+        { "not": { "const": "0x0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "bytes32": {
+      "pattern": "^0x[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "objectId": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "pendingApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reasonCode",
+        "routeMode",
+        "trustedDeclaration"
+      ],
+      "properties": {
+        "reasonCode": {
+          "enum": [
+            "market-analysis-incomplete",
+            "route-analysis-incomplete",
+            "source-binding-incomplete",
+            "manifest-binding-incomplete",
+            "commitment-binding-incomplete",
+            "fee-binding-incomplete"
+          ]
+        },
+        "routeMode": { "const": "analysis-pending" },
+        "trustedDeclaration": { "type": "null" }
+      }
+    },
+    "prelaunchApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routeMode",
+        "trustedDeclaration"
+      ],
+      "properties": {
+        "routeMode": { "const": "programmable-ethereum-mainnet" },
+        "trustedDeclaration": { "type": "null" }
+      }
+    },
+    "repositoryPath": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)\\.[gG][iI][tT](?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$",
+      "type": "string"
+    },
+    "resolvedRouter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "abiSha256",
+        "abiUrl",
+        "address",
+        "atomicSelector",
+        "atomicSignature",
+        "authorityMode",
+        "bindings",
+        "canonicalReadBlock",
+        "chainId",
+        "contractName",
+        "deploymentEvidence",
+        "endBlock",
+        "finalityConfirmations",
+        "generation",
+        "runtimeCodeHash",
+        "scope",
+        "startBlock",
+        "status",
+        "version"
+      ],
+      "properties": {
+        "abiSha256": { "const": "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86" },
+        "abiUrl": { "const": "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json" },
+        "address": { "const": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56" },
+        "atomicSelector": { "const": "0xe5f6b8cd" },
+        "atomicSignature": { "const": "launchAndStampV1((uint256,address,address,uint8,bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint256),(bytes32,address,bytes32,(address,address,uint24,int24,address),bytes32,(uint8,address,bytes32,uint8,uint8)[]),bytes,bytes)" },
+        "authorityMode": { "const": "eip-1271-contract-only" },
+        "bindings": {
+          "const": {
+            "graphFactory": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+            "graphFactoryRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+            "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+            "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+            "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "poolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+          }
+        },
+        "canonicalReadBlock": { "const": "finalized-or-explicit-canonical-block" },
+        "chainId": { "const": 1 },
+        "contractName": { "const": "ProgrammableLaunchStampRouterV1" },
+        "deploymentEvidence": {
+          "const": {
+            "deploymentBlockHash": "0x8e4512193217c2171624657717d32dbfe9896455e553cadc192fbfe32d3278bc",
+            "deploymentBlockNumber": "25717612",
+            "deploymentTransactionHash": "0x3bc086661555c10040feb3fceb23d33003e22ca033e65cfae72592119ee8d486",
+            "evidenceSha256": "sha256:f9786ebfb74c96a3c225567ad324f0fbecfd8520b8d8addec85ba58cd67e19ff",
+            "finalizedBlockHash": "0x4177a280cd7e43da181bf1d73900eb2431c26d5fe933a5ed0e583370064cbd6e",
+            "finalizedBlockNumber": "25717634",
+            "getterBundleSha256": "sha256:6e6e8a93193bbe2f79f98594a1af32c27bae0746f8297dd13592d9608e2feb20",
+            "runtimeCodeSha256": "sha256:0b0e89074bff270bd5bf80ca9642f748dca1857d1ab643cbce65f4f663937ec7",
+            "verificationStatus": "finalized-verified"
+          }
+        },
+        "endBlock": { "type": "null" },
+        "finalityConfirmations": { "const": 64 },
+        "generation": { "const": "1" },
+        "runtimeCodeHash": { "const": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546" },
+        "scope": { "const": "future-launches-only" },
+        "startBlock": { "const": "25717612" },
+        "status": { "const": "live" },
+        "version": { "const": "1" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "commitments",
+        "directFactoryCall",
+        "directFactoryFallbackAllowed",
+        "executionPath",
+        "launchKind",
+        "launchWallet",
+        "routeKind",
+        "sourceIdentity",
+        "transactionSelector",
+        "transactionTarget"
+      ],
+      "properties": {
+        "category": { "enum": ["custom", "classic"] },
+        "commitments": { "$ref": "#/$defs/routeCommitments" },
+        "directFactoryCall": { "const": false },
+        "directFactoryFallbackAllowed": { "const": false },
+        "executionPath": { "const": "canonical-launch-stamp-router-v1" },
+        "launchKind": { "enum": [1, 2] },
+        "launchWallet": { "$ref": "#/$defs/launchWallet" },
+        "routeKind": { "enum": ["custom-graph", "classic"] },
+        "sourceIdentity": { "$ref": "#/$defs/sourceIdentity" },
+        "transactionSelector": { "const": "0xe5f6b8cd" },
+        "transactionTarget": { "const": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56" }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "category": { "const": "custom" },
+            "commitments": {
+              "type": "object",
+              "properties": {
+                "routePayload": {
+                  "type": "object",
+                  "properties": {
+                    "encoding": { "const": "abi.encode(CustomGraphRouteV1)" }
+                  }
+                }
+              }
+            },
+            "launchKind": { "const": 1 },
+            "routeKind": { "const": "custom-graph" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "category": { "const": "classic" },
+            "commitments": {
+              "type": "object",
+              "properties": {
+                "routePayload": {
+                  "type": "object",
+                  "properties": {
+                    "encoding": { "const": "abi.encode(ClassicRouteV1)" }
+                  }
+                }
+              }
+            },
+            "launchKind": { "const": 2 },
+            "routeKind": { "const": "classic" }
+          }
+        }
+      ]
+    },
+    "routeCommitments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commitmentState",
+        "expectedResult",
+        "launchPermitV1",
+        "routePayload",
+        "stampRequestV1"
+      ],
+      "properties": {
+        "commitmentState": { "const": "payload-and-results-bound-wallet-and-validity-late" },
+        "expectedResult": { "$ref": "#/$defs/expectedResultCommitment" },
+        "launchPermitV1": { "$ref": "#/$defs/launchPermitV1" },
+        "routePayload": { "$ref": "#/$defs/routePayloadCommitment" },
+        "stampRequestV1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "componentSetHash",
+            "components",
+            "hashAlgorithm",
+            "hookRuntimeCodeHash",
+            "launchId",
+            "poolKey",
+            "poolKeyHash",
+            "stampRequestHash",
+            "token",
+            "tokenRuntimeCodeHash",
+            "typeHash",
+            "typeSignature"
+          ],
+          "properties": {
+            "componentSetHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "components": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "account",
+                  "kind",
+                  "resultIndex",
+                  "runtimeCodeHash",
+                  "scope"
+                ],
+                "properties": {
+                  "account": { "$ref": "#/$defs/address" },
+                  "kind": { "enum": [0, 1, 2] },
+                  "resultIndex": { "minimum": 0, "maximum": 255, "type": "integer" },
+                  "runtimeCodeHash": { "$ref": "#/$defs/nonzeroBytes32" },
+                  "scope": { "enum": [1, 2] }
+                }
+              }
+            },
+            "hashAlgorithm": { "const": "router-v1-typed-hash" },
+            "hookRuntimeCodeHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "launchId": { "$ref": "#/$defs/nonzeroBytes32" },
+            "poolKey": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["currency0", "currency1", "fee", "hooks", "tickSpacing"],
+              "properties": {
+                "currency0": { "$ref": "#/$defs/address" },
+                "currency1": { "$ref": "#/$defs/address" },
+                "fee": { "minimum": 0, "maximum": 16777215, "type": "integer" },
+                "hooks": { "$ref": "#/$defs/address" },
+                "tickSpacing": { "minimum": -8388608, "maximum": 8388607, "type": "integer" }
+              }
+            },
+            "poolKeyHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "stampRequestHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "token": { "$ref": "#/$defs/address" },
+            "tokenRuntimeCodeHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "typeHash": { "const": "0xa61627b33bfee8131fa1b566b7787c8d93afc86629f51a5c9719bf8f6b3e5573" },
+            "typeSignature": { "const": "ProgrammableStampRequestV1(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash)" }
+          }
+        }
+      }
+    },
+    "sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sourceArtifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byteLength",
+        "gitBlobOid",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byteLength": {
+          "minimum": 1,
+          "maximum": 16777216,
+          "type": "integer"
+        },
+        "gitBlobOid": { "$ref": "#/$defs/objectId" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "commit",
+        "configurationHash",
+        "numericRepositoryId",
+        "repository",
+        "tree"
+      ],
+      "properties": {
+        "artifact": { "$ref": "#/$defs/sourceArtifactBinding" },
+        "commit": { "$ref": "#/$defs/objectId" },
+        "configurationHash": { "$ref": "#/$defs/sha256" },
+        "numericRepositoryId": { "$ref": "#/$defs/numericId" },
+        "repository": { "$ref": "#/$defs/repository" },
+        "tree": { "$ref": "#/$defs/objectId" }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "applicationRevision",
+        "sourceCommit",
+        "sourceConfigurationHash",
+        "sourceRepository",
+        "sourceRepositoryNumericId",
+        "sourceTree"
+      ],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/slug" },
+        "applicationRevision": {
+          "minimum": 1,
+          "maximum": 1000000,
+          "type": "integer"
+        },
+        "sourceCommit": { "$ref": "#/$defs/objectId" },
+        "sourceConfigurationHash": { "$ref": "#/$defs/sha256" },
+        "sourceRepository": { "$ref": "#/$defs/repository" },
+        "sourceRepositoryNumericId": { "$ref": "#/$defs/numericId" },
+        "sourceTree": { "$ref": "#/$defs/objectId" }
+      }
+    },
+    "trustedApplicabilityDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byteLength",
+        "commit",
+        "declaredRouteMode",
+        "declarationKind",
+        "gitBlobOid",
+        "numericRepositoryId",
+        "path",
+        "repository",
+        "sha256",
+        "tree",
+        "trustBasis"
+      ],
+      "properties": {
+        "byteLength": {
+          "minimum": 1,
+          "maximum": 1048576,
+          "type": "integer"
+        },
+        "commit": { "$ref": "#/$defs/objectId" },
+        "declaredRouteMode": { "enum": ["no-market", "external-route"] },
+        "declarationKind": { "enum": ["trusted-no-market-declaration", "trusted-external-route-declaration"] },
+        "gitBlobOid": { "$ref": "#/$defs/objectId" },
+        "numericRepositoryId": { "const": "1320171831" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "repository": { "const": "0xprogrammable/submit-launch" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "tree": { "$ref": "#/$defs/objectId" },
+        "trustBasis": { "const": "protected-submit-launch-base-content-addressed" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "declaredRouteMode": { "const": "no-market" },
+            "declarationKind": { "const": "trusted-no-market-declaration" }
+          }
+        },
+        {
+          "properties": {
+            "declaredRouteMode": { "const": "external-route" },
+            "declarationKind": { "const": "trusted-external-route-declaration" }
+          }
+        }
+      ]
+    },
+    "canonicalTimestamp": {
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$",
+      "type": "string"
+    },
+    "decimal": {
+      "maxLength": 78,
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "numericId": {
+      "pattern": "^[1-9][0-9]{0,63}$",
+      "type": "string"
+    },
+    "repository": {
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "slug": {
+      "maxLength": 80,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    }
+  }
+}

@@ -31,6 +31,92 @@ function canonicalPolicyRecord() {
   return parseLaunchPolicyBytes(fs.readFileSync(policyPath));
 }
 
+function launchReadinessSubject(routerProvenanceRequired = true) {
+  return {
+    commit: "a".repeat(40),
+    configurationHash: `sha256:${"c".repeat(64)}`,
+    routerProvenanceRequired,
+    tree: "b".repeat(40)
+  };
+}
+
+function launchReadinessEvidence() {
+  return {
+    "programmable-launch-requirement": {
+      basis: "gross-canonical-pool-volume",
+      chainId: 1,
+      hundredthsOfBip: 1000,
+      network: "ethereum-mainnet",
+      status: "passed",
+      treasury: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+    },
+    "programmable-router-readiness": {
+      abiSha256: `sha256:${"d".repeat(64)}`,
+      abiUrl: "https://developers.programmable.family/api/v2/launch-stamp-router-abi",
+      chainId: 1,
+      directFactoryCall: false,
+      discoveryDocumentUrl: "https://developers.programmable.family/.well-known/programmable.json",
+      launchEntryPoint: "launchAndStampV1",
+      launchKind: 1,
+      manifestSha256: `sha256:${"e".repeat(64)}`,
+      manifestUrl: "https://developers.programmable.family/api/v2/manifest",
+      routeEvidenceSha256: `sha256:${"f".repeat(64)}`,
+      routerAddress: `0x${"1".repeat(40)}`,
+      routerManifestPointer: "/launchStampRouter",
+      routerRuntimeCodeHash: `0x${"2".repeat(64)}`,
+      routerStatus: "live",
+      sourceCommit: "a".repeat(40),
+      sourceConfigurationHash: `sha256:${"c".repeat(64)}`,
+      sourceTree: "b".repeat(40),
+      status: "passed"
+    }
+  };
+}
+
+function routerPromotionEvidence() {
+  return {
+    "programmable-router-promotion": {
+      abiSha256: `sha256:${"1".repeat(64)}`,
+      blockHash: `0x${"1".repeat(64)}`,
+      blockNumber: 100,
+      canonicalBlockFinalized: true,
+      chainId: 1,
+      componentSetHash: `0x${"2".repeat(64)}`,
+      confirmations: 64,
+      discoveryDocumentUrl: "https://developers.programmable.family/.well-known/programmable.json",
+      expectedResultHash: `0x${"3".repeat(64)}`,
+      finalityConfirmations: 64,
+      hook: `0x${"1".repeat(40)}`,
+      launchId: `0x${"4".repeat(64)}`,
+      launchKind: 1,
+      lookupMatched: true,
+      manifestSha256: `sha256:${"2".repeat(64)}`,
+      manifestUrl: "https://developers.programmable.family/api/v2/manifest",
+      permitDigest: `0x${"5".repeat(64)}`,
+      poolId: `0x${"6".repeat(64)}`,
+      poolManager: `0x${"2".repeat(40)}`,
+      promotionEvidenceSha256: `sha256:${"3".repeat(64)}`,
+      promotionTargets: ["api-v2", "indexer", "public-discovery", "registry"],
+      routeBindingMatched: true,
+      routeLauncher: `0x${"3".repeat(40)}`,
+      routeLauncherRuntimeCodeHash: `0x${"7".repeat(64)}`,
+      routePayloadHash: `0x${"8".repeat(64)}`,
+      routerAddress: `0x${"4".repeat(40)}`,
+      routerManifestPointer: "/launchStampRouter",
+      routerRuntimeCodeHash: `0x${"9".repeat(64)}`,
+      sourceCommit: "a".repeat(40),
+      sourceConfigurationHash: `sha256:${"c".repeat(64)}`,
+      sourceDeploymentBindingSha256: `sha256:${"4".repeat(64)}`,
+      sourceTree: "b".repeat(40),
+      stampHash: `0x${"a".repeat(64)}`,
+      stampProofMatched: true,
+      status: "passed",
+      token: `0x${"5".repeat(40)}`,
+      transactionHash: `0x${"b".repeat(64)}`
+    }
+  };
+}
+
 function runGit(repositoryRoot, args) {
   return childProcess.execFileSync("git", args, {
     cwd: repositoryRoot,
@@ -68,46 +154,55 @@ function trustedPolicyFixture(t, policy = canonicalPolicyRecord().policy) {
   };
 }
 
-test("canonical policy exposes exactly build canary and disabled production profiles", () => {
+test("canonical policy exposes build readiness canary and disabled production profiles without authority", () => {
   const record = canonicalPolicyRecord();
-  assert.equal(record.policy.policyVersion, "1.3.0");
-  assert.deepEqual(record.policy.profiles.map(({ id }) => id), ["build", "production-launch", "workflow-canary"]);
+  assert.equal(record.policy.policyVersion, "2.0.0");
+  assert.deepEqual(record.policy.profiles.map(({ id }) => id), ["build", "launch-readiness", "production-launch", "workflow-canary"]);
   assert.equal(selectLaunchPolicyProfile(record.policy, "build").enabled, true);
+  assert.equal(selectLaunchPolicyProfile(record.policy, "launch-readiness").enabled, true);
   assert.equal(selectLaunchPolicyProfile(record.policy, "production-launch").enabled, false);
   assert.equal(selectLaunchPolicyProfile(record.policy, "workflow-canary").enabled, true);
   assert.equal(selectLaunchPolicyProfile(record.policy, "build").outcome, "BUILT_NOT_REVIEWED");
+  assert.equal(selectLaunchPolicyProfile(record.policy, "launch-readiness").outcome, "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED");
   assert.equal(selectLaunchPolicyProfile(record.policy, "workflow-canary").outcome, "CANARY_WORKFLOW_PASSED");
+  for (const profile of record.policy.profiles) {
+    assert.equal(profile.authority.launchAuthorized, false);
+    assert.equal(profile.authority.productionDiscoveryAllowed, false);
+    assert.equal(profile.authority.publicRoutingAllowed, false);
+    assert.equal(profile.authority.realUserFundsAllowed, false);
+  }
   assert.doesNotMatch(JSON.stringify(record.policy), /LAUNCH_APPROVED/u);
 });
 
-test("current production-route policy is one sentence: Ethereum and the Programmable treasury 10 bps", (t) => {
+test("market-bearing readiness is closed while no-market stays admissible and unsupported integration stays pending", (t) => {
   const { policy } = canonicalPolicyRecord();
-  assert.equal(policy.policyVersion, "1.3.0");
-  assert.deepEqual(policy.rules.map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
-  assert.equal(policy.rules[0].requirement, "A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury.");
+  assert.equal(policy.policyVersion, "2.0.0");
+  assert.deepEqual(policy.rules.map(({ id }) => id), [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
   assert.deepEqual(rulesForProfile(policy, "build"), []);
-  assert.deepEqual(rulesForProfile(policy, "production-launch").map(({ id }) => id), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
+  assert.deepEqual(rulesForProfile(policy, "launch-readiness").map(({ id }) => id), [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+  assert.deepEqual(rulesForProfile(policy, "production-launch").map(({ id }) => id), [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
   assert.deepEqual(rulesForProfile(policy, "workflow-canary"), []);
   assert.equal(policy.rules.some(({ status }) => status !== "active"), false);
 
-  // The production profile is intentionally disabled. Exercise the deterministic
-  // handler through a bounded test-only policy that makes the same rule available
-  // to the checker-only build profile; this does not change the canonical policy.
-  const checkerPolicy = structuredClone(policy);
-  checkerPolicy.rules[0].profiles = ["build", "production-launch"];
-  const { record } = trustedPolicyFixture(t, checkerPolicy);
-  const validEvidence = {
-    "programmable-launch-requirement": {
-      basis: "gross-canonical-pool-volume",
-      chainId: 1,
-      hundredthsOfBip: 1000,
-      network: "ethereum-mainnet",
-      status: "passed",
-      treasury: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
-    }
-  };
-  const passed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "build", subject: {}, evidence: validEvidence });
+  const { record } = trustedPolicyFixture(t);
+  const validEvidence = launchReadinessEvidence();
+  const subject = launchReadinessSubject();
+  const passed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence: validEvidence });
   assert.equal(passed.passed, true);
+  assert.equal(passed.outcome, "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED");
+  assert.deepEqual(passed.pendingRuleIds, []);
+  assert.equal(passed.authority.launchAuthorized, false);
 
   for (const [label, mutate] of [
     ["wrong chain", (evidence) => { evidence["programmable-launch-requirement"].chainId = 8453; }],
@@ -116,10 +211,74 @@ test("current production-route policy is one sentence: Ethereum and the Programm
   ]) {
     const evidence = structuredClone(validEvidence);
     mutate(evidence);
-    const failed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "build", subject: {}, evidence });
+    const failed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence });
     assert.equal(failed.passed, false, label);
     assert.deepEqual(failed.findings.map(({ ruleId }) => ruleId), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"], label);
   }
+
+  const directFactory = structuredClone(validEvidence);
+  directFactory["programmable-router-readiness"].directFactoryCall = true;
+  const directFactoryDecision = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence: directFactory });
+  assert.deepEqual(directFactoryDecision.findings.map(({ ruleId }) => ruleId), ["LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"]);
+
+  const unsupported = structuredClone(validEvidence);
+  delete unsupported["programmable-router-readiness"];
+  const unsupportedDecision = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence: unsupported });
+  assert.equal(unsupportedDecision.passed, false);
+  assert.deepEqual(unsupportedDecision.findings, []);
+  assert.deepEqual(unsupportedDecision.pendingRuleIds, ["LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"]);
+
+  const noMarketDecision = evaluateLaunchPolicyRules({
+    policyRecord: record,
+    profileId: "launch-readiness",
+    subject: launchReadinessSubject(false),
+    evidence: {}
+  });
+  assert.equal(noMarketDecision.passed, true);
+  assert.equal(noMarketDecision.outcome, "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED");
+  assert.deepEqual(noMarketDecision.results.map(({ status }) => status), ["not-applicable", "not-applicable"]);
+
+  assert.throws(
+    () => evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject: {}, evidence: {} }),
+    hasCode("LAUNCH_POLICY_EVALUATION_INPUT_INVALID")
+  );
+});
+
+test("finalized Router promotion handler validates the full closed projection instead of a status claim", (t) => {
+  const policy = structuredClone(canonicalPolicyRecord().policy);
+  policy.rules.find(({ id }) => id === "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION").profiles = [
+    "launch-readiness",
+    "production-launch"
+  ];
+  const { record } = trustedPolicyFixture(t, policy);
+  const subject = launchReadinessSubject();
+  const evidence = { ...launchReadinessEvidence(), ...routerPromotionEvidence() };
+  const passed = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence });
+  assert.equal(passed.passed, true);
+  assert.deepEqual(passed.results.map(({ status }) => status), ["passed", "passed", "passed"]);
+
+  for (const [label, mutate] of [
+    ["not finalized", (value) => { value.canonicalBlockFinalized = false; }],
+    ["wrong manifest source", (value) => { value.manifestUrl = "https://example.invalid/manifest"; }],
+    ["zero Router", (value) => { value.routerAddress = `0x${"0".repeat(40)}`; }],
+    ["open payload", (value) => { value.untrusted = true; }]
+  ]) {
+    const invalid = structuredClone(evidence);
+    mutate(invalid["programmable-router-promotion"]);
+    const decision = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence: invalid });
+    assert.equal(decision.passed, false, label);
+    assert.deepEqual(
+      decision.findings.map(({ ruleId }) => ruleId),
+      ["LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION"],
+      label
+    );
+  }
+
+  const pendingEvidence = structuredClone(evidence);
+  delete pendingEvidence["programmable-router-promotion"];
+  const pending = evaluateLaunchPolicyRules({ policyRecord: record, profileId: "launch-readiness", subject, evidence: pendingEvidence });
+  assert.deepEqual(pending.findings, []);
+  assert.deepEqual(pending.pendingRuleIds, ["LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION"]);
 });
 
 test("policy rejects duplicate keys noncanonical bytes duplicate rule ids and unbound handlers", () => {
@@ -179,8 +338,8 @@ test("active rules cannot become non-enforcing historical records", () => {
   assert.throws(() => validateLaunchPolicy(policy), hasCode("LAUNCH_POLICY_RULE_INVALID"));
 });
 
-test("build and canary authority cannot carry routing discovery or real-user funds", () => {
-  for (const profileId of ["build", "workflow-canary"]) {
+test("checker-only profiles cannot carry routing discovery or real-user funds", () => {
+  for (const profileId of ["build", "launch-readiness", "workflow-canary"]) {
     for (const [field, invalidValue] of [
       ["checkerOnly", false],
       ["independentAudit", true],
@@ -299,12 +458,15 @@ test("JSON Schema rejects profile duplication production enablement approval and
   assert.equal(validate(canonical), true, JSON.stringify(validate.errors));
 
   const mutations = [
-    (policy) => { policy.profiles[0] = structuredClone(policy.profiles[2]); },
+    (policy) => { policy.policyVersion = "9.9.9"; },
+    (policy) => { policy.profiles[0] = structuredClone(policy.profiles[3]); },
     (policy) => { policy.profiles[0].authority.checkerOnly = false; },
     (policy) => { policy.profiles[0].authority.publicRoutingAllowed = true; },
-    (policy) => { policy.profiles[1].enabled = true; },
+    (policy) => { policy.profiles[1].enabled = false; },
     (policy) => { policy.profiles[1].outcome = "LAUNCH_APPROVED"; },
+    (policy) => { policy.profiles[2].enabled = true; },
     (policy) => { policy.profiles[2].authority.realUserFundsAllowed = true; },
+    (policy) => { policy.profiles[3].authority.realUserFundsAllowed = true; },
     (policy) => { policy.rules.find(({ status }) => status === "active").applicability = { mode: "historical" }; }
   ];
   for (const mutate of mutations) {

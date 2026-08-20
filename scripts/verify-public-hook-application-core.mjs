@@ -35,6 +35,7 @@ import {
   PublicApplicationV3IntakeError,
   deriveApplicationV3FeeApplicabilityFromSubmissionV2,
   derivePublicPrApplicationV3PreviousBinding,
+  deriveTrustedPublicApplicationV3LaunchReadinessV1,
   validatePublicApplicationV3PackageFiles,
   validatePublicApplicationV3SubmissionV2Bytes
 } from "./verify-public-application-v3-core.mjs";
@@ -1056,6 +1057,45 @@ export async function hydratePublicApplicationCandidate({
     ) {
       systemBlocked("HYDRATION_BOUNDED_FETCH_FAILED", "Git could not hydrate the bounded application blobs within trusted resource limits.");
     }
+    const exactObjectIds = [...new Set(hydrationPlans.flatMap((hydrationPlan) => (
+      hydrationPlan.entries.map((entry) => entry.oid)
+    )))].sort(compareUtf8);
+    const materialization = await runBoundedHydrationGitProcess({
+      gitExecutable: dependencies.gitExecutable ?? "git",
+      gitDirectory,
+      args: ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+      input: Buffer.from(`${exactObjectIds.join("\n")}\n`, "utf8"),
+      timeoutMs: dependencies.backfillTimeoutMs ?? TRUSTED_GIT_TIMEOUT_MS,
+      maximumOutputBytes: HYDRATION_OUTPUT_BYTES,
+      maximumFileSizeBytes,
+      maximumRepositoryBytes: baselineBytes + maximumAdditionalRepositoryBytes,
+      maximumAddressSpaceBytes: CANDIDATE_GIT_ADDRESS_SPACE_BYTES,
+      maximumCpuSeconds: CANDIDATE_GIT_CPU_SECONDS,
+      allowFileProtocol: dependencies.allowFileProtocolForTests === true
+    });
+    if (materialization.timedOut) {
+      systemBlocked("HYDRATION_TIMEOUT", "Exact candidate blob materialization exceeded its trusted timeout.");
+    }
+    if (
+      materialization.outputExceeded
+      || materialization.repositoryBytesExceeded
+      || materialization.fileSizeExceeded
+      || materialization.addressSpaceExceeded
+      || materialization.cpuExceeded
+      || materialization.status !== 0
+    ) {
+      systemBlocked("HYDRATION_BOUNDED_FETCH_FAILED", "Git could not materialize the exact bounded candidate blob identities.");
+    }
+    const materializedRecords = materialization.stdout.toString("utf8").trim().split("\n");
+    if (
+      materializedRecords.length !== exactObjectIds.length
+      || materializedRecords.some((record, index) => {
+        const match = /^([0-9a-f]{40}) blob (0|[1-9][0-9]*)$/u.exec(record);
+        return match === null || match[1] !== exactObjectIds[index];
+      })
+    ) {
+      systemBlocked("HYDRATION_OBJECT_INVALID", "Exact candidate blob materialization returned an unexpected object identity, type, or size.");
+    }
     hydrationPlans.forEach((hydrationPlan, index) => {
       verifyHydratedObjects(gitDirectory, hydrationPlan, boundedMetadataRecords[index], limits);
     });
@@ -1834,7 +1874,8 @@ export async function runBoundedHydrationGitProcess({
   maximumRepositoryBytes,
   maximumAddressSpaceBytes = CANDIDATE_GIT_ADDRESS_SPACE_BYTES,
   maximumCpuSeconds = CANDIDATE_GIT_CPU_SECONDS,
-  allowFileProtocol = false
+  allowFileProtocol = false,
+  input = null
 }) {
   if (process.platform !== "darwin" && process.platform !== "linux") {
     systemBlocked("HYDRATION_PLATFORM_UNSUPPORTED", "Bounded Git hydration supports macOS and Linux only.");
@@ -1879,6 +1920,7 @@ export async function runBoundedHydrationGitProcess({
     || gitExecutable.length < 1
     || /[\u0000\r\n]/u.test(gitExecutable)
     || !Array.isArray(args)
+    || (input !== null && (!Buffer.isBuffer(input) || input.length < 1 || input.length > HYDRATION_OUTPUT_BYTES))
     || !Number.isInteger(timeoutMs)
     || timeoutMs < 1
     || timeoutMs > TRUSTED_GIT_TIMEOUT_MS
@@ -1924,12 +1966,17 @@ export async function runBoundedHydrationGitProcess({
           detached: true,
           env: hydrationGitEnvironment(),
           shell: false,
-          stdio: ["ignore", "pipe", "pipe"]
+          stdio: [input === null ? "ignore" : "pipe", "pipe", "pipe"]
         }
       );
     } catch (error) {
       rejectPromise(error);
       return;
+    }
+
+    if (input !== null) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(input);
     }
 
     const stdout = [];
@@ -2181,8 +2228,9 @@ async function verifyPublicApplicationV3({
   const sourceArtifacts = await resolveApplicationV3SourceArtifacts({ application, repositories, exactResolver });
   const policy = application.policyBindings;
   const submissionBytes = sourceArtifacts.get(`${policy.submissionRepositoryRef}\0${policy.submissionPath}`);
+  let submissionValidation;
   try {
-    validatePublicApplicationV3SubmissionV2Bytes({
+    submissionValidation = validatePublicApplicationV3SubmissionV2Bytes({
       application,
       submissionBytes,
       sourceArtifacts,
@@ -2193,9 +2241,13 @@ async function verifyPublicApplicationV3({
     throw error;
   }
 
+  const launchReadiness = application.contract.version === "3.2.0"
+    ? deriveTrustedPublicApplicationV3LaunchReadinessV1(submissionValidation)
+    : null;
+
   return {
     schemaVersion: 1,
-    validatorVersion: "3.1.0",
+    validatorVersion: application.contract.version,
     result: "valid-public-application-v3-package",
     mode: "application-v3",
     intakeState: intakeStatus.state,
@@ -2211,7 +2263,8 @@ async function verifyPublicApplicationV3({
     acceptanceGranted: false,
     productionDiscoveryAllowed: false,
     publicRoutingAllowed: false,
-    realUserFundsAllowed: false
+    realUserFundsAllowed: false,
+    ...(launchReadiness === null ? {} : { launchReadiness })
   };
 }
 
@@ -2359,8 +2412,17 @@ function validateApplicationV3Lineage({
       applicationRevision: previous.revision,
       targetDirectory,
       files
-    })
+    }),
+    targetContractVersion: application.contract.version
   });
+  const previousContractVersion = validated.application.contract.version;
+  const currentContractVersion = application.contract.version;
+  if (previousContractVersion === "3.2.0" && currentContractVersion === "3.1.0") {
+    reject("APPLICATION_V3_CONTRACT_DOWNGRADE_FORBIDDEN", "An Application V3.2 history cannot downgrade to the V3.1 compatibility contract.");
+  }
+  if (previousContractVersion === "3.1.0" && currentContractVersion === "3.2.0" && application.lineage.kind !== "schema-migration") {
+    reject("APPLICATION_V3_2_MIGRATION_KIND_REQUIRED", "An Application V3.1 to V3.2 transition must use exact schema-migration lineage.");
+  }
   if (canonicalJson(application.lineage.previous) !== canonicalJson(expectedPrevious)) {
     reject("APPLICATION_V3_LINEAGE_MISMATCH", "Application V3 lineage does not bind the exact authenticated predecessor package.");
   }
@@ -3426,13 +3488,17 @@ function validateMaintainedApplicationV3History(revisions) {
       const expectedPrevious = derivePublicPrApplicationV3PreviousBinding({
         application: previous.application,
         applicationSha256: previous.applicationSha256,
-        packageSha256: previous.packageSha256
+        packageSha256: previous.packageSha256,
+        targetContractVersion: current.application.contract.version
       });
       if (
         canonicalJson(current.application.lineage.previous) !== canonicalJson(expectedPrevious)
         || String(current.application.builder.githubUserId) !== String(previous.application.builder.githubUserId)
       ) {
         systemBlocked("MAINTAINED_APPLICATION_V3_LINEAGE_INVALID", "Maintained Application V3 lineage differs from the exact immediately preceding V3 package.");
+      }
+      if (previous.application.contract.version === "3.2.0" && current.application.contract.version === "3.1.0") {
+        systemBlocked("MAINTAINED_APPLICATION_V3_CONTRACT_DOWNGRADE", "Maintained Application V3 history cannot downgrade from V3.2 to V3.1.");
       }
     }
     previous = current;

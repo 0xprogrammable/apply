@@ -6,6 +6,7 @@ Passing intake is not acceptance, an audit, deployment approval, or availability
 
 ## Contribution type
 
+- [ ] Application V3.2 or V3.1 compatibility revision
 - [ ] Generated six-file application package
 - [ ] Hidden workflow-canary application
 - [ ] Submit a Launch repository maintenance
@@ -13,8 +14,10 @@ Passing intake is not acceptance, an audit, deployment approval, or availability
 
 ## Evidence
 
-Describe the exact source revision, reason for the change, and checks run. For a generated application, keep the
-Hookbuilder-generated title and body unchanged.
+Describe the exact source revision, reason for the change, and checks run. For an Application V3.2 official Router
+route, include the exact content-addressed readiness and route/fee source artifacts; do not claim a postlaunch stamp or
+terminal promotion in a prelaunch application. For a generated legacy V2 application, keep the Hookbuilder-generated
+title and body unchanged.
 
 ## Checklist
 

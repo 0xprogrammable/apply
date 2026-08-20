@@ -14,10 +14,10 @@ import {
 } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
   EXTENSION_SPLIT_REVIEW_CODES,
-  OPEN_WORLD_V2_STANDARD_VERSION,
   bundledSchemas,
   duplicates,
-  idsFor
+  idsFor,
+  openWorldSubmissionContractFor
 } from "./verify-open-world-v2-contracts.mjs";
 
 export function validateOpenWorldV2Intent(context) {
@@ -32,8 +32,9 @@ export function validateOpenWorldV2Intent(context) {
     requireSlug,
     validateSchemaBinding
   } = context;
-  if (submission.$schema !== "urn:programmable:v4-hook-submission:2.0.0") add("blocker", "SUBMISSION_SCHEMA_ID_INVALID", "$.$schema", "Submission must bind the v2 schema URN.");
-  if (submission.schemaVersion !== 2 || submission.standardVersion !== OPEN_WORLD_V2_STANDARD_VERSION) add("blocker", "SUBMISSION_VERSION_INVALID", "$", "Submission must use schemaVersion 2 and standardVersion 2.0.0.");
+  const submissionContract = openWorldSubmissionContractFor(submission);
+  if (submissionContract === null || submission.$schema !== submissionContract.schemaId) add("blocker", "SUBMISSION_SCHEMA_ID_INVALID", "$.$schema", "Submission must bind one exact accepted v2 schema URN selected by standardVersion.");
+  if (submissionContract === null || submission.schemaVersion !== 2) add("blocker", "SUBMISSION_VERSION_INVALID", "$", "Submission must use schemaVersion 2 and one accepted exact standardVersion.");
   requireSlug(submission.applicationId, "$.applicationId", "APPLICATION_ID_INVALID");
   if (!["proposal", "prototype"].includes(submission.stage)) add("blocker", "STAGE_INVALID", "$.stage", "Stage must be proposal or prototype.");
 
@@ -41,18 +42,20 @@ export function validateOpenWorldV2Intent(context) {
   const intent = parsedRecords.intentContract ?? {};
   const architecture = parsedRecords.architectureDecisions ?? {};
   const fidelity = parsedRecords.intentFidelity ?? {};
-  for (const [key, value, valuePath] of [
+  for (const [key, value, valuePath, selectedSchema] of [
     ["ideaSource", idea, "$.records.ideaSource"],
     ["intentContract", intent, "$.records.intentContract"],
     ["architectureDecisions", architecture, "$.records.architectureDecisions"],
     ["intentFidelity", fidelity, "$.records.intentFidelity"],
-    ["submission", submission, "$"]
+    ["submission", submission, "$", submissionContract?.schema]
   ]) {
-    for (const issue of validateExtensionInstance(value, bundledSchemas[key], { trustedSchema: true })) {
+    const schema = selectedSchema ?? bundledSchemas[key];
+    if (schema === undefined) continue;
+    for (const issue of validateExtensionInstance(value, schema, { trustedSchema: true })) {
       if (EXTENSION_SPLIT_REVIEW_CODES.has(issue.code)) {
         addSplitReason({ collection: `base-schema:${key}`, code: issue.code });
         add("split-review", "BASE_SCHEMA_SPLIT_REVIEW_REQUIRED", valuePath, issue.message, {
-          schemaId: bundledSchemas[key].$id,
+          schemaId: schema.$id,
           schemaCode: issue.code,
           instancePath: issue.path,
           ideaEligibility: "ELIGIBLE_FOR_REVIEW",
@@ -60,7 +63,7 @@ export function validateOpenWorldV2Intent(context) {
           automaticMaterialization: false
         });
       } else {
-        add("blocker", "BASE_SCHEMA_INVALID", valuePath, issue.message, { schemaId: bundledSchemas[key].$id, schemaCode: issue.code, instancePath: issue.path });
+        add("blocker", "BASE_SCHEMA_INVALID", valuePath, issue.message, { schemaId: schema.$id, schemaCode: issue.code, instancePath: issue.path });
       }
     }
   }

@@ -19,6 +19,38 @@
   "additionalProperties": false,
   "properties": {
     "boundedApplicantData": {
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "contract": {
+                "const": "public-pr-application-v3.1-immutable-revision-v1"
+              }
+            },
+            "required": [
+              "contract"
+            ],
+            "type": "object"
+          },
+          "maxContains": 1,
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "contract": {
+                "const": "public-pr-application-v3.2-immutable-revision-v1"
+              }
+            },
+            "required": [
+              "contract"
+            ],
+            "type": "object"
+          },
+          "maxContains": 1,
+          "minContains": 1
+        }
+      ],
       "items": {
         "oneOf": [
           {
@@ -54,7 +86,10 @@
             "additionalProperties": false,
             "properties": {
               "contract": {
-                "const": "public-pr-application-v3.1-immutable-revision-v1"
+                "enum": [
+                  "public-pr-application-v3.1-immutable-revision-v1",
+                  "public-pr-application-v3.2-immutable-revision-v1"
+                ]
               },
               "layout": {
                 "const": "application-v3-revision-tree"
@@ -92,8 +127,8 @@
           }
         ]
       },
-      "maxItems": 3,
-      "minItems": 3,
+      "maxItems": 4,
+      "minItems": 4,
       "type": "array"
     },
     "canonicalPolicy": {
@@ -134,6 +169,7 @@
               "current-policy-read",
               "current-review",
               "frozen-legacy-review",
+              "launch-readiness",
               "public-intake",
               "workflow-canary",
               "website-canary-eligibility",

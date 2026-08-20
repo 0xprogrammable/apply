@@ -1,6 +1,6 @@
 {
   "name": "@programmable/submit-launch",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,6 +16,7 @@
     "compile:entitlement": "node scripts/compile-launch-entitlement.mjs",
     "generate": "node scripts/generate-registry.mjs --write",
     "check": "node scripts/verify-repository.mjs",
+    "launch-readiness": "node scripts/programmable-launch-router-readiness.mjs",
     "policy": "node scripts/launch-policy.mjs",
     "policy:check": "node scripts/generate-launch-policy-artifacts.mjs --check",
     "policy:generate": "node scripts/generate-launch-policy-artifacts.mjs --write",

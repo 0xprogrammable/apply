@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="docs/COMPLETE_LAUNCH_REQUIREMENTS.md">See every launch requirement</a> ·
   <a href="#launch-policy">Read the launch policy</a> ·
   <a href="#open-review-standard">Read the standard</a> ·
   <a href="#run-the-checker">Run the checker</a> ·
@@ -27,12 +28,14 @@ the public application ledger, and a versioned discovery registry. Complete proj
 public repository.
 
 > [!IMPORTANT]
-> **Three intake transports are open.** Generic Application V3.1 accepts one immutable revision of any complete
-> no-market, tradable, hook, token, app, game, service, or hybrid project as an official protected draft for review.
-> The hidden Workflow Canary remains a separate one-file handoff test. The receipt-bound Hookbuilder v0.10.3 tree may
-> still submit its frozen six-file legacy V2 package while the checked-in intake state remains `open`. A valid draft is
-> not reviewed, accepted, audited, deployed, available, or launched, and no intake transport grants funds authority.
-> The authenticated queue described below is a disabled reference, not a fourth open transport.
+> **Three intake transports are open.** Application V3.2 is the complete current contract for the official Programmable
+> Router path and accepts no-market, tradable, hook, token, app, game, service, hybrid, and previously unknown projects.
+> Application V3.1 remains accepted under its byte-unchanged compatibility contract, but it cannot establish
+> `launch-readiness` or the official Programmable route. The hidden Workflow Canary remains a separate one-file handoff
+> test. The receipt-bound Hookbuilder v0.10.3 tree may still submit its frozen six-file legacy V2 package while the
+> checked-in intake state remains `open`. A valid draft is not reviewed, accepted, audited, deployed, available, or
+> launched, and no intake transport grants funds authority. The authenticated queue described below is a disabled
+> reference, not a fourth open transport.
 
 The low-cost universal front door is [`docs/UNIVERSAL_ADMISSION_V1.md`](docs/UNIVERSAL_ADMISSION_V1.md). Its small,
 project-agnostic envelope declares exact source coordinates plus execution surfaces, value flows, privileges, and
@@ -45,7 +48,7 @@ tenant-bound enqueue, replay, lease, retry, dead-letter, snapshot, and garbage-c
 single-host SQLite reference are bound by
 [`universal-admission-contract.v1.json`](.programmable/universal-admission-contract.v1.json). That contract is
 `reference-only-disabled`: it publishes no endpoint, audience, trust snapshot, public worker plane, production-capacity
-claim, or authority. GitHub Draft V3.1 remains the open public adapter.
+claim, or authority. GitHub Draft V3.2 is the current full launch adapter; V3.1 remains an accepted compatibility path.
 
 The [Workflow Canary](docs/WORKFLOW_CANARY.md) accepts one hidden JSON file to test the GitHub handoff without
 creating a public launch, Registry entry, audit claim, routing authority, or permission to use real funds.
@@ -64,12 +67,21 @@ The canonical source for Programmable launch requirements is
 [`docs/LAUNCH_POLICY.md`](docs/LAUNCH_POLICY.md) is a generated, digest-bound human projection. Edit the JSON only;
 the generated Markdown is never independent authority.
 
-> **A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury.**
+The policy is the only normative requirement list. The
+[complete launch requirements guide](docs/COMPLETE_LAUNCH_REQUIREMENTS.md) maps its stable Rule IDs to the current
+application, readiness, and promotion artifacts; it does not create requirements of its own.
 
-That is the single production-route term. The enabled `build` profile intentionally carries no semantic launch
-requirement, so any complete project can enter checker-only review regardless of category, chain, token model, or
-whether it uses a market. Workflow transport, canonical JSON, Git identity, signature, path, and size checks protect
-the process; they are not additional launch-policy requirements.
+For a selected Programmable Ethereum market, the current policy requires all of the following at the relevant stage:
+
+- exactly **10 bps (0.10%)** of `gross-canonical-pool-volume` to
+  `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`;
+- an exact prelaunch plan for the manifest-resolved current canonical Router; and
+- a finalized matching Router stamp and proof before Registry, API, or terminal promotion.
+
+These conditions do not reject no-market or unfamiliar projects. No-market is `not-applicable`; an unresolved route
+remains `analysis-pending`. The enabled `build` and `workflow-canary` profiles carry no semantic launch requirements.
+The enabled `launch-readiness` profile is checker-only and cannot authorize a launch, public routing, production
+discovery, an audit, or real-user funds.
 
 [`policy/launch-policy-authority-ownership.v1.json`](policy/launch-policy-authority-ownership.v1.json) is the separate
 machine-readable ownership proof. It carries no requirement text or parameter values. It binds the closed repository
@@ -82,26 +94,37 @@ Third-party developers and agents can inspect the requirements without installin
 ```bash
 npm run policy -- requirements --profile build
 npm run policy -- requirements --profile workflow-canary
+npm run policy -- requirements --profile launch-readiness
+npm run policy -- binding --profile launch-readiness
+npm run policy -- requirements --profile production-launch
 npm run policy -- validate-policy
 npm run policy -- render
 ```
 
 `build` returns no semantic launch requirements and is checker-only. `workflow-canary` intentionally returns no
-semantic launch requirements; it tests transport only. The disabled `production-launch` profile carries the single
-Ethereum-mainnet route term for future use but cannot authorize a launch. `binding` is available for an enabled profile and binds the policy at the exact committed
-repository `HEAD`; it refuses a dirty policy projection.
+semantic launch requirements; it tests transport only. `launch-readiness` returns the conditional fee and Router-plan
+rules with outcome `LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED`. The disabled `production-launch` profile also publishes
+the finalized-promotion rule for inspection but cannot produce a binding or authorize a launch. `binding` is available
+only for an enabled profile and binds the policy at the exact committed repository `HEAD`; it refuses a dirty policy
+projection.
 Every command reads the fixed repository-owned policy path, emits canonical JSON, and never imports or executes
 applicant code.
 
-The generated [active-contract manifest](.programmable/active-contract.json) provides digest-bound discovery for the
-current workflow, validators, the [generic Application V3.1 schema](intake/schemas/public-pr-application-v3.schema.json),
-the [legacy V2 package schema](vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json), the
-[workflow-canary schemas](canary/schemas/), and policy. It is a same-tree discovery record, not approval or proof that
-the tree is protected or live.
+The generated [V1 active-contract compatibility envelope](.programmable/active-contract.json) preserves every direct
+legacy Workflow Canary, V3.1, vendored V2, and validator binding. Its policy role additionally binds the complete
+[V2 active contract](.programmable/active-contract.v2.json), which provides same-tree digest discovery for current V3.2,
+Submission 2.1, Trade Manifest V2, Router readiness, policy review, promotion, and compatibility artifacts. Neither
+manifest is approval or proof that the tree is protected or live.
+
+Applicant-facing machine discovery starts with the current
+[`applicant-compatibility.v2.json`](.programmable/applicant-compatibility.v2.json) and its
+[`schema`](intake/schemas/applicant-compatibility-v2.schema.json). That record content-binds Application V3.2,
+Submission 2.1, Trade Capability Manifest V2, the Router-readiness schema and validator closure, and legacy V3.1.
+Applicant Compatibility V1 remains a legacy discovery contract and does not describe V3.2.
 
 Universal Admission uses its own versioned well-known contract. It does not alter the active contract, Applicant
-Compatibility V1, or Application V3.1. Consumers must read either contract and all of its bound artifacts from one exact
-repository commit.
+Compatibility V2 or legacy V1, Application V3.2, or V3.1 compatibility. Consumers must read the selected contract and
+all of its bound artifacts from one exact repository commit.
 
 ## Open Review Standard
 
@@ -148,13 +171,17 @@ npm test
 ## How it works
 
 1. **Build.** Project source stays in its own public GitHub repository.
-2. **Bind.** Application V3.1 records the exact source revision, owner intent, evidence, and selected policy artifacts.
+2. **Bind.** Application V3.2 records the exact source revision, owner intent, evidence, and selected policy artifacts.
 3. **Submit.** One pull request adds one immutable revision under
    `submissions/<application-id>/v3/revisions/<revision>/`.
 4. **Validate.** Protected-base code checks bounded inert data without executing applicant code. A pass means only that
    the draft is valid for review.
 5. **Review separately.** Reviewers evaluate the exact bound revision; intake never records acceptance or approval.
-6. **Promote later.** Registry, deployment, public availability, funds, and launch authorization remain separate facts.
+6. **Check readiness conditionally.** A selected Programmable Ethereum market binds the exact fee tuple and
+   `.programmable/launch-router-readiness.v1.json`; no-market remains exempt and unresolved routes remain pending.
+7. **Launch only with separate authority.** Readiness does not sign, broadcast, deploy, or authorize funds.
+8. **Verify and promote later.** A finalized canonical Router stamp and matching proof are required before a future
+   market can be promoted to Registry, API, or terminal classification. Third-party terminal adoption remains separate.
 
 Application content is untrusted data. The trusted intake workflow uses protected base code, read-only permissions,
 bounded files, and no candidate execution.
@@ -162,17 +189,24 @@ bounded files, and no candidate execution.
 ## Application intake
 
 **Universal Admission V1.** Validate a bounded, canonical envelope offline with `npm run admission -- FILE`. This is a
-cheap review-queue admission record, not a replacement for the deeper V3.1 package. It never runs candidate code or
+cheap review-queue admission record, not a replacement for the deeper V3.2 package. It never runs candidate code or
 writes to GitHub. The authenticated queue and SQLite backend remain disabled reference surfaces. See the
 [Universal Admission contract](docs/UNIVERSAL_ADMISSION_V1.md) and
 [protocol](docs/UNIVERSAL_ADMISSION_PROTOCOL_V1.md).
 
-**Generic Application V3.1.** Submit one new immutable revision at
+**Application V3.2.** Submit one new immutable revision at
 `submissions/<application-id>/v3/revisions/<revision>/application.v3.json` together with exactly the application-package
-records bound by that manifest. Project kind is not allowlisted: complete no-market, tradable, hook, token, app, game,
-service, and hybrid projects use the same contract. Novel capabilities and evidence remain bound source or additional
-review records instead of being discarded because the validator does not recognize a project category. A green check
-means `ELIGIBLE_FOR_REVIEW` only. Read the [public GitHub intake contract](docs/builder/PUBLIC_GITHUB_PR_BETA.md).
+records bound by that manifest. It binds policy-neutral Submission 2.1 and, for each selected tradable market, Trade
+Capability Manifest V2; no-market projects attach no trade manifest. Project kind is not allowlisted: complete
+no-market, tradable, hook, token, app, game, service, hybrid, and unknown projects use the same contract. Novel
+capabilities and evidence remain bound source or additional review records instead of being discarded because the
+validator does not recognize a project category. A green check means only that the draft is valid for review. Read the
+[public GitHub intake contract](docs/builder/PUBLIC_GITHUB_PR_BETA.md).
+
+**Application V3.1 compatibility.** The V3.1 compatibility contract remains byte-unchanged and continues to accept new
+and existing drafts so current Builders do not break. Those revisions are never reinterpreted as V3.2 and cannot
+establish `launch-readiness` or the official Programmable Router route. Add a new V3.2 revision before requesting
+readiness for an official Ethereum market.
 
 **Hidden Workflow Canary.** Submit exactly one canonical
 `canary-submissions/<application-id>/application.json` file that binds the central policy and exact public source.
@@ -184,10 +218,12 @@ or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the
 
 ## Fee terms
 
-The disabled `production-launch` route currently requires **10 bps (0.10%) of trading volume to the Programmable
-treasury** on Ethereum. This route term does not restrict checker-only admission: projects without a market, with a
-different fee model, or on another chain can still submit a complete revision for review. A verified onchain fee path
-is required only if a real market later opts into that production route.
+The exact selected-route requirement is **10 bps (0.10%) of gross canonical-pool volume** to
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` on Ethereum mainnet. In canonical policy units this is
+`hundredthsOfBip: 1000` with basis `gross-canonical-pool-volume`. It is not 10% and is not an optional creator fee.
+
+This rule does not restrict open-world intake: no-market projects are not applicable, and unknown or unresolved routes
+remain pending. It becomes mandatory when an exact application selects the Programmable Ethereum market route.
 
 ## Discovery registry
 
@@ -198,6 +234,16 @@ selected full record from that same commit and verifies its SHA-256 digest befor
 Search results indicate relevance only. They do not prove originality, compatibility, acceptance, safety, deployment,
 provider support, or availability. The statuses `design`, `candidate`, `accepted`, `deployed`, `available`, `suspended`,
 and `retired` remain deliberately separate.
+
+A future Ethereum v4 market cannot be promoted as a verified Programmable launch from metadata, a shared hook, an API
+claim, or a direct Factory call. Promotion requires the manifest-resolved canonical Router, finalized identity
+`chainId + Router address + launchId`, and matching stamp and component proofs. The receipt is not digest-only: it
+embeds the full canonical passed launch-readiness decision, exact readiness bytes, the exact canonical Application V3
+root bytes, its decision-subject `applicationSha256` and `packageSha256`, and the closed promotion evidence projection.
+Registry verification derives the application and package digests again from those embedded root bytes and binds the
+result to the accepted package; jointly replacing and rehashing a claimed application cannot preserve that acceptance.
+A valid promotion makes the evidence available to integrations; it does not guarantee adoption by GMGN, Axiom, FOMO,
+or any other terminal.
 
 Read the [discovery contract](docs/DISCOVERY_CONTRACT.md) before integrating.
 
@@ -215,6 +261,7 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 
 ## Documentation
 
+- [Complete launch requirements for agents and Builders](docs/COMPLETE_LAUNCH_REQUIREMENTS.md)
 - [Generated launch policy](docs/LAUNCH_POLICY.md)
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)

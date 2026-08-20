@@ -47,6 +47,75 @@ test("the closed ownership manifest proves one current authored admission author
   assert.deepEqual(manifest.fileClasses["authority-ownership-manifest"], [AUTHORITY_OWNERSHIP_MANIFEST_PATH]);
   assert.equal(manifest.canonicalPolicy.path, canonicalPolicyPath);
   assert.equal(manifest.canonicalPolicy.schemaPath, "policy/schemas/launch-policy.v1.schema.json");
+  assert.deepEqual(manifest.boundedApplicantData, [
+    {
+      contract: "workflow-canary-application-v1",
+      files: ["application.json"],
+      rootPath: "canary-submissions"
+    },
+    {
+      contract: "public-pr-application-v2-six-file-v1",
+      files: ["PROPOSAL.md", "TEST_PLAN.md", "THREAT_MODEL.md", "application.json", "compatibility-report.json", "evidence-index.json"],
+      rootPath: "submissions"
+    },
+    {
+      contract: "public-pr-application-v3.1-immutable-revision-v1",
+      layout: "application-v3-revision-tree",
+      maximumFileBytes: 4_194_304,
+      maximumFiles: 100,
+      maximumPackageBytes: 12_582_912,
+      rootFile: "application.v3.json",
+      rootMaximumBytes: 262_144,
+      rootPath: "submissions"
+    },
+    {
+      contract: "public-pr-application-v3.2-immutable-revision-v1",
+      layout: "application-v3-revision-tree",
+      maximumFileBytes: 4_194_304,
+      maximumFiles: 100,
+      maximumPackageBytes: 12_582_912,
+      rootFile: "application.v3.json",
+      rootMaximumBytes: 262_144,
+      rootPath: "submissions"
+    }
+  ]);
+  const readinessEntrypoint = manifest.entrypoints.find(({ path: entrypointPath }) => (
+    entrypointPath === "scripts/programmable-launch-router-readiness.mjs"
+  ));
+  assert.deepEqual(readinessEntrypoint, {
+    frozenVendorImports: [
+      "vendor/programmable-applicant-validator/scripts/evm-encoding-core.mjs",
+      "vendor/programmable-v4-hook-builder/scripts/github-public-source-lossless-json.mjs"
+    ],
+    id: "programmable-router-readiness-cli",
+    moduleClosure: [
+      "scripts/programmable-launch-router-readiness-core.mjs",
+      "scripts/programmable-launch-router-readiness.mjs"
+    ],
+    path: "scripts/programmable-launch-router-readiness.mjs",
+    role: "launch-readiness"
+  });
+  for (const compatibilityPath of [
+    ".programmable/applicant-compatibility.v1.json",
+    ".programmable/applicant-compatibility.v2.json"
+  ]) {
+    assert.equal(
+      manifest.publicProjections.find(({ path: projectionPath }) => projectionPath === compatibilityPath)?.kind,
+      "public-contract",
+      compatibilityPath
+    );
+  }
+  const withoutV3_2 = structuredClone(manifest);
+  withoutV3_2.boundedApplicantData.pop();
+  assert.equal(validateManifest(withoutV3_2), false);
+  const duplicateV3_1 = structuredClone(manifest);
+  duplicateV3_1.boundedApplicantData.at(-1).contract = "public-pr-application-v3.1-immutable-revision-v1";
+  assert.equal(validateManifest(duplicateV3_1), false);
+  const widenedReadinessRole = structuredClone(manifest);
+  widenedReadinessRole.entrypoints.find(({ path: entrypointPath }) => (
+    entrypointPath === "scripts/programmable-launch-router-readiness.mjs"
+  )).role = "launch-readiness-unbounded";
+  assert.equal(validateManifest(widenedReadinessRole), false);
   assert.deepEqual(findForbiddenPolicyValueKeys(manifest), []);
 
   const policy = readJson(canonicalPolicyPath);
@@ -56,6 +125,70 @@ test("the closed ownership manifest proves one current authored admission author
   assert.equal(policy.repository.path, canonicalPolicyPath);
   assert.equal(policy.effective.state, "current");
   assert.equal(fs.existsSync(path.join(root, "review/policy.v1.json")), false);
+});
+
+test("V3.2, both compatibility contracts, and the Router-readiness CLI cannot self-weaken their authority declarations", () => {
+  withRepositoryCopy((repositoryRoot) => {
+    const original = JSON.parse(readAt(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH));
+
+    const withoutV3_2 = structuredClone(original);
+    withoutV3_2.boundedApplicantData = withoutV3_2.boundedApplicantData.filter(({ contract }) => (
+      contract !== "public-pr-application-v3.2-immutable-revision-v1"
+    ));
+    writeAuthorityManifest(repositoryRoot, withoutV3_2);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_BOUNDED_DATA_INVALID"
+    );
+
+    const widenedReadinessRole = structuredClone(original);
+    widenedReadinessRole.entrypoints.find(({ path: entrypointPath }) => (
+      entrypointPath === "scripts/programmable-launch-router-readiness.mjs"
+    )).role = "public-intake";
+    writeAuthorityManifest(repositoryRoot, widenedReadinessRole);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID"
+    );
+
+    const downgradedCompatibilityV2 = structuredClone(original);
+    downgradedCompatibilityV2.publicProjections.find(({ path: projectionPath }) => (
+      projectionPath === ".programmable/applicant-compatibility.v2.json"
+    )).kind = "public-documentation";
+    writeAuthorityManifest(repositoryRoot, downgradedCompatibilityV2);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_PROJECTIONS_INVALID"
+    );
+
+    const missingReadinessImport = structuredClone(original);
+    missingReadinessImport.entrypoints.find(({ path: entrypointPath }) => (
+      entrypointPath === "scripts/programmable-launch-router-readiness.mjs"
+    )).frozenVendorImports = [
+      "vendor/programmable-v4-hook-builder/scripts/github-public-source-lossless-json.mjs"
+    ];
+    writeAuthorityManifest(repositoryRoot, missingReadinessImport);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_IMPORT_CLOSURE_MISMATCH"
+    );
+
+    const orphanedPromotionConsumer = structuredClone(original);
+    const promotionMapping = orphanedPromotionConsumer.semanticRuleMap.find(({ ruleId }) => (
+      ruleId === "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION"
+    ));
+    promotionMapping.consumers = promotionMapping.consumers.filter((consumer) => consumer !== "scripts/registry-core.mjs");
+    writeAuthorityManifest(repositoryRoot, orphanedPromotionConsumer);
+    assert.throws(
+      () => verifyLaunchPolicyAuthorityOwnership({ repositoryRoot }),
+      (error) => error instanceof LaunchPolicyAuthorityOwnershipError
+        && error.code === "AUTHORITY_OWNERSHIP_MODULE_RULE_MISMATCH"
+    );
+  });
 });
 
 test("the ownership gate rejects an added YAML policy and an indirect imported admission gate", () => {
@@ -224,6 +357,35 @@ test("every semantic finding and handler maps bijectively to a central Rule ID",
     assert.deepEqual(mapping.profiles, [...rule.profiles].sort(compareUtf8), rule.id);
   }
 
+  const expectedConsumers = {
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS": [
+      "review/launch-policy-review-core.mjs",
+      "scripts/launch-policy-core.mjs",
+      "scripts/launch-policy-handlers.mjs",
+      "scripts/programmable-launch-router-readiness-core.mjs",
+      "scripts/registry-core.mjs",
+      "scripts/verify-public-application-v3-core.mjs"
+    ],
+    "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION": [
+      "review/launch-policy-review-core.mjs",
+      "scripts/launch-policy-core.mjs",
+      "scripts/launch-policy-handlers.mjs",
+      "scripts/registry-core.mjs"
+    ],
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS": [
+      "review/launch-policy-review-core.mjs",
+      "scripts/launch-policy-core.mjs",
+      "scripts/launch-policy-handlers.mjs",
+      "scripts/programmable-launch-router-readiness-core.mjs",
+      "scripts/registry-core.mjs",
+      "scripts/verify-public-application-v3-core.mjs"
+    ]
+  };
+  assert.deepEqual(
+    Object.fromEntries(manifest.semanticRuleMap.map(({ consumers, ruleId }) => [ruleId, consumers])),
+    expectedConsumers
+  );
+
   for (const profileId of ["build", "workflow-canary"]) {
     const rules = rulesForProfile(policyRecord.policy, profileId);
     const baselineInput = currentReviewInput(policyRecord, profileId, rules);
@@ -333,11 +495,13 @@ test("public docs describe one policy chain through reviewer canary and audience
   assert.match(beta, /frozen legacy V2 transport/u);
   assert.match(beta, /cannot satisfy Workflow\s+Canary or Website eligibility/u);
   assert.match(agents, /only authored source of current Programmable-specific admission requirements/u);
-  assert.match(readme, /A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury/u);
+  assert.match(readme, /exactly \*\*10 bps \(0\.10%\)\*\* of `gross-canonical-pool-volume`/u);
   assert.match(readme, /`build` returns no semantic launch requirements/u);
   assert.match(readme, /Three intake transports are open/u);
-  assert.match(readme, /Generic Application V3\.1 accepts one immutable revision/u);
-  assert.match(readme, /six-file legacy V2 package while the checked-in/u);
+  assert.match(readme, /Application V3\.2\.\*\* Submit one new immutable revision/u);
+  assert.match(readme, /Application V3\.1 compatibility/u);
+  assert.match(readme, /six-file legacy V2 package/u);
+  assert.match(readme, /checked-in intake state remains/u);
   assert.match(readme, /existing V2 applications use that bounded compatibility validator/u);
 });
 
@@ -416,6 +580,14 @@ function withRepositoryCopy(callback) {
 
 function digestFile(repositoryRoot, relativePath) {
   return `sha256:${crypto.createHash("sha256").update(fs.readFileSync(path.join(repositoryRoot, relativePath))).digest("hex")}`;
+}
+
+function writeAuthorityManifest(repositoryRoot, manifest) {
+  fs.writeFileSync(
+    path.join(repositoryRoot, AUTHORITY_OWNERSHIP_MANIFEST_PATH),
+    `${canonicalAuthorityJson(manifest)}\n`,
+    "utf8"
+  );
 }
 
 function trustedPolicyRecord() {

@@ -9,7 +9,8 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 test("the public landing page states the checker and intake boundaries", () => {
   const readme = read("README.md");
   assert.match(readme, /Three intake transports are open/u);
-  assert.match(readme, /Generic Application V3\.1/u);
+  assert.match(readme, /Application V3\.2 is the complete current contract/u);
+  assert.match(readme, /Application V3\.1 remains accepted/u);
   assert.match(readme, /Hidden Workflow Canary/u);
   assert.match(readme, /Open legacy V2/u);
   assert.match(readme, /existing V2 applications use that bounded compatibility validator/u);
@@ -49,9 +50,10 @@ test("contribution paths and the pull request template stay in sync", () => {
   assert.match(maturity, /receipt-bound Hookbuilder v0\.10\.3 tree also remains open/u);
   assert.match(maturity, /cannot satisfy Canary or Website eligibility/u);
   assert.match(migration, /activated the Hookbuilder 0\.5\.1 bridge/u);
-  assert.match(migration, /bridge remains the open legacy V2 transport/u);
+  assert.match(migration, /current open, frozen legacy V2 transport/u);
   assert.match(migration, /separate lightweight one-file Workflow Canary/u);
   assert.match(template, /Generated six-file application package/u);
+  assert.match(template, /Application V3\.2 or V3\.1 compatibility revision/u);
   assert.match(template, /Hidden workflow-canary application/u);
   assert.match(template, /Submit a Launch repository maintenance/u);
   assert.match(template, /Open Review Standard maintenance/u);

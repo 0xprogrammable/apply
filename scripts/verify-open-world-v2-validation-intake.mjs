@@ -14,11 +14,18 @@ import {
   validateTradeTestResultV1
 } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
 import {
+  validateTradeCapabilityManifestV2,
+  validateTradeResultPairV2,
+  validateTradeTestResultV2
+} from "./verify-open-world-v2-trade-manifest-v2.mjs";
+import {
   EXTENSION_SPLIT_REVIEW_CODES,
   OPEN_WORLD_V2_ARTIFACTS,
   OPEN_WORLD_V2_FEE_CONFORMANCE_ARTIFACTS,
   OPEN_WORLD_V2_OPTIONAL_SUPPORTING_ARTIFACTS,
   OPEN_WORLD_V2_SUPPORTING_ARTIFACTS,
+  OPEN_WORLD_V2_1_STANDARD_VERSION,
+  OPEN_WORLD_V2_1_TRADE_CAPABILITY_ARTIFACT,
   OPEN_WORLD_V2_TRADE_CAPABILITY_ARTIFACT,
   STRUCTURAL_SPLIT_REVIEW_CODES,
   bundledSchemas,
@@ -265,7 +272,11 @@ export function validateOpenWorldV2Intake(context) {
   const declaredTradeCapabilityMarkets = Array.isArray(submission.tradeCapability?.markets)
     ? submission.tradeCapability.markets
     : [];
-  if (!legacyCompatibilityProfile && declaredTradeCapabilityMarkets.some(({ manifest }) => manifest?.schemaId === OPEN_WORLD_V2_TRADE_CAPABILITY_ARTIFACT.schemaId)) add("blocker", "FROZEN_LEGACY_TRADE_MANIFEST_ENTRYPOINT_REQUIRED", "$.tradeCapability.markets", "Trade-capability manifest v1 carries a branded Fee V2 projection and is accepted only by the explicitly named frozen legacy validator. Current generic fee behavior remains project intent and must use a policy-neutral evidence contract.");
+  const policyNeutralTradeManifest = submission.standardVersion === OPEN_WORLD_V2_1_STANDARD_VERSION;
+  const selectedTradeCapabilityArtifact = policyNeutralTradeManifest
+    ? OPEN_WORLD_V2_1_TRADE_CAPABILITY_ARTIFACT
+    : OPEN_WORLD_V2_TRADE_CAPABILITY_ARTIFACT;
+  if (!legacyCompatibilityProfile && !policyNeutralTradeManifest && declaredTradeCapabilityMarkets.some(({ manifest }) => manifest?.schemaId === OPEN_WORLD_V2_TRADE_CAPABILITY_ARTIFACT.schemaId)) add("blocker", "FROZEN_LEGACY_TRADE_MANIFEST_ENTRYPOINT_REQUIRED", "$.tradeCapability.markets", "Trade-capability manifest v1 carries a branded Fee V2 projection and is accepted only by the explicitly named frozen legacy validator. Current generic fee behavior must use Submission 2.1 and Trade Manifest 2.");
   const suppliedTradeCapabilityRecords = supportingRecords.tradeCapabilities === undefined
     ? []
     : Array.isArray(supportingRecords.tradeCapabilities)
@@ -298,8 +309,8 @@ export function validateOpenWorldV2Intake(context) {
       continue;
     }
     if (supplied.marketRef !== declaration?.marketRef) add("blocker", "TRADE_CAPABILITY_SUPPORTING_MARKET_MISMATCH", `${suppliedPath}.marketRef`, "Typed trade-capability record must align to the selected marketRef.");
-    if (binding.artifactType !== OPEN_WORLD_V2_TRADE_CAPABILITY_ARTIFACT.artifactType) add("blocker", "TRADE_CAPABILITY_MANIFEST_ARTIFACT_TYPE_MISMATCH", `${bindingPath}.artifactType`, "Trade-capability manifest binding uses the wrong artifact type.");
-    if (binding.schemaId !== OPEN_WORLD_V2_TRADE_CAPABILITY_ARTIFACT.schemaId) add("blocker", "TRADE_CAPABILITY_MANIFEST_SCHEMA_ID_MISMATCH", `${bindingPath}.schemaId`, "Trade-capability manifest binding uses the wrong schema ID.");
+    if (binding.artifactType !== selectedTradeCapabilityArtifact.artifactType) add("blocker", "TRADE_CAPABILITY_MANIFEST_ARTIFACT_TYPE_MISMATCH", `${bindingPath}.artifactType`, "Trade-capability manifest binding uses the wrong artifact type.");
+    if (binding.schemaId !== selectedTradeCapabilityArtifact.schemaId) add("blocker", "TRADE_CAPABILITY_MANIFEST_SCHEMA_ID_MISMATCH", `${bindingPath}.schemaId`, "Trade-capability manifest binding uses the wrong schema ID for the selected Submission version.");
     if (!isSafeRepositoryPath(binding.path)) add("blocker", "TRADE_CAPABILITY_MANIFEST_PATH_INVALID", `${bindingPath}.path`, "Trade-capability manifest binding requires a safe repository-relative path.");
     const record = supplied.manifest;
     const recordPath = `${suppliedPath}.manifest`;
@@ -329,7 +340,16 @@ export function validateOpenWorldV2Intake(context) {
     if (binding.sha256 !== sha256Bytes(bytes)) add("blocker", "TRADE_CAPABILITY_MANIFEST_HASH_MISMATCH", `${bindingPath}.sha256`, "Trade-capability manifest binding SHA-256 does not match exact bytes.");
     if (binding.byteLength !== bytes.length) add("blocker", "TRADE_CAPABILITY_MANIFEST_LENGTH_MISMATCH", `${bindingPath}.byteLength`, "Trade-capability manifest binding byte length does not match exact bytes.");
     parsedEntry.manifest = { value: parsed, bytes, binding };
-    const manifestFindings = validateTradeCapabilityManifestV1(parsed, {
+    const validateTradeManifest = policyNeutralTradeManifest
+      ? validateTradeCapabilityManifestV2
+      : validateTradeCapabilityManifestV1;
+    const validateTradeResult = policyNeutralTradeManifest
+      ? validateTradeTestResultV2
+      : validateTradeTestResultV1;
+    const validateTradePair = policyNeutralTradeManifest
+      ? validateTradeResultPairV2
+      : validateTradeResultPairV1;
+    const manifestFindings = validateTradeManifest(parsed, {
       applicationId: submission.applicationId,
       marketRef: declaration?.marketRef,
       routeType: declaration?.routeType
@@ -383,7 +403,7 @@ export function validateOpenWorldV2Intake(context) {
         }
         if (canonicalJson(parsedResult) !== canonicalJson(resultRecord.value)) add("blocker", "TRADE_TEST_RESULT_VALUE_BYTES_MISMATCH", resultRecordPath, "Parsed trade test result bytes differ from the supplied value.");
         if (!resultBytes.equals(Buffer.from(`${canonicalJson(parsedResult)}\n`, "utf8"))) add("blocker", "TRADE_TEST_RESULT_CANONICAL_BYTES_REQUIRED", `${resultRecordPath}.bytes`, "Trade test result bytes must use canonical JSON with one final newline so the exact source snapshot can be mirrored into Application review.");
-        const resultFindings = validateTradeTestResultV1(
+        const resultFindings = validateTradeResult(
           parsedResult,
           manifestValid ? { manifest: parsed, test } : {}
         );
@@ -409,7 +429,7 @@ export function validateOpenWorldV2Intake(context) {
         ) continue;
         const quoteTest = parsed.testEvidence.quoteTests[quoteIndex];
         const executionTest = parsed.testEvidence.executionTests[executionIndex];
-        const pairFindings = validateTradeResultPairV1(
+        const pairFindings = validateTradePair(
           parsedEntry.quoteResults[quoteIndex].result.value,
           parsedEntry.executionResults[executionIndex].result.value,
           { manifest: parsed, quoteTest, executionTest }

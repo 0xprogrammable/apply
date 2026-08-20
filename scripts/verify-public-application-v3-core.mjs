@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 import { canonicalJson, validateAgainstSchema } from "../vendor/programmable-applicant-validator/scripts/public-applicant-validator.mjs";
@@ -40,10 +42,33 @@ import {
   validateCurrentOpenWorldV2Package,
   validateLegacyFeeV2OpenWorldV2Package
 } from "./verify-open-world-v2-package.mjs";
+import {
+  deriveProgrammableLaunchRouterSourceConfigurationHashV1,
+  deriveProgrammableLaunchRouterApplicabilityRecordV1,
+  parseProgrammableLaunchRouterReadinessBytesV1,
+  projectProgrammableLaunchRouterPolicyEvidenceV1
+} from "./programmable-launch-router-readiness-core.mjs";
 
-const applicationSchema = readJson(
+const applicationV3_1Schema = readJson(
   new URL("../intake/schemas/public-pr-application-v3.schema.json", import.meta.url)
 );
+const applicationV3_2Schema = readJson(
+  new URL("../intake/schemas/public-pr-application-v3.2.schema.json", import.meta.url)
+);
+const routerReadinessSchemaUrl = new URL(
+  "../intake/schemas/programmable-launch-router-readiness-v1.schema.json",
+  import.meta.url
+);
+const routerReadinessSchemaBytes = fs.readFileSync(routerReadinessSchemaUrl);
+const routerReadinessSchema = JSON.parse(routerReadinessSchemaBytes.toString("utf8"));
+const applicationSchemasByVersion = new Map([
+  ["3.1.0", applicationV3_1Schema],
+  ["3.2.0", applicationV3_2Schema]
+]);
+const submissionContractsByApplicationVersion = new Map([
+  ["3.1.0", Object.freeze({ schemaId: "urn:programmable:v4-hook-submission:2.0.0", standardVersion: "2.0.0" })],
+  ["3.2.0", Object.freeze({ schemaId: "urn:programmable:v4-hook-submission:2.1.0", standardVersion: "2.1.0" })]
+]);
 const openWorldSecurityV1Bytes = Buffer.from(`${canonicalJson(readJson(
   new URL("../vendor/programmable-applicant-validator/references/open-world-security-v1.schema.json", import.meta.url)
 ))}\n`, "utf8");
@@ -54,6 +79,10 @@ const MAXIMUM_APPLICATION_V3_PACKAGE_BYTES = 12 * 1024 * 1024;
 const MAXIMUM_APPLICATION_V3_PACKAGE_FILES = 100;
 const APPLICATION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+const TRUSTED_APPLICATION_V3_DOCUMENTS = new WeakSet();
+const TRUSTED_APPLICATION_V3_PACKAGE_BINDINGS = new WeakMap();
+const TRUSTED_APPLICATION_V3_LAUNCH_READINESS = new WeakMap();
+const TRUSTED_APPLICATION_V3_LAUNCH_READINESS_PROJECTIONS = new WeakSet();
 
 export {
   PUBLIC_PR_APPLICATION_V3_BASE_REQUIRED_REVIEW_KINDS,
@@ -131,7 +160,18 @@ export function validatePublicApplicationV3SubmissionV2Bytes({
       "Application V3 feeApplicability must equal the state derived from exact Submission V2 bytes."
     );
   }
-  return Object.freeze({ feeApplicability, submission, artifactCount: packageValidation.artifactCount });
+  const result = Object.freeze({ feeApplicability, submission, artifactCount: packageValidation.artifactCount });
+  if (TRUSTED_APPLICATION_V3_DOCUMENTS.has(application)) {
+    const launchReadiness = packageValidation.launchReadiness
+      ?? deriveApplicationV3PackageReadinessProjection(
+        application,
+        TRUSTED_APPLICATION_V3_PACKAGE_BINDINGS.get(application)
+      );
+    if (launchReadiness !== null) {
+      TRUSTED_APPLICATION_V3_LAUNCH_READINESS.set(result, launchReadiness);
+    }
+  }
+  return result;
 }
 
 /**
@@ -192,7 +232,7 @@ export function validatePublicApplicationV3PackageFiles({
   }
   if (
     application.contract?.id !== "public-pr-application-v3"
-    || application.contract?.version !== "3.1.0"
+    || !applicationSchemasByVersion.has(application.contract?.version)
     || application.schemaVersion !== 3
     || application.applicationId !== applicationId
     || application.applicationRevision !== applicationRevision
@@ -257,7 +297,162 @@ export function validatePublicApplicationV3PackageFiles({
   ) {
     rejectApplicationV3("APPLICATION_V3_AUTHORITY_INVALID", "Application V3 intake cannot claim review, acceptance, or approval authority.");
   }
-  return Object.freeze({ application, applicationRecords: Object.freeze(applicationRecords), report, totalBytes });
+  const packageBinding = derivePublicApplicationV3PackageBindingV1({
+    application,
+    applicationBytes,
+    applicationRecords
+  });
+  deepFreezeJsonValue(application);
+  const frozenApplicationRecords = Object.freeze(applicationRecords.map((record) => Object.freeze(record)));
+  const result = Object.freeze({ application, applicationRecords: frozenApplicationRecords, report, totalBytes });
+  TRUSTED_APPLICATION_V3_DOCUMENTS.add(application);
+  TRUSTED_APPLICATION_V3_PACKAGE_BINDINGS.set(application, packageBinding);
+  const packageReadiness = deriveApplicationV3PackageReadinessProjection(application, packageBinding);
+  if (packageReadiness !== null) TRUSTED_APPLICATION_V3_LAUNCH_READINESS.set(result, packageReadiness);
+  return result;
+}
+
+function deepFreezeJsonValue(value) {
+  if (value === null || typeof value !== "object") return value;
+  const pending = [value];
+  const visited = new Set();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const child of Object.values(current)) {
+      if (child !== null && typeof child === "object") pending.push(child);
+    }
+    Object.freeze(current);
+  }
+  return value;
+}
+
+export function deriveTrustedPublicApplicationV3LaunchReadinessV1(result) {
+  const projection = result !== null && typeof result === "object"
+    ? TRUSTED_APPLICATION_V3_LAUNCH_READINESS.get(result)
+    : undefined;
+  if (projection === undefined) {
+    rejectApplicationV3(
+      "APPLICATION_V3_LAUNCH_READINESS_TRUST_INVALID",
+      "Launch-readiness projection requires an opaque result minted by the protected V3.2 package or exact source verifier."
+    );
+  }
+  TRUSTED_APPLICATION_V3_LAUNCH_READINESS_PROJECTIONS.add(projection);
+  return projection;
+}
+
+export function isTrustedPublicApplicationV3LaunchReadinessV1(value) {
+  return value !== null
+    && typeof value === "object"
+    && TRUSTED_APPLICATION_V3_LAUNCH_READINESS_PROJECTIONS.has(value);
+}
+
+export function derivePublicApplicationV3PackageBindingV1({
+  application,
+  applicationBytes,
+  applicationRecords
+}) {
+  if (
+    !isObject(application)
+    || !(applicationBytes instanceof Uint8Array)
+    || !Array.isArray(applicationRecords)
+  ) {
+    rejectApplicationV3("APPLICATION_V3_PACKAGE_BINDING_INPUT_INVALID", "Application package binding requires the exact root bytes and closed review records.");
+  }
+  const targetDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+  const files = [{
+    path: `${targetDirectory}/${APPLICATION_V3_ROOT_FILE}`,
+    mediaType: "application/json",
+    byteLength: applicationBytes.length,
+    sha256: sha256Bytes(applicationBytes)
+  }, ...applicationRecords.map((record) => ({
+    ...record,
+    path: `${targetDirectory}/${record.path}`
+  }))].sort((left, right) => compareUtf8(left.path, right.path));
+  return Object.freeze({
+    applicationSha256: sha256Bytes(applicationBytes),
+    packageSha256: sha256Bytes(Buffer.from(canonicalJson({
+      contract: "public-pr-application-v3-package",
+      applicationId: application.applicationId,
+      applicationRevision: application.applicationRevision,
+      targetDirectory,
+      files
+    }), "utf8"))
+  });
+}
+
+function deriveApplicationV3PackageReadinessProjection(application, packageBinding) {
+  if (
+    !["3.1.0", "3.2.0"].includes(application.contract?.version)
+    || !isObject(packageBinding)
+  ) return null;
+  const official = application.launchRequest?.requestedRoute === "programmable-ethereum-mainnet";
+  return createApplicationV3LaunchReadinessProjection({
+    application,
+    applicationSha256: packageBinding.applicationSha256,
+    decision: "analysis-pending",
+    packageSha256: packageBinding.packageSha256,
+    readinessBinding: official ? application.launchRequest.routePlan : null,
+    subject: applicationV3SourceSubject(application)
+  });
+}
+
+function applicationV3SourceSubject(application) {
+  const primary = application.source?.primary;
+  const coverage = application.source?.verificationReports?.find(({ repositoryRef }) => repositoryRef === primary?.id);
+  const repository = githubRepositoryName(primary?.repositoryUri);
+  if (
+    !isObject(primary)
+    || typeof repository !== "string"
+    || !sha256Pattern.test(coverage?.closureSha256 ?? "")
+  ) {
+    rejectApplicationV3("APPLICATION_V3_LAUNCH_READINESS_SUBJECT_INVALID", "The protected Application V3 source subject is incomplete.");
+  }
+  return {
+    commit: primary.revisionObjectId,
+    configurationHash: coverage.closureSha256,
+    numericRepositoryId: primary.numericRepositoryId,
+    repository,
+    tree: primary.treeObjectId
+  };
+}
+
+function createApplicationV3LaunchReadinessProjection({
+  application,
+  applicationSha256,
+  decision,
+  packageSha256,
+  readinessBinding,
+  subject
+}) {
+  const binding = readinessBinding === null
+    ? null
+    : Object.freeze({
+        byteLength: readinessBinding.byteLength,
+        gitBlobOid: readinessBinding.gitBlobOid,
+        path: readinessBinding.path,
+        sha256: readinessBinding.sha256
+      });
+  const frozenSubject = Object.freeze({
+    commit: subject.commit,
+    configurationHash: subject.configurationHash,
+    numericRepositoryId: subject.numericRepositoryId,
+    repository: subject.repository,
+    tree: subject.tree
+  });
+  return Object.freeze({
+    applicationId: application.applicationId,
+    applicationRevision: application.applicationRevision,
+    applicationSha256,
+    decision,
+    kind: "public-application-v3-launch-readiness",
+    readinessBinding: binding,
+    packageSha256,
+    requestedRoute: application.launchRequest?.requestedRoute ?? null,
+    schemaVersion: "1.0.0",
+    subject: frozenSubject
+  });
 }
 
 function validateMaterializedApplicationV3Package({ application, normalizedFiles }) {
@@ -407,12 +602,15 @@ function validateCompleteSubmissionV2Package({
   packageFiles
 }) {
   const policy = application.policyBindings;
+  const applicationContractVersion = application.contract?.version;
+  const submissionContract = submissionContractsByApplicationVersion.get(applicationContractVersion);
   const repositoryRef = policy.submissionRepositoryRef;
   const submissionPath = policy.submissionPath;
   if (
-    submission?.$schema !== "urn:programmable:v4-hook-submission:2.0.0"
+    submissionContract === undefined
+    || submission?.$schema !== submissionContract.schemaId
     || submission?.schemaVersion !== 2
-    || submission?.standardVersion !== "2.0.0"
+    || submission?.standardVersion !== submissionContract.standardVersion
     || submission?.applicationId !== application.applicationId
     || submission?.stage !== application.stage
     || typeof repositoryRef !== "string"
@@ -615,6 +813,14 @@ function validateCompleteSubmissionV2Package({
       return entry;
     });
   }
+  const launchRequestValidation = validateLaunchRequestPackage({
+    application,
+    submission,
+    sourceArtifacts,
+    requireReviewRecord,
+    supportingRecords
+  });
+  if (launchRequestValidation !== null) boundArtifacts.push(...launchRequestValidation.artifacts);
   const extensionSchemaBytes = {};
   for (const extensionPath of collectSubmissionV2ExtensionSchemaPaths({ submission, records, supportingRecords })) {
     const repositoryPath = resolveArtifactPath(extensionPath);
@@ -636,8 +842,10 @@ function validateCompleteSubmissionV2Package({
       boundArtifacts.push({ kind: "extension-schema", repositoryPath, packagePath: extensionPath, bytes: normalized });
     }
   }
-  const feeV2Selected = submission.programmableFee !== undefined
-    || submission.supportingPackage?.feePolicySchema !== undefined;
+  const feeV2Selected = submission.standardVersion === "2.0.0" && (
+    submission.programmableFee !== undefined
+    || submission.supportingPackage?.feePolicySchema !== undefined
+  );
   const validateSourcePackage = feeV2Selected
     ? validateLegacyFeeV2OpenWorldV2Package
     : validateCurrentOpenWorldV2Package;
@@ -692,7 +900,272 @@ function validateCompleteSubmissionV2Package({
   ) {
     rejectApplicationV3("APPLICATION_REMOTE_V2_PACKAGE_INVALID", "A non-applicable, unresolved, or unselected fee state carries a forbidden policy instance.");
   }
-  return Object.freeze({ feeApplicability, artifactCount: boundArtifacts.length });
+  return Object.freeze({
+    feeApplicability,
+    artifactCount: boundArtifacts.length,
+    launchReadiness: launchRequestValidation?.launchReadiness ?? null
+  });
+}
+
+function validateLaunchRequestPackage({
+  application,
+  submission,
+  sourceArtifacts,
+  requireReviewRecord,
+  supportingRecords
+}) {
+  const contractVersion = application.contract?.version;
+  const launchRequest = application.launchRequest;
+  if (contractVersion === "3.1.0") return null;
+  if (contractVersion !== "3.2.0" || !isObject(launchRequest)) {
+    rejectApplicationV3("APPLICATION_V3_LAUNCH_REQUEST_INVALID", "Application V3.2 must carry one closed launchRequest.");
+  }
+  const packageBinding = TRUSTED_APPLICATION_V3_PACKAGE_BINDINGS.get(application);
+  if (launchRequest.requestedRoute !== "programmable-ethereum-mainnet") {
+    const tradeApplicability = submission.tradeCapability?.applicability;
+    const selectedMarkets = submission.tradeCapability?.markets;
+    if (
+      launchRequest.requestedRoute === "none"
+      && tradeApplicability !== "no-market"
+      && tradeApplicability !== "unresolved"
+    ) {
+      rejectApplicationV3(
+        "APPLICATION_V3_ROUTE_DECLARATION_CONTRADICTORY",
+        "launchRequest.requestedRoute none is valid only for exact source-verified no-market evidence; tradable source bytes require an explicit route declaration."
+      );
+    }
+    if (
+      launchRequest.requestedRoute === "none"
+      && tradeApplicability === "no-market"
+      && (!Array.isArray(selectedMarkets) || selectedMarkets.length !== 0)
+    ) {
+      rejectApplicationV3(
+        "APPLICATION_V3_ROUTE_DECLARATION_CONTRADICTORY",
+        "The exact no-market route declaration cannot carry selected market bindings."
+      );
+    }
+    const decision = tradeApplicability === "unresolved"
+      ? "analysis-pending"
+      : "not-applicable";
+    return {
+      artifacts: [],
+      launchReadiness: packageBinding === undefined
+        ? null
+        : createApplicationV3LaunchReadinessProjection({
+            application,
+            applicationSha256: packageBinding.applicationSha256,
+            decision,
+            packageSha256: packageBinding.packageSha256,
+            readinessBinding: null,
+            subject: applicationV3SourceSubject(application)
+          })
+    };
+  }
+
+  const primary = application.source?.primary;
+  const routePlanBinding = launchRequest.routePlan;
+  const schemaBinding = launchRequest.routerReadinessSchema;
+  const primaryRepository = githubRepositoryName(primary?.repositoryUri);
+  if (
+    !isObject(primary)
+    || !isObject(routePlanBinding)
+    || !isObject(routePlanBinding.repositoryRef)
+    || routePlanBinding.schemaId !== routerReadinessSchema.$id
+    || routePlanBinding.path !== ".programmable/launch-router-readiness.v1.json"
+    || routePlanBinding.repositoryRef.repository !== primaryRepository
+    || routePlanBinding.repositoryRef.numericRepositoryId !== primary.numericRepositoryId
+    || routePlanBinding.repositoryRef.commit !== primary.revisionObjectId
+    || routePlanBinding.repositoryRef.tree !== primary.treeObjectId
+  ) {
+    rejectApplicationV3("APPLICATION_V3_ROUTE_PLAN_SOURCE_BINDING_MISMATCH", "The launch route plan must bind the exact primary source repository, commit, tree, and canonical readiness path.");
+  }
+  const routePlanBytes = sourceArtifacts.get(`${primary.id}\0${routePlanBinding.path}`);
+  if (
+    !(routePlanBytes instanceof Uint8Array)
+    || routePlanBinding.byteLength !== routePlanBytes.length
+    || routePlanBinding.sha256 !== sha256Bytes(routePlanBytes)
+    || routePlanBinding.gitBlobOid !== gitBlobOid(routePlanBytes)
+  ) {
+    rejectApplicationV3("APPLICATION_V3_ROUTE_PLAN_BYTES_MISMATCH", "The exact launch route plan bytes differ from their path, hash, byte-length, or Git blob binding.");
+  }
+  const normalizedRoutePlanBytes = Buffer.from(routePlanBytes);
+  requireReviewRecord({
+    kind: "programmable-launch-router-readiness",
+    artifactPath: routePlanBinding.path,
+    bytes: normalizedRoutePlanBytes,
+    source: "source-repository",
+    artifactRepositoryRef: primary.id
+  });
+  let parsedReadiness;
+  let policyEvidence;
+  let applicabilityRecord;
+  try {
+    parsedReadiness = parseProgrammableLaunchRouterReadinessBytesV1(normalizedRoutePlanBytes);
+    policyEvidence = projectProgrammableLaunchRouterPolicyEvidenceV1(parsedReadiness);
+    applicabilityRecord = deriveProgrammableLaunchRouterApplicabilityRecordV1(parsedReadiness);
+  } catch {
+    rejectApplicationV3(
+      "APPLICATION_V3_ROUTE_PLAN_READINESS_INVALID",
+      "The launch route plan failed the exact protected Router, runtime, permit, payload, Developer-reference, and 10 BPS readiness verifier."
+    );
+  }
+  const routePlan = parsedReadiness.document;
+
+  if (
+    !isObject(schemaBinding)
+    || schemaBinding.schemaId !== routerReadinessSchema.$id
+    || schemaBinding.path !== "intake/schemas/programmable-launch-router-readiness-v1.schema.json"
+    || schemaBinding.repositoryRef?.repository !== "0xprogrammable/submit-launch"
+    || schemaBinding.repositoryRef?.numericRepositoryId !== "1320171831"
+    || schemaBinding.byteLength !== routerReadinessSchemaBytes.length
+    || schemaBinding.sha256 !== sha256Bytes(routerReadinessSchemaBytes)
+    || schemaBinding.gitBlobOid !== gitBlobOid(routerReadinessSchemaBytes)
+  ) {
+    rejectApplicationV3("APPLICATION_V3_ROUTE_PLAN_SCHEMA_BINDING_MISMATCH", "routerReadinessSchema must content-address the exact protected Submit Launch schema bytes.");
+  }
+
+  const sourceIdentity = applicabilityRecord.subject;
+  const readinessEvidence = policyEvidence["programmable-router-readiness"];
+  const launchRequirement = policyEvidence["programmable-launch-requirement"];
+  const routeSourceArtifact = readLaunchReadinessSourceArtifact({
+    binding: routePlan.route?.sourceIdentity?.artifact,
+    kind: "programmable-launch-route-source",
+    label: "route source identity",
+    primary,
+    sourceArtifacts,
+    requireReviewRecord
+  });
+  const feeSourceArtifact = readLaunchReadinessSourceArtifact({
+    binding: routePlan.feeConfiguration?.implementationArtifact,
+    kind: "programmable-launch-fee-source",
+    label: "10 BPS implementation",
+    primary,
+    sourceArtifacts,
+    requireReviewRecord
+  });
+  const expectedConfigurationHash = deriveProgrammableLaunchRouterSourceConfigurationHashV1({
+    feeImplementationArtifact: routePlan.feeConfiguration.implementationArtifact,
+    routeArtifact: routePlan.route.sourceIdentity.artifact
+  });
+  const selectedMarketRefs = new Set((submission.tradeCapability?.markets ?? []).map(({ marketRef }) => marketRef));
+  const programmableMarketSelected = (submission.markets ?? []).some(({ id, executionClass }) => (
+    selectedMarketRefs.has(id) && executionClass === "programmable-canonical"
+  ));
+  const selectedTradeManifestOnEthereum = (supportingRecords.tradeCapabilities ?? []).some(({ manifest }) => (
+    manifest?.value?.chain?.chainId === "1"
+  ));
+  if (
+    application.stage !== "prototype"
+    || submission.tradeCapability?.applicability !== "tradable"
+    || selectedMarketRefs.size < 1
+    || !programmableMarketSelected
+    || !selectedTradeManifestOnEthereum
+    || applicabilityRecord.decision !== "required"
+    || applicabilityRecord.routeMode !== "programmable-ethereum-mainnet"
+    || routePlan.subject?.applicationId !== application.applicationId
+    || routePlan.subject?.applicationRevision !== Number(application.applicationRevision)
+    || sourceIdentity?.repository !== primaryRepository
+    || sourceIdentity?.numericRepositoryId !== primary.numericRepositoryId
+    || sourceIdentity?.commit !== primary.revisionObjectId
+    || sourceIdentity?.tree !== primary.treeObjectId
+    || readinessEvidence?.status !== "passed"
+    || readinessEvidence?.sourceCommit !== primary.revisionObjectId
+    || readinessEvidence?.sourceTree !== primary.treeObjectId
+    || readinessEvidence?.sourceConfigurationHash !== sourceIdentity?.configurationHash
+    || sourceIdentity?.configurationHash !== expectedConfigurationHash
+    || readinessEvidence?.launchKind !== launchRequest.launchKind
+    || readinessEvidence?.directFactoryCall !== false
+    || launchRequirement?.status !== "passed"
+    || launchRequirement?.chainId !== 1
+    || launchRequirement?.network !== "ethereum-mainnet"
+    || launchRequirement?.hundredthsOfBip !== 1000
+    || routePlan.route?.category !== launchRequest.category
+    || routePlan.route?.launchKind !== launchRequest.launchKind
+    || routePlan.route?.directFactoryCall !== false
+    || routePlan.route?.directFactoryFallbackAllowed !== false
+  ) {
+    rejectApplicationV3("APPLICATION_V3_ROUTE_PLAN_SEMANTICS_INVALID", "The requested official Ethereum route must bind one tradable Programmable market and the exact prelaunch Router plan identity, category, kind, source, and no-fallback semantics.");
+  }
+  return {
+    artifacts: [
+      {
+        kind: "programmable-launch-router-readiness",
+        repositoryPath: routePlanBinding.path,
+        packagePath: routePlanBinding.path,
+        bytes: normalizedRoutePlanBytes
+      },
+      routeSourceArtifact,
+      feeSourceArtifact
+    ],
+    launchReadiness: packageBinding === undefined
+      ? null
+      : createApplicationV3LaunchReadinessProjection({
+          application,
+          applicationSha256: packageBinding.applicationSha256,
+          decision: "required",
+          packageSha256: packageBinding.packageSha256,
+          readinessBinding: routePlanBinding,
+          subject: sourceIdentity
+        })
+  };
+}
+
+function readLaunchReadinessSourceArtifact({
+  binding,
+  kind,
+  label,
+  primary,
+  sourceArtifacts,
+  requireReviewRecord
+}) {
+  if (
+    !isObject(binding)
+    || !safeRepositoryPath(binding.path ?? "")
+    || binding.path === ".programmable/launch-router-readiness.v1.json"
+    || !Number.isSafeInteger(binding.byteLength)
+    || binding.byteLength < 1
+    || !sha256Pattern.test(binding.sha256 ?? "")
+    || !gitObjectPattern.test(binding.gitBlobOid ?? "")
+  ) {
+    rejectApplicationV3("APPLICATION_V3_ROUTE_SOURCE_BINDING_INVALID", `The ${label} must bind one exact primary-source artifact.`);
+  }
+  const bytes = sourceArtifacts.get(`${primary.id}\0${binding.path}`);
+  if (
+    !(bytes instanceof Uint8Array)
+    || bytes.length !== binding.byteLength
+    || sha256Bytes(bytes) !== binding.sha256
+    || gitBlobOid(bytes) !== binding.gitBlobOid
+  ) {
+    rejectApplicationV3("APPLICATION_V3_ROUTE_SOURCE_BYTES_MISMATCH", `The ${label} bytes are missing or differ from their exact path, byte-length, SHA-256, or Git blob binding.`);
+  }
+  const normalized = Buffer.from(bytes);
+  requireReviewRecord({
+    kind,
+    artifactPath: binding.path,
+    bytes: normalized,
+    source: "source-repository",
+    artifactRepositoryRef: primary.id
+  });
+  return {
+    kind,
+    repositoryPath: binding.path,
+    packagePath: binding.path,
+    bytes: normalized
+  };
+}
+
+function githubRepositoryName(repositoryUri) {
+  if (typeof repositoryUri !== "string") return null;
+  const prefix = "https://github.com/";
+  return repositoryUri.startsWith(prefix) ? repositoryUri.slice(prefix.length) : null;
+}
+
+function gitBlobOid(bytes) {
+  const normalized = Buffer.from(bytes);
+  return crypto.createHash("sha1")
+    .update(Buffer.from(`blob ${normalized.length}\0`, "utf8"))
+    .update(normalized)
+    .digest("hex");
 }
 
 function collectSubmissionV2ExtensionSchemaPaths(value) {
@@ -742,14 +1215,16 @@ function parseCanonicalApplicationV3Json(bytes, label, maximumBytes) {
 export function derivePublicPrApplicationV3PreviousBinding({
   application,
   applicationSha256,
-  packageSha256
+  packageSha256,
+  targetContractVersion = application?.contract?.version
 }) {
   const source = application?.source?.primary;
   const policy = application?.policyBindings;
   const submissionStandard = application?.contract?.submissionStandard;
   if (
     application?.contract?.id !== "public-pr-application-v3"
-    || application?.contract?.version !== "3.1.0"
+    || !applicationSchemasByVersion.has(application?.contract?.version)
+    || !applicationSchemasByVersion.has(targetContractVersion)
     || application?.schemaVersion !== 3
     || !positiveDecimalPattern.test(application?.applicationRevision ?? "")
     || !sha256Pattern.test(applicationSha256 ?? "")
@@ -760,7 +1235,7 @@ export function derivePublicPrApplicationV3PreviousBinding({
   ) {
     throw new TypeError("immutable predecessor does not satisfy the derivable public-pr-application-v3 lineage contract");
   }
-  return Object.freeze({
+  const binding = {
     applicationContract: application.contract.id,
     applicationSchemaVersion: application.schemaVersion,
     applicationRevision: application.applicationRevision,
@@ -777,6 +1252,20 @@ export function derivePublicPrApplicationV3PreviousBinding({
     feePolicyVersion: policy.programmableFeePolicyVersion,
     feeApplicability: policy.feeApplicability,
     feePolicyInstanceSha256: policy.feePolicyInstanceSha256
+  };
+  if (targetContractVersion === "3.2.0") {
+    binding.applicationContractVersion = application.contract.version;
+  }
+  return Object.freeze(binding);
+}
+
+export function derivePublicPrApplicationV3_2MigrationBinding(options) {
+  if (options?.application?.contract?.version !== "3.1.0") {
+    throw new TypeError("Application V3.2 migration binding requires one exact V3.1 predecessor");
+  }
+  return derivePublicPrApplicationV3PreviousBinding({
+    ...options,
+    targetContractVersion: "3.2.0"
   });
 }
 
@@ -817,12 +1306,16 @@ export function projectPublicPrApplicationV3DiffPaths({
   return Object.freeze([...combined].sort(compareUtf8));
 }
 
-export function validatePublicPrApplicationV3(application, { schema = applicationSchema } = {}) {
+export function validatePublicPrApplicationV3(application) {
   const findings = [];
   const seen = new Set();
   const add = createFindingAdder(findings, seen);
+  const selectedSchema = applicationSchemasByVersion.get(application?.contract?.version);
 
-  for (const finding of validateAgainstSchema(application, schema)) {
+  if (selectedSchema === undefined) {
+    add("blocker", "APPLICATION_CONTRACT_VERSION_UNSUPPORTED", "$.contract.version", "Application contract.version must select exact V3.1 or V3.2 validation bytes.", "Use 3.1.0 for the compatibility draft or 3.2.0 for the launch-request contract.", "application-contract");
+  }
+  for (const finding of selectedSchema === undefined ? [] : validateAgainstSchema(application, selectedSchema)) {
     const toolingTransport = finding.path.includes(".sourcePaths") && finding.code === "SCHEMA_MAX_ITEMS";
     add(
       "blocker",
@@ -837,14 +1330,15 @@ export function validatePublicPrApplicationV3(application, { schema = applicatio
   }
 
   if (!isObject(application)) {
-    return applicationReport(findings);
+    return applicationReport(findings, null);
   }
 
   validatePublicApplicationText(application, add);
-  validateLineage(application.lineage, application.applicationRevision, add);
+  validateLineage(application.lineage, application.applicationRevision, application.contract?.version, add);
   validateIntentAndFidelity(application.intentCapture, application.fidelity, add);
-  validatePolicyBindings(application.policyBindings, application.stage, add);
+  validatePolicyBindings(application.policyBindings, application.stage, add, application.contract?.version);
   validateReviewPackage(application.reviewPackage, application.policyBindings, application.stage, application.intentCapture, add);
+  validateLaunchRequest(application, add);
   validateSecurityBindings(application.securityBindings, application.reviewPackage, add);
   validateReviewState(application.reviewState, application.declarations, add);
   validateSourceClosure(
@@ -856,10 +1350,10 @@ export function validatePublicPrApplicationV3(application, { schema = applicatio
     add
   );
 
-  return applicationReport(findings);
+  return applicationReport(findings, application.contract?.version);
 }
 
-function validateLineage(lineage, applicationRevision, add) {
+function validateLineage(lineage, applicationRevision, applicationContractVersion, add) {
   if (!isObject(lineage)) return;
   if (!positiveDecimalPattern.test(applicationRevision ?? "")) {
     add("blocker", "APPLICATION_REVISION_INVALID", "$.applicationRevision", "Application revision must be one canonical positive decimal string.", "Emit the exact decimal revision without Number coercion, leading zeroes, exponents, or a numeric cap.", "lineage");
@@ -886,6 +1380,16 @@ function validateLineage(lineage, applicationRevision, add) {
       add("blocker", "APPLICATION_LINEAGE_PREVIOUS_CONTRACT_INVALID", "$.lineage.previous.applicationContract", "Previous application contract and schema version must select one exact supported V2 or V3 lineage shape.", "Use an authenticated public-pr-application-v2 schema migration or the complete derived public-pr-application-v3 predecessor binding.", "lineage");
     }
     const previousRevision = lineage.previous?.applicationRevision;
+    const previousContractVersion = lineage.previous?.applicationContractVersion;
+    if (applicationContractVersion === "3.2.0") {
+      if (!new Set(["3.1.0", "3.2.0"]).has(previousContractVersion)) {
+        add("blocker", "APPLICATION_LINEAGE_PREVIOUS_VERSION_INVALID", "$.lineage.previous.applicationContractVersion", "Application V3.2 lineage must identify the exact V3.1 or V3.2 predecessor contract version.", "Bind the immutable predecessor contract.version explicitly.", "lineage");
+      } else if (previousContractVersion === "3.1.0" && lineage.kind !== "schema-migration") {
+        add("blocker", "APPLICATION_V3_2_MIGRATION_KIND_REQUIRED", "$.lineage.kind", "A V3.1 to V3.2 transition is an explicit schema migration.", "Use schema-migration and preserve the exact V3.1 predecessor bytes.", "lineage");
+      } else if (previousContractVersion === "3.2.0" && lineage.kind === "schema-migration") {
+        add("blocker", "APPLICATION_V3_2_REDUNDANT_MIGRATION_INVALID", "$.lineage.kind", "A V3.2 predecessor cannot be relabeled as a V3.1 to V3.2 migration.", "Use source-update or recheck for later V3.2 revisions.", "lineage");
+      }
+    }
     if (!positiveDecimalPattern.test(previousRevision ?? "")) {
       add("blocker", "APPLICATION_LINEAGE_PREVIOUS_REVISION_INVALID", "$.lineage.previous.applicationRevision", "Previous application revision must be one canonical positive decimal string.", "Preserve the exact historical decimal revision without Number coercion.", "lineage");
     } else if (applicationRevision !== incrementCanonicalDecimal(previousRevision)) {
@@ -965,8 +1469,36 @@ function validateIntentAndFidelity(intent, fidelity, add) {
   }
 }
 
-function validatePolicyBindings(policy, stage, add) {
+function validatePolicyBindings(policy, stage, add, applicationContractVersion) {
   if (!isObject(policy)) return;
+  if (
+    applicationContractVersion === "3.2.0"
+    && (
+      policy.feeApplicability !== "not-selected"
+      || [
+        "feePolicySchemaId",
+        "programmableFeePolicyId",
+        "programmableFeePolicyVersion",
+        "programmableFeePolicyHashPreimage",
+        "programmableFeePolicyHash",
+        "feePolicySchemaPath",
+        "feePolicySchemaRepositoryRef",
+        "feePolicySchemaSha256",
+        "feePolicyInstancePath",
+        "feePolicyInstanceRepositoryRef",
+        "feePolicyInstanceSha256"
+      ].some((field) => policy[field] !== null)
+    )
+  ) {
+    add(
+      "blocker",
+      "APPLICATION_V3_2_LEGACY_FEE_SELECTION_FORBIDDEN",
+      "$.policyBindings",
+      "Application V3.2 and Submission 2.1 are policy-neutral and cannot select the historical branded Fee V2 contract.",
+      "Keep feeApplicability not-selected and every legacy Fee V2 identity, schema, and instance binding null.",
+      "fee-policy"
+    );
+  }
   const feeV2Selected = policy.feeApplicability !== "not-selected";
   const feeIdentity = {
     feePolicySchemaId: PROGRAMMABLE_FEE_V2.policySchemaId,
@@ -1020,6 +1552,43 @@ function validatePolicyBindings(policy, stage, add) {
   }
   if (policy.feePolicySchemaPath === policy.feePolicyInstancePath && policy.feePolicyInstancePath !== null) {
     add("blocker", "APPLICATION_FEE_SCHEMA_INSTANCE_ROLE_COLLISION", "$.policyBindings", "Fee policy schema and scoped instance cannot share one path.", "Use fee-policy-v2.schema.json for schema bytes and fee-policy.v2.json for the real instance.", "fee-policy-role-separation");
+  }
+}
+
+function validateLaunchRequest(application, add) {
+  const version = application.contract?.version;
+  const records = Array.isArray(application.reviewPackage?.records)
+    ? application.reviewPackage.records
+    : [];
+  const readinessRecords = records.filter(({ kind }) => kind === "programmable-launch-router-readiness");
+  if (version === "3.1.0") {
+    if (readinessRecords.length > 0) {
+      add("blocker", "APPLICATION_V3_1_LAUNCH_READINESS_CLAIM_FORBIDDEN", "$.reviewPackage.records", "Application V3.1 remains accepted compatibility, but it cannot claim official Programmable Router launch readiness.", "Migrate to Application V3.2 before binding the official Ethereum Router route.", "launch-route");
+    }
+    return;
+  }
+  if (version !== "3.2.0" || !isObject(application.launchRequest)) return;
+  const request = application.launchRequest;
+  if (request.requestedRoute !== "programmable-ethereum-mainnet") {
+    if (readinessRecords.length > 0) {
+      add("blocker", "APPLICATION_ROUTE_PLAN_NOT_APPLICABLE", "$.reviewPackage.records", "None and other routes must not carry the reserved Programmable Router readiness record.", "Keep launchRequest route bindings null and remove the reserved readiness record.", "launch-route");
+    }
+    return;
+  }
+  const routePlan = request.routePlan;
+  const primaryRepositoryRef = application.source?.primary?.id;
+  const matching = readinessRecords.filter((record) => (
+    record.source === "source-repository"
+    && record.repositoryRef === primaryRepositoryRef
+    && record.path === routePlan?.path
+    && record.sha256 === routePlan?.sha256
+    && record.byteLength === routePlan?.byteLength
+  ));
+  if (readinessRecords.length !== 1 || matching.length !== 1) {
+    add("blocker", "APPLICATION_ROUTE_PLAN_REVIEW_BINDING_MISMATCH", "$.reviewPackage.records", "The official Ethereum route must bind exactly one applicant-owned Router readiness record with the same path, hash, and byte length.", "Bind `.programmable/launch-router-readiness.v1.json` once as a source-repository review record.", "launch-route");
+  }
+  if ((request.category === "custom" && request.launchKind !== 1) || (request.category === "classic" && request.launchKind !== 2)) {
+    add("blocker", "APPLICATION_ROUTE_CATEGORY_KIND_MISMATCH", "$.launchRequest", "Official route category and launch kind must map custom to 1 or classic to 2.", "Use the exact LaunchKindV1 mapping.", "launch-route");
   }
 }
 
@@ -1164,10 +1733,11 @@ function validateReviewState(reviewState, declarations, add) {
 }
 
 
-function applicationReport(findings) {
+function applicationReport(findings, contractVersion) {
   const privacyHeld = findingsHavePrivacyHold(findings);
   const report = finalizeReport("public-pr-application-v3-validation", findings, {
     applicationContract: "public-pr-application-v3",
+    ...(contractVersion === "3.2.0" ? { applicationContractVersion: contractVersion } : {}),
     ideaEligibility: "ELIGIBLE_FOR_REVIEW",
     publicApplicationEligibility: privacyHeld ? "HELD_FOR_PRIVACY_REDACTION" : "ELIGIBLE_FOR_REVIEW",
     approvalGranted: false,
