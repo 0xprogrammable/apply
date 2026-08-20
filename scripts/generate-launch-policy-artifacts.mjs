@@ -6,7 +6,10 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { validateActiveContractManifestV1 } from "../vendor/programmable-v4-hook-builder/scripts/resolve-contract-validation.mjs";
+import {
+  validateActiveContractManifestV1,
+  validateActiveContractManifestV2
+} from "./active-contract-manifest-core.mjs";
 import {
   canonicalJson,
   parseLaunchPolicyBytes,
@@ -16,8 +19,44 @@ import {
 const POLICY_PATH = "policy/launch-policy.v1.json";
 const RENDERED_POLICY_PATH = "docs/LAUNCH_POLICY.md";
 const ACTIVE_CONTRACT_PATH = ".programmable/active-contract.json";
+const ACTIVE_CONTRACT_V2_PATH = ".programmable/active-contract.v2.json";
 const MAXIMUM_ARTIFACT_BYTES = 2 * 1024 * 1024;
-const ROLE_PATHS = Object.freeze({
+export const ACTIVE_CONTRACT_ROLE_PATHS_V2 = Object.freeze({
+  workflow: Object.freeze([".github/workflows/verify-hook-builder.yml"]),
+  validator: Object.freeze([
+    "review/launch-policy-review-core.mjs",
+    "scripts/active-contract-manifest-core.mjs",
+    "scripts/programmable-launch-router-readiness-core.mjs",
+    "scripts/programmable-launch-router-readiness.mjs",
+    "scripts/registry-core.mjs",
+    "scripts/verify-open-world-v2-contracts.mjs",
+    "scripts/verify-open-world-v2-trade-manifest-v2.mjs",
+    "scripts/verify-public-hook-application.mjs",
+    "scripts/verify-public-application-v3-core.mjs",
+    "scripts/verify-public-application-v3-shared.mjs",
+    "scripts/verify-workflow-canary.mjs"
+  ]),
+  package: Object.freeze([
+    ".programmable/applicant-compatibility.v2.json",
+    "canary/schemas/workflow-canary-application-v1.schema.json",
+    "canary/schemas/workflow-canary-result-v1.schema.json",
+    "intake/schemas/active-contract-manifest-v2.schema.json",
+    "intake/schemas/applicant-compatibility-v2.schema.json",
+    "intake/schemas/open-world-submission-v2.1.schema.json",
+    "intake/schemas/programmable-launch-router-readiness-v1.schema.json",
+    "intake/schemas/public-pr-application-v3.2.schema.json",
+    "intake/schemas/public-pr-application-v3.schema.json",
+    "intake/schemas/trade-capability-manifest-v2.schema.json",
+    "policy/schemas/launch-policy-binding.v1.schema.json",
+    "policy/schemas/launch-policy.v1.schema.json",
+    "registry/schema/launch-stamp-promotion-v1.schema.json",
+    "review/schemas/launch-policy-review-decision.v1.schema.json",
+    "review/schemas/launch-policy-review-input.v1.schema.json",
+    "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
+  ]),
+  policy: Object.freeze([POLICY_PATH])
+});
+export const ACTIVE_CONTRACT_ROLE_PATHS_V1 = Object.freeze({
   workflow: Object.freeze([".github/workflows/verify-hook-builder.yml"]),
   validator: Object.freeze([
     "scripts/verify-public-hook-application.mjs",
@@ -31,9 +70,13 @@ const ROLE_PATHS = Object.freeze({
     "intake/schemas/public-pr-application-v3.schema.json",
     "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
   ]),
-  policy: Object.freeze([POLICY_PATH])
+  policy: Object.freeze([POLICY_PATH, ACTIVE_CONTRACT_V2_PATH])
 });
-const GENERATED_PATHS = Object.freeze([RENDERED_POLICY_PATH, ACTIVE_CONTRACT_PATH]);
+const GENERATED_PATHS = Object.freeze([
+  RENDERED_POLICY_PATH,
+  ACTIVE_CONTRACT_PATH,
+  ACTIVE_CONTRACT_V2_PATH
+]);
 
 export class LaunchPolicyArtifactError extends Error {
   constructor(code, message, options) {
@@ -55,13 +98,13 @@ export function buildLaunchPolicyArtifacts(options) {
 
 function buildArtifactState(repositoryRoot) {
   const policyRecord = readRepositoryLaunchPolicy({ repositoryRoot });
-  const activeContract = validateActiveContractManifestV1({
-    $schema: "urn:programmable:active-contract-manifest:1.0.0",
-    schemaVersion: "1.0.0",
+  const activeContractV2 = validateActiveContractManifestV2({
+    $schema: "urn:programmable:active-contract-manifest:2.0.0",
+    schemaVersion: "2.0.0",
     kind: "programmable-active-contract",
     contractId: "submit-launch",
     defaultBranch: "main",
-    artifacts: Object.fromEntries(Object.entries(ROLE_PATHS).map(([role, paths]) => [
+    artifacts: Object.fromEntries(Object.entries(ACTIVE_CONTRACT_ROLE_PATHS_V2).map(([role, paths]) => [
       role,
       paths.map((relativePath) => ({
         path: relativePath,
@@ -69,11 +112,29 @@ function buildArtifactState(repositoryRoot) {
       }))
     ]))
   }, { defaultBranch: "main" });
+  const activeContractV2Source = `${canonicalJson(activeContractV2)}\n`;
+  const activeContractV1 = validateActiveContractManifestV1({
+    $schema: "urn:programmable:active-contract-manifest:1.0.0",
+    schemaVersion: "1.0.0",
+    kind: "programmable-active-contract",
+    contractId: "submit-launch",
+    defaultBranch: "main",
+    artifacts: Object.fromEntries(Object.entries(ACTIVE_CONTRACT_ROLE_PATHS_V1).map(([role, paths]) => [
+      role,
+      paths.map((relativePath) => ({
+        path: relativePath,
+        sha256: relativePath === ACTIVE_CONTRACT_V2_PATH
+          ? digestBytes(Buffer.from(activeContractV2Source, "utf8"))
+          : digestBytes(readRegularFile(repositoryRoot, relativePath, MAXIMUM_ARTIFACT_BYTES))
+      }))
+    ]))
+  }, { defaultBranch: "main" });
 
   return {
     artifacts: new Map([
       [RENDERED_POLICY_PATH, renderLaunchPolicyMarkdown(policyRecord)],
-      [ACTIVE_CONTRACT_PATH, `${canonicalJson(activeContract)}\n`]
+      [ACTIVE_CONTRACT_V2_PATH, activeContractV2Source],
+      [ACTIVE_CONTRACT_PATH, `${canonicalJson(activeContractV1)}\n`]
     ]),
     policyRecord
   };
@@ -154,6 +215,7 @@ function requireRepositoryRootOptions(options) {
 }
 
 function readRegularFile(repositoryRoot, relativePath, maximumBytes) {
+  const parentChain = snapshotRegularParentChain(repositoryRoot, relativePath);
   const absolutePath = path.join(repositoryRoot, relativePath);
   let status;
   try {
@@ -195,6 +257,7 @@ function readRegularFile(repositoryRoot, relativePath, maximumBytes) {
         `Required repository file ${relativePath} changed while it was read.`
       );
     }
+    assertRegularParentChain(parentChain, relativePath);
     return bytes;
   } catch (error) {
     if (error instanceof LaunchPolicyArtifactError) throw error;
@@ -205,6 +268,68 @@ function readRegularFile(repositoryRoot, relativePath, maximumBytes) {
     );
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function snapshotRegularParentChain(repositoryRoot, relativePath) {
+  const segments = relativePath.split("/");
+  if (
+    path.isAbsolute(relativePath)
+    || segments.some((segment) => segment === "" || segment === "." || segment === "..")
+  ) {
+    throw new LaunchPolicyArtifactError(
+      "LAUNCH_POLICY_ARTIFACT_IO",
+      `Required repository file ${relativePath} has an invalid parent path.`
+    );
+  }
+  const chain = [];
+  let current = repositoryRoot;
+  for (const segment of segments.slice(0, -1)) {
+    current = path.join(current, segment);
+    let status;
+    try {
+      status = fs.lstatSync(current);
+    } catch (error) {
+      throw new LaunchPolicyArtifactError(
+        "LAUNCH_POLICY_ARTIFACT_IO",
+        `Required repository file ${relativePath} has an unavailable parent directory.`,
+        { cause: error }
+      );
+    }
+    if (!status.isDirectory() || status.isSymbolicLink()) {
+      throw new LaunchPolicyArtifactError(
+        "LAUNCH_POLICY_ARTIFACT_IO",
+        `Required repository file ${relativePath} must remain below regular repository directories.`
+      );
+    }
+    chain.push(Object.freeze({ absolutePath: current, dev: status.dev, ino: status.ino }));
+  }
+  return Object.freeze(chain);
+}
+
+function assertRegularParentChain(chain, relativePath) {
+  for (const expected of chain) {
+    let observed;
+    try {
+      observed = fs.lstatSync(expected.absolutePath);
+    } catch (error) {
+      throw new LaunchPolicyArtifactError(
+        "LAUNCH_POLICY_ARTIFACT_IO",
+        `Required repository file ${relativePath} changed while it was read.`,
+        { cause: error }
+      );
+    }
+    if (
+      !observed.isDirectory()
+      || observed.isSymbolicLink()
+      || observed.dev !== expected.dev
+      || observed.ino !== expected.ino
+    ) {
+      throw new LaunchPolicyArtifactError(
+        "LAUNCH_POLICY_ARTIFACT_IO",
+        `Required repository file ${relativePath} changed while it was read.`
+      );
+    }
   }
 }
 

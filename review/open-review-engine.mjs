@@ -93,7 +93,8 @@ function toSubject(revision) {
     commit: revision.commit,
     tree: revision.tree,
     configurationHash: revision.configurationHash,
-    usesUniswapV4: true
+    usesUniswapV4: true,
+    routerProvenanceRequired: true
   };
 }
 

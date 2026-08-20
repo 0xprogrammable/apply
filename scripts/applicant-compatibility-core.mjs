@@ -7,22 +7,34 @@ import { parseBoundedLosslessJson } from "../vendor/programmable-v4-hook-builder
 
 export const APPLICANT_COMPATIBILITY_PATH = ".programmable/applicant-compatibility.v1.json";
 export const APPLICANT_COMPATIBILITY_SCHEMA_PATH = "intake/schemas/applicant-compatibility-v1.schema.json";
+export const APPLICANT_COMPATIBILITY_V2_PATH = ".programmable/applicant-compatibility.v2.json";
+export const APPLICANT_COMPATIBILITY_V2_SCHEMA_PATH = "intake/schemas/applicant-compatibility-v2.schema.json";
 export const APPLICANT_VALIDATOR_RECEIPT_SCHEMA_PATH = "intake/schemas/applicant-validator-package-receipt-v1.schema.json";
 export const APPLICANT_VALIDATOR_ROOT = "vendor/programmable-applicant-validator";
 export const APPLICANT_VALIDATOR_ENTRYPOINT = `${APPLICANT_VALIDATOR_ROOT}/scripts/public-applicant-validator.mjs`;
 export const APPLICANT_VALIDATOR_RECEIPT_PATH = `${APPLICANT_VALIDATOR_ROOT}/validator-package-receipt.v1.json`;
 
 const APPLICATION_SCHEMA_PATH = "intake/schemas/public-pr-application-v3.schema.json";
+const V2_APPLICATION_SCHEMA_PATH = "intake/schemas/public-pr-application-v3.2.schema.json";
+const V2_SUBMISSION_SCHEMA_PATH = "intake/schemas/open-world-submission-v2.1.schema.json";
+const V2_TRADE_CAPABILITY_SCHEMA_PATH = "intake/schemas/trade-capability-manifest-v2.schema.json";
+const V2_ROUTER_READINESS_SCHEMA_PATH = "intake/schemas/programmable-launch-router-readiness-v1.schema.json";
+const V2_ROUTER_READINESS_CORE_PATH = "scripts/programmable-launch-router-readiness-core.mjs";
+const V2_ROUTER_READINESS_CLI_PATH = "scripts/programmable-launch-router-readiness.mjs";
+const V2_ROUTER_READINESS_EVM_ENCODING_PATH = "vendor/programmable-applicant-validator/scripts/evm-encoding-core.mjs";
+const V2_ROUTER_READINESS_LOSSLESS_JSON_PATH = "vendor/programmable-v4-hook-builder/scripts/github-public-source-lossless-json.mjs";
 const REPOSITORY_NAME = "0xprogrammable/submit-launch";
 const REPOSITORY_NUMERIC_ID = "1320171831";
 const DEFAULT_BRANCH = "main";
 const COMPATIBILITY_SCHEMA = "urn:programmable:applicant-compatibility:1.0.0";
+const V2_COMPATIBILITY_SCHEMA = "urn:programmable:applicant-compatibility:2.0.0";
 const COMPATIBILITY_KIND = "programmable-applicant-compatibility";
 const RECEIPT_SCHEMA = "urn:programmable:applicant-validator-package-receipt:1.0.0";
 const RECEIPT_KIND = "programmable-applicant-validator-package-receipt";
 const RECEIPT_ALGORITHM = "sha256-path-nul-size-nul-content-nul-v1";
 const COMPACT_ENTRYPOINT = "scripts/public-applicant-validator.mjs";
 const SCHEMA_VERSION = "1.0.0";
+const V2_SCHEMA_VERSION = "2.0.0";
 const MINIMUM_BUILDER_PROTOCOL_VERSION = "1.0.0";
 const MAXIMUM_COMPATIBILITY_BYTES = 256 * 1024;
 const MAXIMUM_RECEIPT_BYTES = 1024 * 1024;
@@ -49,6 +61,12 @@ const CAPABILITY_IDS = Object.freeze([
   "missing-object-recovery",
   "source-closure:inline",
   "source-closure:manifest",
+  "unreviewed-draft-only"
+]);
+const V2_CAPABILITY_IDS = Object.freeze([
+  "draft-transport:create",
+  "draft-transport:update",
+  "launch-readiness:offline-check",
   "unreviewed-draft-only"
 ]);
 
@@ -82,6 +100,15 @@ export function parseApplicantCompatibilityBytesV1(bytes) {
   });
 }
 
+export function parseApplicantCompatibilityBytesV2(bytes) {
+  const { source, value } = parseCanonicalJsonBytes(bytes, MAXIMUM_COMPATIBILITY_BYTES, "APPLICANT_COMPATIBILITY_V2");
+  validateCompatibilityShapeV2(value);
+  return Object.freeze({
+    compatibility: deepFreeze(value),
+    manifestSha256: digestBytes(Buffer.from(source, "utf8"))
+  });
+}
+
 export function parseApplicantValidatorReceiptBytesV1(bytes) {
   const { value } = parseCanonicalJsonBytes(bytes, MAXIMUM_RECEIPT_BYTES, "APPLICANT_VALIDATOR_RECEIPT");
   validateReceiptShape(value);
@@ -93,6 +120,12 @@ export function verifyApplicantCompatibilityContract(options) {
   const repositoryRoot = requireRepositoryRoot(options.repositoryRoot);
   if (typeof options.allowLegacyFallback !== "boolean") {
     fail("APPLICANT_COMPATIBILITY_ARGUMENTS_INVALID", "allowLegacyFallback must be a boolean.");
+  }
+  const v2ManifestPath = resolveRepositoryPath(repositoryRoot, APPLICANT_COMPATIBILITY_V2_PATH);
+  const v2ManifestStatus = lstatOptional(v2ManifestPath);
+  if (v2ManifestStatus !== null) {
+    assertRegularFileStatus(v2ManifestStatus, "APPLICANT_COMPATIBILITY_V2_FILE_INVALID", "The Applicant compatibility V2 contract");
+    return verifyApplicantCompatibilityContractV2({ repositoryRoot });
   }
   const manifestPath = resolveRepositoryPath(repositoryRoot, APPLICANT_COMPATIBILITY_PATH);
   const manifestStatus = lstatOptional(manifestPath);
@@ -114,6 +147,24 @@ export function verifyApplicantCompatibilityContract(options) {
     manifestSha256: parsed.manifestSha256,
     mode: "declared-compact-validator-v1",
     validatorPackage
+  });
+}
+
+export function verifyApplicantCompatibilityContractV2(options) {
+  assertExactKeys(options, ["repositoryRoot"], "APPLICANT_COMPATIBILITY_V2_ARGUMENTS_INVALID", "options");
+  const repositoryRoot = requireRepositoryRoot(options.repositoryRoot);
+  const manifestPath = resolveRepositoryPath(repositoryRoot, APPLICANT_COMPATIBILITY_V2_PATH);
+  const manifestStatus = lstatOptional(manifestPath);
+  if (manifestStatus === null) {
+    fail("APPLICANT_COMPATIBILITY_V2_MISSING", "The protected base does not publish the current Applicant compatibility V2 contract.");
+  }
+  assertRegularFileStatus(manifestStatus, "APPLICANT_COMPATIBILITY_V2_FILE_INVALID", "The Applicant compatibility V2 contract");
+  const parsed = parseApplicantCompatibilityBytesV2(fs.readFileSync(manifestPath));
+  verifyV2ApplicationAndSupportingContracts(repositoryRoot, parsed.compatibility);
+  return deepFreeze({
+    compatibility: parsed.compatibility,
+    manifestSha256: parsed.manifestSha256,
+    mode: "declared-readiness-contract-v2"
   });
 }
 
@@ -232,6 +283,66 @@ export function verifyApplicantCompatibilityReadbackV1(options) {
   });
 }
 
+export function verifyApplicantCompatibilityReadbackV2(options) {
+  assertExactKeys(options, [
+    "builderProtocolVersion",
+    "bytes",
+    "exactBaseCommit",
+    "expectedDefaultBranch",
+    "expectedRepositoryNumericId",
+    "requiredCapabilities"
+  ], "APPLICANT_COMPATIBILITY_V2_READBACK_ARGUMENTS_INVALID", "options");
+  if (!OBJECT_ID.test(options.exactBaseCommit ?? "")) {
+    fail("APPLICANT_COMPATIBILITY_V2_BASE_INVALID", "The compatibility V2 readback must bind one exact lowercase base commit.");
+  }
+  if (!SEMVER.test(options.builderProtocolVersion ?? "")) {
+    fail("APPLICANT_COMPATIBILITY_V2_PROTOCOL_INVALID", "The Builder protocol version must be exact SemVer.");
+  }
+  if (!Array.isArray(options.requiredCapabilities)) {
+    fail("APPLICANT_COMPATIBILITY_V2_CAPABILITIES_INVALID", "requiredCapabilities must be an array.");
+  }
+  const parsed = parseApplicantCompatibilityBytesV2(options.bytes);
+  const compatibility = parsed.compatibility;
+  if (
+    compatibility.trustedRepository.numericId !== options.expectedRepositoryNumericId
+    || compatibility.trustedRepository.defaultBranch !== options.expectedDefaultBranch
+  ) {
+    fail("APPLICANT_COMPATIBILITY_V2_REPOSITORY_MISMATCH", "The exact-base compatibility V2 contract belongs to a different trusted repository.");
+  }
+  if (compareSemver(options.builderProtocolVersion, compatibility.minimumBuilderProtocolVersion) < 0) {
+    fail("APPLICANT_COMPATIBILITY_V2_PROTOCOL_UNSUPPORTED", "The installed Builder protocol is older than the protected base V2 minimum.");
+  }
+  const required = [...new Set(options.requiredCapabilities)];
+  if (required.length !== options.requiredCapabilities.length || required.some((value) => typeof value !== "string")) {
+    fail("APPLICANT_COMPATIBILITY_V2_CAPABILITIES_INVALID", "Required V2 capabilities must be unique strings.");
+  }
+  for (const capability of required) {
+    if (!V2_CAPABILITY_IDS.includes(capability)) {
+      fail("APPLICANT_COMPATIBILITY_V2_CAPABILITY_UNSUPPORTED", `The protected base does not declare V2 capability ${capability}.`);
+    }
+  }
+  return deepFreeze({
+    application: compatibility.application,
+    capabilities: compatibility.capabilities,
+    exactBaseCommit: options.exactBaseCommit,
+    manifestSha256: parsed.manifestSha256,
+    minimumBuilderProtocolVersion: compatibility.minimumBuilderProtocolVersion,
+    result: "compatible-protected-applicant-readiness-contract-v2",
+    supportingContracts: compatibility.supportingContracts,
+    trustedRepository: compatibility.trustedRepository
+  });
+}
+
+export function verifyApplicantCompatibilityReadback(options) {
+  if (!isPlainObject(options) || !Buffer.isBuffer(options.bytes) && !(options.bytes instanceof Uint8Array)) {
+    fail("APPLICANT_COMPATIBILITY_READBACK_ARGUMENTS_INVALID", "Compatibility readback requires an options object with bytes.");
+  }
+  const { value } = parseCanonicalJsonBytes(options.bytes, MAXIMUM_COMPATIBILITY_BYTES, "APPLICANT_COMPATIBILITY");
+  if (value?.$schema === V2_COMPATIBILITY_SCHEMA) return verifyApplicantCompatibilityReadbackV2(options);
+  if (value?.$schema === COMPATIBILITY_SCHEMA) return verifyApplicantCompatibilityReadbackV1(options);
+  fail("APPLICANT_COMPATIBILITY_UNSUPPORTED_VERSION", "The compatibility readback accepts only exact V1 or V2 contracts.");
+}
+
 function verifyLegacyFallback(repositoryRoot) {
   const activeContractPath = resolveRepositoryPath(repositoryRoot, ".programmable/active-contract.json");
   const activeContractBytes = readRegularFile(activeContractPath, MAXIMUM_COMPATIBILITY_BYTES, "APPLICANT_COMPATIBILITY_LEGACY_ACTIVE_CONTRACT_INVALID");
@@ -278,6 +389,145 @@ function verifyApplicationSchemaBinding(repositoryRoot, application) {
   ));
   if (observed !== application.schemaSha256) {
     fail("APPLICANT_COMPATIBILITY_APPLICATION_SCHEMA_MISMATCH", "The Applicant compatibility contract does not bind the protected Application schema bytes.");
+  }
+}
+
+function verifyV2ApplicationAndSupportingContracts(repositoryRoot, compatibility) {
+  verifyBoundArtifact(repositoryRoot, compatibility.application.current, V2_APPLICATION_SCHEMA_PATH, "APPLICANT_COMPATIBILITY_V2_APPLICATION_SCHEMA_MISMATCH");
+  verifyBoundArtifact(repositoryRoot, compatibility.application.legacy[0], APPLICATION_SCHEMA_PATH, "APPLICANT_COMPATIBILITY_V2_LEGACY_APPLICATION_SCHEMA_MISMATCH");
+  verifyBoundArtifact(repositoryRoot, compatibility.supportingContracts.submission, V2_SUBMISSION_SCHEMA_PATH, "APPLICANT_COMPATIBILITY_V2_SUBMISSION_SCHEMA_MISMATCH");
+  verifyBoundArtifact(repositoryRoot, compatibility.supportingContracts.tradeCapabilityManifest, V2_TRADE_CAPABILITY_SCHEMA_PATH, "APPLICANT_COMPATIBILITY_V2_TRADE_MANIFEST_SCHEMA_MISMATCH");
+  verifyBoundArtifact(repositoryRoot, compatibility.supportingContracts.routerReadiness.schema, V2_ROUTER_READINESS_SCHEMA_PATH, "APPLICANT_COMPATIBILITY_V2_ROUTER_SCHEMA_MISMATCH");
+
+  const closure = compatibility.supportingContracts.routerReadiness.validatorClosure;
+  const hash = crypto.createHash("sha256");
+  for (const binding of closure.files) {
+    const bytes = readRegularFile(
+      resolveRepositoryPath(repositoryRoot, binding.path),
+      MAXIMUM_PACKAGE_FILE_BYTES,
+      "APPLICANT_COMPATIBILITY_V2_ROUTER_VALIDATOR_FILE_INVALID"
+    );
+    if (digestBytes(bytes) !== binding.sha256) {
+      fail("APPLICANT_COMPATIBILITY_V2_ROUTER_VALIDATOR_FILE_MISMATCH", `${binding.path} does not match the V2 router-readiness validator closure.`);
+    }
+    hash.update(Buffer.from(binding.path, "utf8"));
+    hash.update(Buffer.from([0]));
+    hash.update(Buffer.from(String(bytes.byteLength), "ascii"));
+    hash.update(Buffer.from([0]));
+    hash.update(bytes);
+    hash.update(Buffer.from([0]));
+  }
+  const observedClosure = `sha256:${hash.digest("hex")}`;
+  if (observedClosure !== closure.closureSha256) {
+    fail("APPLICANT_COMPATIBILITY_V2_ROUTER_VALIDATOR_CLOSURE_MISMATCH", "The V2 router-readiness validator closure does not match its protected binding.");
+  }
+}
+
+function verifyBoundArtifact(repositoryRoot, binding, expectedPath, code) {
+  const bytes = readRegularFile(
+    resolveRepositoryPath(repositoryRoot, expectedPath),
+    MAXIMUM_PACKAGE_FILE_BYTES,
+    `${code}_FILE_INVALID`
+  );
+  if (binding.path !== expectedPath || digestBytes(bytes) !== binding.sha256) {
+    fail(code, `${expectedPath} does not match its V2 protected binding.`);
+  }
+}
+
+function validateCompatibilityShapeV2(value) {
+  assertPlainObject(value, "APPLICANT_COMPATIBILITY_V2_INVALID", "compatibility");
+  assertExactKeys(value, [
+    "$schema",
+    "application",
+    "authority",
+    "capabilities",
+    "kind",
+    "minimumBuilderProtocolVersion",
+    "schemaVersion",
+    "supportingContracts",
+    "trustedRepository"
+  ], "APPLICANT_COMPATIBILITY_V2_INVALID", "compatibility");
+  assertEqual(value.$schema, V2_COMPATIBILITY_SCHEMA, "APPLICANT_COMPATIBILITY_V2_INVALID", "$schema");
+  assertEqual(value.kind, COMPATIBILITY_KIND, "APPLICANT_COMPATIBILITY_V2_INVALID", "kind");
+  assertEqual(value.schemaVersion, V2_SCHEMA_VERSION, "APPLICANT_COMPATIBILITY_V2_INVALID", "schemaVersion");
+  if (!SEMVER.test(value.minimumBuilderProtocolVersion ?? "")) {
+    fail("APPLICANT_COMPATIBILITY_V2_INVALID", "minimumBuilderProtocolVersion must be exact SemVer.");
+  }
+  assertPlainObject(value.application, "APPLICANT_COMPATIBILITY_V2_INVALID", "application");
+  assertExactKeys(value.application, ["current", "legacy"], "APPLICANT_COMPATIBILITY_V2_INVALID", "application");
+  validateV2BoundArtifact(value.application.current, "public-pr-application-v3.2", V2_APPLICATION_SCHEMA_PATH, "application.current");
+  if (!Array.isArray(value.application.legacy) || value.application.legacy.length !== 1) {
+    fail("APPLICANT_COMPATIBILITY_V2_INVALID", "application.legacy must bind exactly the immutable V3.1 compatibility contract.");
+  }
+  validateV2BoundArtifact(value.application.legacy[0], "public-pr-application-v3.1", APPLICATION_SCHEMA_PATH, "application.legacy[0]");
+
+  assertPlainObject(value.authority, "APPLICANT_COMPATIBILITY_V2_INVALID", "authority");
+  assertExactKeys(value.authority, [
+    "candidateCodeExecuted",
+    "credentialsUsed",
+    "externalWritesPerformed",
+    "launchAuthorized",
+    "networkAccessed",
+    "promotionAuthorized",
+    "reviewAuthorized",
+    "rpcAccessed"
+  ], "APPLICANT_COMPATIBILITY_V2_INVALID", "authority");
+  for (const [key, observed] of Object.entries(value.authority)) {
+    if (observed !== false) fail("APPLICANT_COMPATIBILITY_V2_AUTHORITY_INVALID", `authority.${key} must remain false.`);
+  }
+
+  assertPlainObject(value.capabilities, "APPLICANT_COMPATIBILITY_V2_INVALID", "capabilities");
+  assertExactKeys(value.capabilities, ["draftTransportOperations", "launchReadiness", "unreviewedDraftOnly"], "APPLICANT_COMPATIBILITY_V2_INVALID", "capabilities");
+  if (canonicalApplicantJson(value.capabilities) !== canonicalApplicantJson(v2CapabilityShape())) {
+    fail("APPLICANT_COMPATIBILITY_V2_INVALID", "capabilities must be the exact draft-only and offline-readiness V2 capability set.");
+  }
+
+  assertPlainObject(value.supportingContracts, "APPLICANT_COMPATIBILITY_V2_INVALID", "supportingContracts");
+  assertExactKeys(value.supportingContracts, ["routerReadiness", "submission", "tradeCapabilityManifest"], "APPLICANT_COMPATIBILITY_V2_INVALID", "supportingContracts");
+  validateV2BoundArtifact(value.supportingContracts.submission, "open-world-submission-v2.1", V2_SUBMISSION_SCHEMA_PATH, "supportingContracts.submission");
+  validateV2BoundArtifact(value.supportingContracts.tradeCapabilityManifest, "trade-capability-manifest-v2", V2_TRADE_CAPABILITY_SCHEMA_PATH, "supportingContracts.tradeCapabilityManifest");
+  assertPlainObject(value.supportingContracts.routerReadiness, "APPLICANT_COMPATIBILITY_V2_INVALID", "supportingContracts.routerReadiness");
+  assertExactKeys(value.supportingContracts.routerReadiness, ["schema", "validatorClosure"], "APPLICANT_COMPATIBILITY_V2_INVALID", "supportingContracts.routerReadiness");
+  validateV2BoundArtifact(value.supportingContracts.routerReadiness.schema, "programmable-launch-router-readiness-v1", V2_ROUTER_READINESS_SCHEMA_PATH, "supportingContracts.routerReadiness.schema");
+  validateV2ValidatorClosure(value.supportingContracts.routerReadiness.validatorClosure);
+
+  assertPlainObject(value.trustedRepository, "APPLICANT_COMPATIBILITY_V2_INVALID", "trustedRepository");
+  assertExactKeys(value.trustedRepository, ["defaultBranch", "numericId"], "APPLICANT_COMPATIBILITY_V2_INVALID", "trustedRepository");
+  assertEqual(value.trustedRepository.numericId, REPOSITORY_NUMERIC_ID, "APPLICANT_COMPATIBILITY_V2_INVALID", "trustedRepository.numericId");
+  assertEqual(value.trustedRepository.defaultBranch, DEFAULT_BRANCH, "APPLICANT_COMPATIBILITY_V2_INVALID", "trustedRepository.defaultBranch");
+}
+
+function validateV2BoundArtifact(value, expectedContractId, expectedPath, label) {
+  assertPlainObject(value, "APPLICANT_COMPATIBILITY_V2_INVALID", label);
+  assertExactKeys(value, ["contractId", "path", "sha256"], "APPLICANT_COMPATIBILITY_V2_INVALID", label);
+  assertEqual(value.contractId, expectedContractId, "APPLICANT_COMPATIBILITY_V2_INVALID", `${label}.contractId`);
+  assertEqual(value.path, expectedPath, "APPLICANT_COMPATIBILITY_V2_INVALID", `${label}.path`);
+  assertSha256(value.sha256, `${label}.sha256`);
+}
+
+function validateV2ValidatorClosure(value) {
+  assertPlainObject(value, "APPLICANT_COMPATIBILITY_V2_INVALID", "router-readiness validator closure");
+  assertExactKeys(value, ["algorithm", "closureSha256", "files"], "APPLICANT_COMPATIBILITY_V2_INVALID", "router-readiness validator closure");
+  assertEqual(value.algorithm, RECEIPT_ALGORITHM, "APPLICANT_COMPATIBILITY_V2_INVALID", "router-readiness validator closure.algorithm");
+  assertSha256(value.closureSha256, "router-readiness validator closure.closureSha256");
+  if (!Array.isArray(value.files) || value.files.length !== 4) {
+    fail("APPLICANT_COMPATIBILITY_V2_INVALID", "The router-readiness validator closure must bind exactly its four public validator source files.");
+  }
+  const expectedPaths = [
+    V2_ROUTER_READINESS_CORE_PATH,
+    V2_ROUTER_READINESS_CLI_PATH,
+    V2_ROUTER_READINESS_EVM_ENCODING_PATH,
+    V2_ROUTER_READINESS_LOSSLESS_JSON_PATH
+  ].sort(compareUtf8);
+  const observedPaths = [];
+  for (const binding of value.files) {
+    assertPlainObject(binding, "APPLICANT_COMPATIBILITY_V2_INVALID", "router-readiness validator closure file");
+    assertExactKeys(binding, ["path", "sha256"], "APPLICANT_COMPATIBILITY_V2_INVALID", "router-readiness validator closure file");
+    assertSha256(binding.sha256, `router-readiness validator closure ${binding.path}.sha256`);
+    observedPaths.push(binding.path);
+  }
+  if (!sameStringArray(observedPaths, expectedPaths)) {
+    fail("APPLICANT_COMPATIBILITY_V2_INVALID", "The router-readiness validator closure must use the exact sorted static import closure.");
   }
 }
 
@@ -381,6 +631,14 @@ function capabilityShape() {
     draftTransportOperations: ["create", "update"],
     missingObjectRecovery: true,
     sourceClosureModes: ["inline", "manifest"],
+    unreviewedDraftOnly: true
+  };
+}
+
+function v2CapabilityShape() {
+  return {
+    draftTransportOperations: ["create", "update"],
+    launchReadiness: "offline-check-only",
     unreviewedDraftOnly: true
   };
 }

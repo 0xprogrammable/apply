@@ -29,7 +29,15 @@ const VENDOR_ROOT = "vendor/programmable-v4-hook-builder";
 const VENDOR_PREFIX = `${VENDOR_ROOT}/`;
 const APPLICANT_VALIDATOR_ROOT = "vendor/programmable-applicant-validator";
 const APPLICANT_VALIDATOR_PREFIX = `${APPLICANT_VALIDATOR_ROOT}/`;
-const APPLICANT_COMPATIBILITY_PATH = ".programmable/applicant-compatibility.v1.json";
+const APPLICANT_COMPATIBILITY_PATHS = Object.freeze([
+  ".programmable/applicant-compatibility.v1.json",
+  ".programmable/applicant-compatibility.v2.json"
+]);
+const PROGRAMMABLE_ROUTER_READINESS_ENTRYPOINT = Object.freeze({
+  id: "programmable-router-readiness-cli",
+  path: "scripts/programmable-launch-router-readiness.mjs",
+  role: "launch-readiness"
+});
 const FROZEN_VENDOR_PREFIXES = Object.freeze([APPLICANT_VALIDATOR_PREFIX, VENDOR_PREFIX]);
 const VENDOR_RECEIPT_PATH = "vendor/receipt.json";
 const MAXIMUM_MANIFEST_BYTES = 2 * 1024 * 1024;
@@ -58,6 +66,7 @@ const ENTRYPOINT_ROLES = new Set([
   "current-policy-read",
   "current-review",
   "frozen-legacy-review",
+  "launch-readiness",
   "public-intake",
   "workflow-canary",
   "website-canary-eligibility",
@@ -79,6 +88,7 @@ const MODULE_OWNERSHIP_ROLES = new Set([
   "semantic-consumer"
 ]);
 const CONTROL_IMPLEMENTATION_PATHS = new Set([
+  "scripts/active-contract-manifest-core.mjs",
   "scripts/applicant-compatibility-core.mjs",
   "review/cli.mjs",
   "review/open-review-engine.mjs",
@@ -89,7 +99,7 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/generate-launch-policy-artifacts.mjs",
   "scripts/launch-policy-authority-ownership.mjs",
   "scripts/launch-policy.mjs",
-  "scripts/registry-core.mjs",
+  "scripts/programmable-launch-router-readiness.mjs",
   "scripts/release-version-core.mjs",
   "scripts/universal-admission-command-core.mjs",
   "scripts/universal-admission-contract-core.mjs",
@@ -100,10 +110,10 @@ const CONTROL_IMPLEMENTATION_PATHS = new Set([
   "scripts/universal-admission-sqlite.mjs",
   "scripts/verify-open-world-v2-contracts.mjs",
   "scripts/verify-open-world-v2-package.mjs",
+  "scripts/verify-open-world-v2-trade-manifest-v2.mjs",
   "scripts/verify-open-world-v2-validation-fee.mjs",
   "scripts/verify-open-world-v2-validation-intake.mjs",
   "scripts/verify-open-world-v2-validation-intent.mjs",
-  "scripts/verify-public-application-v3-core.mjs",
   "scripts/verify-public-application-v3-generation.mjs",
   "scripts/verify-public-application-v3-shared.mjs",
   "scripts/verify-public-hook-application.mjs",
@@ -145,6 +155,16 @@ const EXPECTED_BOUNDED_APPLICANT_DATA = Object.freeze([
   }),
   Object.freeze({
     contract: "public-pr-application-v3.1-immutable-revision-v1",
+    layout: "application-v3-revision-tree",
+    maximumFileBytes: 4 * 1024 * 1024,
+    maximumFiles: 100,
+    maximumPackageBytes: 12 * 1024 * 1024,
+    rootFile: "application.v3.json",
+    rootMaximumBytes: 256 * 1024,
+    rootPath: "submissions"
+  }),
+  Object.freeze({
+    contract: "public-pr-application-v3.2-immutable-revision-v1",
     layout: "application-v3-revision-tree",
     maximumFileBytes: 4 * 1024 * 1024,
     maximumFiles: 100,
@@ -343,7 +363,7 @@ function validateManifestShape(manifest, { requireCompleteHashes }) {
 
 function validateBoundedApplicantData(value) {
   if (canonicalAuthorityJson(value) !== canonicalAuthorityJson(EXPECTED_BOUNDED_APPLICANT_DATA)) {
-    fail("AUTHORITY_OWNERSHIP_BOUNDED_DATA_INVALID", "boundedApplicantData must preserve the exact inert V2, Workflow Canary, and Application V3 revision package surfaces.");
+    fail("AUTHORITY_OWNERSHIP_BOUNDED_DATA_INVALID", "boundedApplicantData must preserve the exact inert V2, Workflow Canary, and Application V3.1/V3.2 revision package surfaces.");
   }
 }
 
@@ -409,6 +429,18 @@ function validateEntrypoints(entrypoints) {
     paths.add(entrypoint.path);
     if (ids.has(entrypoint.id)) fail("AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID", `${entrypoint.id} is registered more than once.`);
     ids.add(entrypoint.id);
+  }
+  const readinessEntrypoint = entrypoints.find(({ path: entrypointPath }) => (
+    entrypointPath === PROGRAMMABLE_ROUTER_READINESS_ENTRYPOINT.path
+  ));
+  if (
+    readinessEntrypoint?.id !== PROGRAMMABLE_ROUTER_READINESS_ENTRYPOINT.id
+    || readinessEntrypoint?.role !== PROGRAMMABLE_ROUTER_READINESS_ENTRYPOINT.role
+  ) {
+    fail(
+      "AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID",
+      "The protected Router-readiness CLI must retain its exact checker-only entrypoint identity and role."
+    );
   }
 }
 
@@ -539,10 +571,10 @@ function listRepositoryFiles(repositoryRoot) {
   if (result.status !== 0) fail("AUTHORITY_OWNERSHIP_GIT_FAILED", "The closed repository file inventory could not be read.");
   const paths = result.stdout.toString("utf8").split("\0").filter(Boolean);
   for (const relativePath of paths) assertSafeRepositoryPath(relativePath, "AUTHORITY_OWNERSHIP_FILE_SET_INVALID", "repository path");
-  const compactContractPresent = paths.includes(APPLICANT_COMPATIBILITY_PATH);
+  const compactContractsPresent = APPLICANT_COMPATIBILITY_PATHS.every((relativePath) => paths.includes(relativePath));
   return [...new Set(paths.filter((relativePath) => (
     !relativePath.startsWith(VENDOR_PREFIX)
-    && !(compactContractPresent && relativePath.startsWith(APPLICANT_VALIDATOR_PREFIX))
+    && !(compactContractsPresent && relativePath.startsWith(APPLICANT_VALIDATOR_PREFIX))
   )))].sort(compareUtf8);
 }
 
@@ -676,6 +708,15 @@ function verifyProjectionOwnership({ manifest, classifiedFiles }) {
       if (!classified.has(sourcePath)) fail("AUTHORITY_OWNERSHIP_PROJECTIONS_INVALID", `${projection.path} names an unclassified source ${sourcePath}.`);
     }
   }
+  const projectionsByPath = new Map(manifest.publicProjections.map((projection) => [projection.path, projection]));
+  for (const compatibilityPath of APPLICANT_COMPATIBILITY_PATHS) {
+    if (projectionsByPath.get(compatibilityPath)?.kind !== "public-contract") {
+      fail(
+        "AUTHORITY_OWNERSHIP_PROJECTIONS_INVALID",
+        `${compatibilityPath} must remain an exact public compatibility contract projection.`
+      );
+    }
+  }
   for (const entrypointPath of manifest.orchestrationEntrypoints) {
     if (!classified.has(entrypointPath)) fail("AUTHORITY_OWNERSHIP_ORCHESTRATION_INVALID", `${entrypointPath} is not in the closed file inventory.`);
   }
@@ -686,7 +727,7 @@ function verifyEntrypointClosures({ manifest, observedFiles, repositoryRoot }) {
   const importGraph = inspectStaticImports({ modulePaths, repositoryRoot });
   const ownedFiles = new Set(observedFiles);
   const declaredEntrypoints = new Set(manifest.entrypoints.map(({ path: entrypointPath }) => entrypointPath));
-  const compactContractPresent = observedFiles.includes(APPLICANT_COMPATIBILITY_PATH);
+  const compactContractsPresent = APPLICANT_COMPATIBILITY_PATHS.every((relativePath) => observedFiles.includes(relativePath));
   for (const entrypointPath of manifest.fileClasses["admission-entrypoint"]) {
     if (!declaredEntrypoints.has(entrypointPath)) {
       fail("AUTHORITY_OWNERSHIP_ENTRYPOINTS_INVALID", `${entrypointPath} is classified as an admission entrypoint but has no closure declaration.`);
@@ -695,10 +736,10 @@ function verifyEntrypointClosures({ manifest, observedFiles, repositoryRoot }) {
 
   for (const entrypoint of manifest.entrypoints) {
     const actual = resolveEntrypointClosure({ entrypointPath: entrypoint.path, importGraph, ownedFiles, repositoryRoot });
-    if (!compactContractPresent && actual.frozenVendorImports.some((relativePath) => relativePath.startsWith(APPLICANT_VALIDATOR_PREFIX))) {
+    if (!compactContractsPresent && actual.frozenVendorImports.some((relativePath) => relativePath.startsWith(APPLICANT_VALIDATOR_PREFIX))) {
       fail(
         "AUTHORITY_OWNERSHIP_COMPACT_VENDOR_UNBOUND",
-        `${entrypoint.id} imports a compact Applicant validator without the closed protected compatibility contract.`
+        `${entrypoint.id} imports a compact Applicant validator without both closed protected V1 and V2 compatibility contracts.`
       );
     }
     if (

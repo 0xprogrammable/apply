@@ -94,7 +94,7 @@ export function validateLaunchPolicy(policy) {
     fail("LAUNCH_POLICY_MIGRATION_INVALID", "Policy migration behavior is not the closed initial contract.");
   }
 
-  validateProfiles(policy.profiles);
+  validateProfiles(policy.profiles, policy.policyVersion);
   validateRules(policy.rules, policy.profiles);
   if (JSON.stringify(policy).includes("LAUNCH_APPROVED")) {
     fail("LAUNCH_POLICY_AUTHORITY_INVALID", "The initial policy cannot contain production launch approval authority.");
@@ -228,6 +228,11 @@ export function evaluateLaunchPolicyRules({ policyRecord, profileId, subject, ev
   if (!isPlainObject(subject) || !isPlainObject(evidence)) {
     fail("LAUNCH_POLICY_EVALUATION_INPUT_INVALID", "Rule subject and evidence must be closed objects.");
   }
+  const requiresRouterProvenance = rulesForProfile(policyRecord.policy, profileId)
+    .some(({ applicability }) => applicability.mode === "when" && applicability.field === "routerProvenanceRequired");
+  if (requiresRouterProvenance && typeof subject.routerProvenanceRequired !== "boolean") {
+    fail("LAUNCH_POLICY_EVALUATION_INPUT_INVALID", `Policy profile ${profileId} requires the protected derived routerProvenanceRequired subject flag.`);
+  }
 
   const results = [];
   for (const rule of rulesForProfile(policyRecord.policy, profileId)) {
@@ -237,9 +242,12 @@ export function evaluateLaunchPolicyRules({ policyRecord, profileId, subject, ev
     }
     const handler = ruleHandlersForPolicyVersion(policyRecord.policy.policyVersion)[rule.enforcement.handlerId];
     const result = handler({ evidence, rule, subject });
+    if (!new Set(["analysis-pending", "failed", "passed"]).has(result.status)) {
+      fail("LAUNCH_POLICY_HANDLER_RESULT_INVALID", `Policy handler ${rule.enforcement.handlerId} returned an invalid status.`);
+    }
     results.push(Object.freeze({
       ruleId: rule.id,
-      status: result.passed ? "passed" : "failed",
+      status: result.status,
       missingEvidence: result.missingEvidence,
       message: result.message
     }));
@@ -247,14 +255,18 @@ export function evaluateLaunchPolicyRules({ policyRecord, profileId, subject, ev
   const findings = results
     .filter(({ status }) => status === "failed")
     .map(({ message, missingEvidence, ruleId }) => Object.freeze({ message, missingEvidence, ruleId }));
-  const passed = findings.length === 0;
+  const pendingRuleIds = results
+    .filter(({ status }) => status === "analysis-pending")
+    .map(({ ruleId }) => ruleId);
+  const passed = findings.length === 0 && pendingRuleIds.length === 0;
   return Object.freeze({
     profileId,
     passed,
     outcome: passed ? profile.outcome : null,
     authority: profile.authority,
     results: Object.freeze(results),
-    findings: Object.freeze(findings)
+    findings: Object.freeze(findings),
+    pendingRuleIds: Object.freeze(pendingRuleIds)
   });
 }
 
@@ -282,11 +294,22 @@ export function renderLaunchPolicyMarkdown(policyRecord) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-function validateProfiles(profiles) {
-  if (!Array.isArray(profiles) || profiles.length !== 3) fail("LAUNCH_POLICY_PROFILE_INVALID", "Policy must declare exactly three profiles.");
+function validateProfiles(profiles, policyVersion) {
+  const legacy = new Set(["1.0.0", "1.1.0", "1.2.0", "1.3.0"]).has(policyVersion);
+  const expectedProfileIds = legacy
+    ? ["build", "production-launch", "workflow-canary"]
+    : policyVersion === "2.0.0"
+      ? ["build", "launch-readiness", "production-launch", "workflow-canary"]
+      : null;
+  if (expectedProfileIds === null) {
+    fail("LAUNCH_POLICY_IDENTITY_INVALID", `Policy version ${policyVersion} is unsupported.`);
+  }
+  if (!Array.isArray(profiles) || profiles.length !== expectedProfileIds.length) {
+    fail("LAUNCH_POLICY_PROFILE_INVALID", `Policy ${policyVersion} must declare exactly ${expectedProfileIds.length} profiles.`);
+  }
   assertSortedUnique(profiles.map(({ id } = {}) => id), "profile ids");
-  if (canonicalJson(profiles.map(({ id }) => id)) !== canonicalJson(["build", "production-launch", "workflow-canary"])) {
-    fail("LAUNCH_POLICY_PROFILE_INVALID", "Policy profiles do not match the closed initial set.");
+  if (canonicalJson(profiles.map(({ id }) => id)) !== canonicalJson(expectedProfileIds)) {
+    fail("LAUNCH_POLICY_PROFILE_INVALID", `Policy profiles do not match the closed ${legacy ? "v1" : "v2"} set.`);
   }
   for (const profile of profiles) {
     requirePlainObject(profile, `profile ${profile?.id ?? "unknown"}`);
@@ -298,10 +321,15 @@ function validateProfiles(profiles) {
     if (profile.authority.launchAuthorized || profile.authority.independentAudit) fail("LAUNCH_POLICY_AUTHORITY_INVALID", `Profile ${profile.id} cannot confer launch or audit authority.`);
   }
   const build = profiles[0];
-  const production = profiles[1];
-  const canary = profiles[2];
+  const readiness = legacy ? null : profiles[1];
+  const production = profiles[legacy ? 1 : 2];
+  const canary = profiles[legacy ? 2 : 3];
   if (!build.enabled || build.outcome !== "BUILT_NOT_REVIEWED") fail("LAUNCH_POLICY_PROFILE_INVALID", "Build profile outcome is invalid.");
   if (!closedAuthority(build.authority, true)) fail("LAUNCH_POLICY_AUTHORITY_INVALID", "Build authority must remain checker-only and non-production.");
+  if (!legacy) {
+    if (!readiness.enabled || readiness.outcome !== "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED") fail("LAUNCH_POLICY_PROFILE_INVALID", "Launch-readiness profile outcome is invalid.");
+    if (!closedAuthority(readiness.authority, true)) fail("LAUNCH_POLICY_AUTHORITY_INVALID", "Launch-readiness authority must remain checker-only and non-production.");
+  }
   if (production.enabled || production.outcome !== null) fail("LAUNCH_POLICY_PROFILE_INVALID", "Production launch profile must remain disabled without an outcome.");
   if (!closedAuthority(production.authority, false)) fail("LAUNCH_POLICY_AUTHORITY_INVALID", "Production launch authority must remain fully disabled.");
   if (!canary.enabled || canary.outcome !== "CANARY_WORKFLOW_PASSED") fail("LAUNCH_POLICY_PROFILE_INVALID", "Workflow canary outcome is invalid.");

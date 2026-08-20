@@ -26,7 +26,6 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
-const LEGACY_ACTIVE_CONTRACT_SHA256 = "sha256:e550bf7eff35042225aac9275e73a7f338a4e7e68e0881cfffbad519a0a9cb36";
 const LEGACY_APPLICANT_COMPATIBILITY_SHA256 = "sha256:4242db08c54c6a3ef698cfc34634fb7f21c0e1f6cce7a91e5dd472087db31d0d";
 const LEGACY_GITHUB_DRAFT_V31_SCHEMA_SHA256 = "sha256:2d51837bbbfe52672ecca334596243bebcec78e8e0a885d67084dfd98955bcb7";
 
@@ -102,13 +101,19 @@ test("discovery is closed, public-only, disabled, single-host, and grants no aut
   }
 });
 
-test("legacy V1 discovery and GitHub Draft V3.1 remain byte-exact", () => {
+test("V1 discovery preserves legacy package bindings and points to the complete V2 contract", () => {
   const bytes = fs.readFileSync(path.join(ROOT, ".programmable/active-contract.json"));
   const manifest = JSON.parse(bytes);
-  assert.equal(sha256(bytes), LEGACY_ACTIVE_CONTRACT_SHA256);
   assert.equal(manifest.schemaVersion, "1.0.0");
   assert.equal(manifest.artifacts.package.length, 4);
   for (const binding of manifest.artifacts.package) {
+    assert.equal(binding.sha256, sha256(fs.readFileSync(path.join(ROOT, binding.path))), binding.path);
+  }
+  assert.deepEqual(
+    manifest.artifacts.policy.map(({ path: artifactPath }) => artifactPath),
+    ["policy/launch-policy.v1.json", ".programmable/active-contract.v2.json"]
+  );
+  for (const binding of manifest.artifacts.policy) {
     assert.equal(binding.sha256, sha256(fs.readFileSync(path.join(ROOT, binding.path))), binding.path);
   }
   assert.equal(

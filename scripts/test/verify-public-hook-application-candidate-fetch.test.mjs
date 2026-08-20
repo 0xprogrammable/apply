@@ -28,7 +28,10 @@ import {
 } from "../launch-policy-core.mjs";
 import { validateGitHubPublicSourceRequestV1 } from "../../vendor/programmable-v4-hook-builder/scripts/github-public-source-request.mjs";
 import { createApplicationV3TestPackage } from "./application-v3-package-fixture.mjs";
-import { derivePublicPrApplicationV3PreviousBinding } from "../verify-public-application-v3-core.mjs";
+import {
+  derivePublicPrApplicationV3PreviousBinding,
+  isTrustedPublicApplicationV3LaunchReadinessV1
+} from "../verify-public-application-v3-core.mjs";
 
 const PULL_REQUEST_NUMBER = "7";
 const BUILDER_USER_ID = "9007199254740993";
@@ -406,6 +409,164 @@ test("protected dispatch validates no-fee proposal and prototype Application V3 
       assert.equal(report.realUserFundsAllowed, false);
     });
   }
+});
+
+test("protected dispatch validates exact V3.2 no-market bytes and returns trusted not-applicable readiness", async (t) => {
+  const fixture = createRevisionPair(t);
+  const candidatePackage = makeApplicationV3Package({
+    applicationContractVersion: "3.2.0",
+    requestedRoute: "none",
+    marketMode: "no-market"
+  });
+  const prepared = await prepareApplicationV3Candidate(
+    fixture,
+    candidatePackage,
+    "complete V3.2 no-market Application package"
+  );
+
+  const report = await verifyPublicHookApplication({
+    ...applicationV3VerificationInput(fixture, candidatePackage, prepared),
+    resolveSource: exactApplicationV3SourceResolver,
+    resolveExactObjects: exactApplicationV3ObjectResolver(candidatePackage.sourceFiles)
+  });
+
+  assert.equal(report.result, "valid-public-application-v3-package");
+  assert.equal(report.validatorVersion, "3.2.0");
+  assert.equal(report.launchReadiness.decision, "not-applicable");
+  assert.equal(report.launchReadiness.requestedRoute, "none");
+  assert.equal(report.launchReadiness.readinessBinding, null);
+  assert.match(report.launchReadiness.applicationSha256, /^sha256:[0-9a-f]{64}$/u);
+  assert.match(report.launchReadiness.packageSha256, /^sha256:[0-9a-f]{64}$/u);
+  assert.equal(isTrustedPublicApplicationV3LaunchReadinessV1(report.launchReadiness), true);
+});
+
+test("protected dispatch validates the full source-bound official V3.2 route and returns trusted required readiness", async (t) => {
+  const fixture = createRevisionPair(t);
+  const candidatePackage = makeApplicationV3Package({
+    applicationContractVersion: "3.2.0",
+    requestedRoute: "programmable-ethereum-mainnet",
+    marketMode: "tradable"
+  });
+  const prepared = await prepareApplicationV3Candidate(
+    fixture,
+    candidatePackage,
+    "complete source-bound official V3.2 route"
+  );
+
+  const report = await verifyPublicHookApplication({
+    ...applicationV3VerificationInput(fixture, candidatePackage, prepared),
+    resolveSource: exactApplicationV3SourceResolver,
+    resolveExactObjects: exactApplicationV3ObjectResolver(candidatePackage.sourceFiles)
+  });
+
+  assert.equal(report.result, "valid-public-application-v3-package");
+  assert.equal(report.validatorVersion, "3.2.0");
+  assert.equal(report.launchReadiness.decision, "required");
+  assert.equal(report.launchReadiness.requestedRoute, "programmable-ethereum-mainnet");
+  assert.equal(report.launchReadiness.readinessBinding.path, ".programmable/launch-router-readiness.v1.json");
+  assert.equal(report.launchReadiness.readinessBinding.sha256, candidatePackage.application.launchRequest.routePlan.sha256);
+  assert.equal(report.launchReadiness.readinessBinding.gitBlobOid, candidatePackage.application.launchRequest.routePlan.gitBlobOid);
+  assert.match(report.launchReadiness.applicationSha256, /^sha256:[0-9a-f]{64}$/u);
+  assert.match(report.launchReadiness.packageSha256, /^sha256:[0-9a-f]{64}$/u);
+  assert.equal(isTrustedPublicApplicationV3LaunchReadinessV1(report.launchReadiness), true);
+});
+
+test("protected V3 history accepts only V3.1 to V3.2 migration and rejects downgrade", async (t) => {
+  await t.test("V3.1 to V3.2 schema migration", async (subtest) => {
+    const fixture = createRevisionPair(subtest);
+    const first = makeApplicationV3Package({ applicationId: "protected-version-migration" });
+    installTrustedApplicationV3Revision(fixture, first, "trusted V3.1 predecessor");
+    const second = makeApplicationV3Package({
+      applicationId: "protected-version-migration",
+      applicationContractVersion: "3.2.0",
+      applicationRevision: "2",
+      lineage: {
+        kind: "schema-migration",
+        previous: deriveApplicationV3PreviousBinding(first.application, first.packageFiles, "3.2.0")
+      }
+    });
+    const prepared = await prepareApplicationV3Candidate(
+      fixture,
+      second,
+      "migrate protected V3.1 predecessor to V3.2"
+    );
+
+    const report = await verifyPublicHookApplication({
+      ...applicationV3VerificationInput(fixture, second, prepared),
+      resolveSource: exactApplicationV3SourceResolver,
+      resolveExactObjects: exactApplicationV3ObjectResolver(second.sourceFiles)
+    });
+    assert.equal(report.result, "valid-public-application-v3-package");
+    assert.equal(report.applicationRevision, "2");
+    assert.equal(report.validatorVersion, "3.2.0");
+    assert.equal(report.launchReadiness.decision, "not-applicable");
+  });
+
+  await t.test("V3.1 to V3.2 requires schema-migration", async (subtest) => {
+    const fixture = createRevisionPair(subtest);
+    const first = makeApplicationV3Package({ applicationId: "protected-wrong-migration" });
+    installTrustedApplicationV3Revision(fixture, first, "trusted V3.1 predecessor");
+    const second = makeApplicationV3Package({
+      applicationId: "protected-wrong-migration",
+      applicationContractVersion: "3.2.0",
+      applicationRevision: "2",
+      lineage: {
+        kind: "recheck",
+        previous: deriveApplicationV3PreviousBinding(first.application, first.packageFiles, "3.2.0")
+      }
+    });
+    const prepared = await prepareApplicationV3Candidate(
+      fixture,
+      second,
+      "mislabel protected V3.1 to V3.2 transition",
+      { hydrate: false }
+    );
+    let resolverCalls = 0;
+
+    await assert.rejects(
+      () => verifyPublicHookApplication({
+        ...applicationV3VerificationInput(fixture, second, prepared),
+        resolveSource: async () => { resolverCalls += 1; },
+        resolveExactObjects: exactApplicationV3ObjectResolver(second.sourceFiles)
+      }),
+      (error) => error?.code === "APPLICATION_V3_2_MIGRATION_KIND_REQUIRED" && error?.kind === "candidate"
+    );
+    assert.equal(resolverCalls, 0);
+  });
+
+  await t.test("V3.2 to V3.1 downgrade", async (subtest) => {
+    const fixture = createRevisionPair(subtest);
+    const first = makeApplicationV3Package({
+      applicationId: "protected-version-downgrade",
+      applicationContractVersion: "3.2.0"
+    });
+    installTrustedApplicationV3Revision(fixture, first, "trusted V3.2 predecessor");
+    const second = makeApplicationV3Package({
+      applicationId: "protected-version-downgrade",
+      applicationRevision: "2",
+      lineage: {
+        kind: "recheck",
+        previous: deriveApplicationV3PreviousBinding(first.application, first.packageFiles, "3.1.0")
+      }
+    });
+    const prepared = await prepareApplicationV3Candidate(
+      fixture,
+      second,
+      "attempt protected V3.2 to V3.1 downgrade",
+      { hydrate: false }
+    );
+    let resolverCalls = 0;
+
+    await assert.rejects(
+      () => verifyPublicHookApplication({
+        ...applicationV3VerificationInput(fixture, second, prepared),
+        resolveSource: async () => { resolverCalls += 1; },
+        resolveExactObjects: exactApplicationV3ObjectResolver(second.sourceFiles)
+      }),
+      (error) => error?.code === "APPLICATION_V3_CONTRACT_DOWNGRADE_FORBIDDEN" && error?.kind === "candidate"
+    );
+    assert.equal(resolverCalls, 0);
+  });
 });
 
 test("protected dispatch resolves inline Application V3 contract paths once when they are also in the source closure", async (t) => {
@@ -1522,7 +1683,60 @@ function writeApplicationV3Revision(repository, packageDirectory, packageFiles) 
   }
 }
 
-function deriveApplicationV3PreviousBinding(application, packageFiles) {
+function installTrustedApplicationV3Revision(fixture, candidatePackage, message) {
+  const { application, packageFiles } = candidatePackage;
+  const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+  writeApplicationV3Revision(fixture.base, packageDirectory, packageFiles);
+  fixture.baseCommit = commitAll(fixture.base, message);
+  git(fixture.candidate, ["fetch", "--quiet", fixture.base, fixture.baseCommit]);
+  git(fixture.candidate, ["reset", "--hard", fixture.baseCommit]);
+}
+
+async function prepareApplicationV3Candidate(
+  fixture,
+  candidatePackage,
+  message,
+  { hydrate = true } = {}
+) {
+  const { application, packageFiles } = candidatePackage;
+  const packageDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
+  writeApplicationV3Revision(fixture.candidate, packageDirectory, packageFiles);
+  const candidateCommit = commitAll(fixture.candidate, message);
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  if (!hydrate) return { candidateCommit, candidateData: fixture.candidate, mergeCommit };
+  const candidateData = await fetchBloblessPullRequestMerge(fixture, mergeCommit);
+  await hydratePublicApplicationCandidate({
+    baseRoot: fixture.base,
+    candidateRoot: candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    expectedCandidateCommit: candidateCommit,
+    expectedMergeCommit: mergeCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    repository: "central/repository",
+    readToken: "test-read-token"
+  }, localHydrationDependencies(fixture, packageDirectory));
+  return { candidateCommit, candidateData, mergeCommit };
+}
+
+function applicationV3VerificationInput(fixture, candidatePackage, prepared) {
+  const { application } = candidatePackage;
+  return {
+    baseRoot: fixture.base,
+    candidateRoot: prepared.candidateData,
+    expectedBaseCommit: fixture.baseCommit,
+    pullRequestNumber: PULL_REQUEST_NUMBER,
+    expectedBuilderLogin: application.builder.githubLogin,
+    expectedBuilderUserId: application.builder.githubUserId,
+    expectedCandidateCommit: prepared.candidateCommit,
+    expectedMergeCommit: prepared.mergeCommit
+  };
+}
+
+function deriveApplicationV3PreviousBinding(
+  application,
+  packageFiles,
+  targetContractVersion = application.contract.version
+) {
   const applicationBytes = packageFiles.get("application.v3.json");
   const targetDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
   const files = [{
@@ -1548,7 +1762,8 @@ function deriveApplicationV3PreviousBinding(application, packageFiles) {
       applicationRevision: application.applicationRevision,
       targetDirectory,
       files
-    }), "utf8"))
+    }), "utf8")),
+    targetContractVersion
   });
 }
 async function exactApplicationV3SourceResolver(request) {

@@ -4,22 +4,35 @@ There are four intentionally separate contribution paths. Keep each pull request
 
 ## Application pull requests
 
-### Generic Application V3.1
+### Application V3.2 and V3.1 compatibility
 
-The default public draft transport is project-agnostic. One pull request adds exactly one immutable revision under
+Application V3.2 is the complete current, project-agnostic public draft contract. One pull request adds exactly one immutable revision under
 `submissions/<application-id>/v3/revisions/<positive-decimal-revision>/`. It must contain `application.v3.json` and
 exactly the application-package files content-addressed by that manifest. Do not modify a prior revision or combine two
 applications, revisions, maintenance files, workflows, Registry records, or policy changes.
 
 There is no project-type or capability allowlist. Complete no-market, tradable, hook, token, app, game, service, and
-hybrid projects use the same V3.1 contract. Keep novel evidence as additional content-addressed review records; do not
-mislabel it as a known capability to pass intake. When the project did not select legacy Fee V2, its Fee V2 identity,
-schema, and instance fields are `null` and its fee-policy review records are omitted.
+hybrid projects use the same V3.2 contract. Keep novel evidence as additional content-addressed review records; do not
+mislabel it as a known capability to pass intake. V3.2 binds Submission 2.1 and, for each selected tradable market, the
+policy-neutral Trade Capability Manifest V2. No-market projects attach no trade manifest.
+
+The byte-unchanged V3.1 compatibility contract continues to accept new and existing drafts, but it cannot establish
+`launch-readiness` or the official Programmable Router route. A market-bearing Ethereum project that wants the official
+Programmable route submits a V3.2 revision. That revision binds the exact readiness document and source artifacts for
+the current manifest-resolved Router, the 10 bps treasury requirement, typed route payload and stamp request. A direct
+Classic, Graph, or Single Factory call does not create canonical Programmable Router provenance.
 
 The applicant identity must match the authenticated pull-request author. Protected-base CI treats every applicant file
 as inert untrusted data and never executes candidate code. Passing intake establishes only a structurally valid draft
 for human or automated review. It does not establish review completion, acceptance, approval, audit, deployment,
 availability, launch, or funds authority.
+
+After an authorized launch and finality, maintainers—not applicants—must add the content-carrying promotion receipt
+under `registry/promotions/<project-id>/<launch-id>.json` before Registry, API, indexer, or terminal promotion. The
+receipt embeds and cross-binds the passed readiness decision, exact readiness bytes, the exact canonical Application V3
+root bytes, finalized Router/stamp evidence, and the derived application and package digests. Registry re-derives the
+package binding from those bytes and matches it to acceptance. Terminal adoption is external and is not guaranteed by a
+valid stamp.
 
 Read [`docs/builder/PUBLIC_GITHUB_PR_BETA.md`](docs/builder/PUBLIC_GITHUB_PR_BETA.md) for the exact public flow.
 
@@ -88,14 +101,15 @@ npm run authority:check
 npm test
 ```
 
-Do not hand-edit `docs/LAUNCH_POLICY.md` or `.programmable/active-contract.json`. V2 and canary application pull
+Do not hand-edit `docs/LAUNCH_POLICY.md`, `.programmable/active-contract.json`, or
+`.programmable/active-contract.v2.json`. Applicant and canary pull
 requests must never mix applicant data with policy or generated-contract maintenance. The authority-ownership manifest
 does not contain requirement text or values. It records exact file hashes, classifications, admission import closures,
 Rule-ID-to-handler ownership, public projections, and the receipt-bound legacy vendor exclusion. New files and imported
 gates fail closed until that ownership is explicitly reviewed and recorded.
 
-The Universal Admission well-known contract is independent of the active contract, Applicant Compatibility V1, and
-Application V3.1. Regenerating it must not rewrite or reinterpret those legacy bytes.
+The Universal Admission well-known contract is independent of the active contract, Applicant Compatibility V2 and
+legacy V1, Application V3.2, and V3.1 compatibility. Regenerating it must not rewrite or reinterpret those contracts.
 
 ## Review standard maintenance
 

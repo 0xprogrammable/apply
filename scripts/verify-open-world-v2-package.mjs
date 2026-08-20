@@ -17,9 +17,19 @@ function validateOpenWorldV2PackageWithProfile(options, validationProfile) {
   const context = createOpenWorldV2ValidationRuntime(options);
   context.validationProfile = validationProfile;
   const earlyReport = validateOpenWorldV2Intake(context);
-  if (earlyReport !== null) return earlyReport;
+  if (earlyReport !== null) return reportForSelectedSubmission(earlyReport, options.submission);
+  if (validationProfile === "frozen-legacy-fee-v2" && options.submission?.standardVersion !== "2.0.0") {
+    context.add("blocker", "FROZEN_LEGACY_SUBMISSION_VERSION_REQUIRED", "$", "The frozen legacy Fee V2 entrypoint accepts only exact Submission 2.0 bytes.");
+  }
   validateOpenWorldV2Intent(context);
   validateOpenWorldV2Graph(context);
   validateOpenWorldV2Fee(context);
-  return finalizeOpenWorldV2Validation(context);
+  return reportForSelectedSubmission(finalizeOpenWorldV2Validation(context), options.submission);
+}
+
+function reportForSelectedSubmission(report, submission) {
+  const acceptedVersion = new Set(["2.0.0", "2.1.0"]).has(submission?.standardVersion)
+    ? submission.standardVersion
+    : report.standardVersion;
+  return Object.freeze({ ...report, standardVersion: acceptedVersion });
 }

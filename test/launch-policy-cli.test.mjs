@@ -7,6 +7,8 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  ACTIVE_CONTRACT_ROLE_PATHS_V1,
+  ACTIVE_CONTRACT_ROLE_PATHS_V2,
   buildLaunchPolicyArtifacts,
   readRepositoryLaunchPolicy,
   verifyLaunchPolicyArtifacts
@@ -84,23 +86,21 @@ test("generated Markdown and active contract are byte-exact projections", () => 
 test("generated-artifact verifier fails closed on stale bytes", (t) => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-artifacts-"));
   t.after(() => fs.rmSync(fixtureRoot, { recursive: true, force: true }));
-  for (const relativePath of [
-    "policy/launch-policy.v1.json",
-    "docs/LAUNCH_POLICY.md",
-    ".programmable/active-contract.json",
-    ".github/workflows/verify-hook-builder.yml",
-    "canary/schemas/workflow-canary-application-v1.schema.json",
-    "canary/schemas/workflow-canary-result-v1.schema.json",
-    "intake/schemas/public-pr-application-v3.schema.json",
-    "scripts/verify-public-application-v3-core.mjs",
-    "scripts/verify-public-application-v3-shared.mjs",
-    "scripts/verify-public-hook-application.mjs",
-    "scripts/verify-workflow-canary.mjs",
-    "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json"
-  ]) {
+  const generated = buildLaunchPolicyArtifacts({ repositoryRoot: root });
+  const generatedPaths = new Set(generated.keys());
+  const sourcePaths = new Set([
+    ...Object.values(ACTIVE_CONTRACT_ROLE_PATHS_V1).flat(),
+    ...Object.values(ACTIVE_CONTRACT_ROLE_PATHS_V2).flat()
+  ]);
+  for (const relativePath of [...sourcePaths].filter((value) => !generatedPaths.has(value))) {
     const target = path.join(fixtureRoot, relativePath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(root, relativePath), target);
+  }
+  for (const [relativePath, source] of generated) {
+    const target = path.join(fixtureRoot, relativePath);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, source, "utf8");
   }
   fs.appendFileSync(path.join(fixtureRoot, "docs/LAUNCH_POLICY.md"), "stale\n");
   assert.throws(
@@ -109,62 +109,35 @@ test("generated-artifact verifier fails closed on stale bytes", (t) => {
   );
 });
 
-test("active contract contains the four fixed nonempty roles with exact path digests", () => {
-  const manifest = JSON.parse(read(".programmable/active-contract.json"));
-  assert.equal(read(".programmable/active-contract.json"), `${canonicalJson(manifest)}\n`);
-  assert.deepEqual(Object.keys(manifest), ["$schema", "artifacts", "contractId", "defaultBranch", "kind", "schemaVersion"]);
-  assert.equal(manifest.$schema, "urn:programmable:active-contract-manifest:1.0.0");
-  assert.equal(manifest.schemaVersion, "1.0.0");
-  assert.equal(manifest.kind, "programmable-active-contract");
-  assert.equal(manifest.contractId, "submit-launch");
-  assert.equal(manifest.defaultBranch, "main");
-  assert.deepEqual(Object.keys(manifest.artifacts), ["package", "policy", "validator", "workflow"]);
-  assert.deepEqual(manifest.artifacts, {
-    package: [
-      {
-        path: "canary/schemas/workflow-canary-application-v1.schema.json",
-        sha256: digest("canary/schemas/workflow-canary-application-v1.schema.json")
-      },
-      {
-        path: "canary/schemas/workflow-canary-result-v1.schema.json",
-        sha256: digest("canary/schemas/workflow-canary-result-v1.schema.json")
-      },
-      {
-        path: "intake/schemas/public-pr-application-v3.schema.json",
-        sha256: digest("intake/schemas/public-pr-application-v3.schema.json")
-      },
-      {
-        path: "vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json",
-        sha256: digest("vendor/programmable-v4-hook-builder/references/public-pr-application.schema.json")
-      }
-    ],
-    policy: [{
-      path: "policy/launch-policy.v1.json",
-      sha256: digest("policy/launch-policy.v1.json")
-    }],
-    validator: [
-      {
-        path: "scripts/verify-public-hook-application.mjs",
-        sha256: digest("scripts/verify-public-hook-application.mjs")
-      },
-      {
-        path: "scripts/verify-public-application-v3-core.mjs",
-        sha256: digest("scripts/verify-public-application-v3-core.mjs")
-      },
-      {
-        path: "scripts/verify-public-application-v3-shared.mjs",
-        sha256: digest("scripts/verify-public-application-v3-shared.mjs")
-      },
-      {
-        path: "scripts/verify-workflow-canary.mjs",
-        sha256: digest("scripts/verify-workflow-canary.mjs")
-      }
-    ],
-    workflow: [{
-      path: ".github/workflows/verify-hook-builder.yml",
-      sha256: digest(".github/workflows/verify-hook-builder.yml")
-    }]
-  });
+test("active contract V1 compatibility envelope binds the complete V2 role contract", () => {
+  const generated = buildLaunchPolicyArtifacts({ repositoryRoot: root });
+  const v2Source = generated.get(".programmable/active-contract.v2.json");
+  for (const [relativePath, schemaVersion, expectedPaths] of [
+    [".programmable/active-contract.json", "1.0.0", ACTIVE_CONTRACT_ROLE_PATHS_V1],
+    [".programmable/active-contract.v2.json", "2.0.0", ACTIVE_CONTRACT_ROLE_PATHS_V2]
+  ]) {
+    const source = generated.get(relativePath);
+    const manifest = JSON.parse(source);
+    assert.equal(source, `${canonicalJson(manifest)}\n`);
+    assert.deepEqual(Object.keys(manifest), ["$schema", "artifacts", "contractId", "defaultBranch", "kind", "schemaVersion"]);
+    assert.equal(manifest.$schema, `urn:programmable:active-contract-manifest:${schemaVersion}`);
+    assert.equal(manifest.schemaVersion, schemaVersion);
+    assert.equal(manifest.kind, "programmable-active-contract");
+    assert.equal(manifest.contractId, "submit-launch");
+    assert.equal(manifest.defaultBranch, "main");
+    assert.deepEqual(Object.keys(manifest.artifacts), ["package", "policy", "validator", "workflow"]);
+    assert.deepEqual(manifest.artifacts, Object.fromEntries(
+      Object.entries(expectedPaths).map(([role, paths]) => [
+        role,
+        paths.map((artifactPath) => ({
+          path: artifactPath,
+          sha256: artifactPath === ".programmable/active-contract.v2.json"
+            ? `sha256:${crypto.createHash("sha256").update(v2Source).digest("hex")}`
+            : digest(artifactPath)
+        }))
+      ])
+    ));
+  }
 });
 
 test("third-party requirements CLI needs no Hookbuilder and projects declared rules", () => {
@@ -184,6 +157,24 @@ test("third-party requirements CLI needs no Hookbuilder and projects declared ru
   assert.match(output.policy.sha256, /^sha256:[0-9a-f]{64}$/u);
 });
 
+test("launch-readiness requirements are enabled checker-only and project only prelaunch rules", () => {
+  const result = run(["requirements", "--profile", "launch-readiness"]);
+  assert.equal(result.status, 0, result.stderr);
+  const output = parseCanonicalOutput(result);
+  assert.equal(output.profile.enabled, true);
+  assert.equal(output.profile.outcome, "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED");
+  assert.equal(output.profile.authority.checkerOnly, true);
+  assert.equal(output.profile.authority.launchAuthorized, false);
+  assert.equal(output.profile.authority.productionDiscoveryAllowed, false);
+  assert.equal(output.profile.authority.publicRoutingAllowed, false);
+  assert.equal(output.profile.authority.realUserFundsAllowed, false);
+  assert.deepEqual(output.rules.map(({ id }) => id), [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+  assert.doesNotMatch(result.stdout, /LAUNCH_APPROVED/u);
+});
+
 test("requirements can describe disabled production without inventing approval authority", () => {
   const result = run(["requirements", "--profile", "production-launch"]);
   assert.equal(result.status, 0, result.stderr);
@@ -191,22 +182,23 @@ test("requirements can describe disabled production without inventing approval a
   assert.equal(output.profile.enabled, false);
   assert.equal(output.profile.outcome, null);
   assert.equal(output.profile.authority.launchAuthorized, false);
-  assert.deepEqual(output.rules.map(({ id, requirement }) => ({ id, requirement })), [{
-    id: "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
-    requirement: "A Programmable Ethereum-mainnet launch must route 10 bps of trading volume to the Programmable treasury."
-  }]);
+  assert.deepEqual(output.rules.map(({ id }) => id), [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
   assert.doesNotMatch(result.stdout, /LAUNCH_APPROVED/u);
 });
 
 test("binding CLI binds the fixed Git policy and rejects disabled production", () => {
-  const result = run(["binding", "--profile", "workflow-canary"]);
+  const result = run(["binding", "--profile", "launch-readiness"]);
   assert.equal(result.status, 0, result.stderr);
   const binding = parseCanonicalOutput(result);
   assert.equal(binding.repository, "0xprogrammable/submit-launch");
   assert.equal(binding.numericRepositoryId, "1320171831");
   assert.equal(binding.baseCommit, childProcess.execFileSync("git", ["rev-parse", "HEAD^{commit}"], { cwd: root, encoding: "utf8" }).trim());
   assert.equal(binding.path, "policy/launch-policy.v1.json");
-  assert.equal(binding.profileId, "workflow-canary");
+  assert.equal(binding.profileId, "launch-readiness");
 
   const disabled = run(["binding", "--profile", "production-launch"]);
   assert.equal(disabled.status, 1);

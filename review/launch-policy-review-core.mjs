@@ -4,15 +4,26 @@ import {
   buildLaunchPolicyBinding,
   canonicalJson,
   compareLaunchPolicyBindings,
+  evaluateLaunchPolicyRules,
   readTrustedLaunchPolicyFromGit,
   rulesForProfile,
   selectLaunchPolicyProfile
 } from "../scripts/launch-policy-core.mjs";
+import {
+  deriveTrustedPublicApplicationV3LaunchReadinessV1,
+  isTrustedPublicApplicationV3LaunchReadinessV1
+} from "../scripts/verify-public-application-v3-core.mjs";
+import {
+  deriveProgrammableLaunchRouterApplicabilityRecordV1,
+  isTrustedProgrammableLaunchRouterApplicabilityRecordV1,
+  parseProgrammableLaunchRouterReadinessBytesV1,
+  projectProgrammableLaunchRouterPolicyEvidenceV1
+} from "../scripts/programmable-launch-router-readiness-core.mjs";
 
 const INPUT_SCHEMA_VERSION = "programmable.launch-policy-review-input.v1";
 const DECISION_SCHEMA_VERSION = "programmable.launch-policy-review-decision.v1";
 const BINDING_SCHEMA_VERSION = "programmable.launch-policy-binding.v1";
-const PROFILES = new Set(["build", "production-launch", "workflow-canary"]);
+const PROFILES = new Set(["build", "launch-readiness", "production-launch", "workflow-canary"]);
 const STATES = new Set(["analysis_pending", "passed", "violated"]);
 const ANALYZER_KINDS = new Set(["deterministic", "human", "llm", "scanner"]);
 const STATUS_VALUES = new Set(["analysis_pending", "changes_requested", "passed", "policy_drift", "profile_disabled", "subject_drift"]);
@@ -22,6 +33,8 @@ const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const POSITIVE_DECIMAL = /^[1-9][0-9]{0,19}$/u;
 const RULE_ID = /^[A-Z][A-Z0-9_]*(?:\.[A-Z][A-Z0-9_]*)+$/u;
 const ANALYZER_ID = /^[a-z0-9][a-z0-9._-]{1,79}$/u;
+const trustedLaunchReadinessReviewInputs = new WeakSet();
+const trustedLaunchReadinessDecisions = new WeakSet();
 const AUTHORITY = Object.freeze({
   checkerOnly: true,
   independentAudit: false,
@@ -79,8 +92,10 @@ export function validateLaunchPolicyReviewInput(input) {
       fail("REVIEW_POLICY_BINDING_INVALID", "Recorded policy binding profile does not match the review profile.");
     }
   }
-  validateSubject(input.expectedSubject, "expectedSubject");
-  validateSubject(input.currentSubject, "currentSubject");
+  const requireRouterProvenanceRequired = new Set(["launch-readiness", "production-launch"]).has(input.profileId);
+  const requireApplicationIdentity = input.profileId === "launch-readiness";
+  validateSubject(input.expectedSubject, "expectedSubject", { requireApplicationIdentity, requireRouterProvenanceRequired });
+  validateSubject(input.currentSubject, "currentSubject", { requireApplicationIdentity, requireRouterProvenanceRequired });
   validateEvaluations(input.evaluations);
   validateObservations(input.observations);
   return true;
@@ -90,6 +105,12 @@ export function evaluateTrustedLaunchPolicyReview(options) {
   requirePlainObject(options, "review options", "REVIEW_ARGUMENTS_INVALID");
   exactKeys(options, ["expectedBaseCommit", "input", "repositoryRoot"], "REVIEW_ARGUMENTS_INVALID", "Review options");
   validateLaunchPolicyReviewInput(options.input);
+  if (options.input.profileId === "launch-readiness" && !trustedLaunchReadinessReviewInputs.has(options.input)) {
+    fail(
+      "REVIEW_LAUNCH_READINESS_TRUST_REQUIRED",
+      "Launch-readiness decisions must be compiled from exact trusted Application and Router-readiness records; caller-supplied applicability or evaluation states are not accepted."
+    );
+  }
 
   const input = structuredClone(options.input);
   const policyRecord = readTrustedLaunchPolicyFromGit({
@@ -207,14 +228,142 @@ export function evaluateTrustedLaunchPolicyReview(options) {
   });
 }
 
+export function evaluateTrustedLaunchReadinessPolicyReview(options) {
+  requirePlainObject(options, "launch-readiness compiler options", "REVIEW_ARGUMENTS_INVALID");
+  exactKeys(
+    options,
+    ["applicationResult", "expectedBaseCommit", "readinessBytes", "repositoryRoot"],
+    "REVIEW_ARGUMENTS_INVALID",
+    "Launch-readiness compiler options"
+  );
+
+  let applicationReadiness;
+  try {
+    applicationReadiness = deriveTrustedPublicApplicationV3LaunchReadinessV1(options.applicationResult);
+  } catch (error) {
+    fail("REVIEW_LAUNCH_READINESS_APPLICATION_INVALID", "Launch readiness requires an opaque result minted by the protected Application V3 package or exact-source verifier.", error);
+  }
+  if (!isTrustedPublicApplicationV3LaunchReadinessV1(applicationReadiness)) {
+    fail("REVIEW_LAUNCH_READINESS_TRUST_REQUIRED", "Application launch applicability was not minted by the protected Application V3 verifier.");
+  }
+
+  let parsedReadiness = null;
+  let routerApplicability = null;
+  let evidence = {};
+  if (options.readinessBytes !== null) {
+    try {
+      parsedReadiness = parseProgrammableLaunchRouterReadinessBytesV1(options.readinessBytes);
+      routerApplicability = deriveProgrammableLaunchRouterApplicabilityRecordV1(parsedReadiness);
+      if (!isTrustedProgrammableLaunchRouterApplicabilityRecordV1(routerApplicability)) {
+        throw new TypeError("untrusted Router applicability record");
+      }
+    } catch (error) {
+      fail("REVIEW_LAUNCH_READINESS_EVIDENCE_INVALID", "Exact Router-readiness bytes did not satisfy the trusted closed checker.", error);
+    }
+  } else if (applicationReadiness.decision === "not-applicable" && applicationReadiness.readinessBinding !== null) {
+    fail("REVIEW_LAUNCH_READINESS_APPLICATION_MISMATCH", "A protected not-applicable Application cannot bind Router-readiness bytes.");
+  }
+
+  if (parsedReadiness !== null) {
+    verifyApplicationRouterReadinessBinding({ applicationReadiness, parsedReadiness, routerApplicability, readinessBytes: options.readinessBytes });
+    if (applicationReadiness.decision === "required") {
+      if (routerApplicability.decision !== "required") {
+        fail("REVIEW_LAUNCH_READINESS_APPLICATION_MISMATCH", "A fully verified required Application must bind prelaunch-bound Router readiness.");
+      }
+      evidence = projectProgrammableLaunchRouterPolicyEvidenceV1(parsedReadiness);
+    }
+  }
+
+  const policyRecord = readTrustedLaunchPolicyFromGit({
+    repositoryRoot: options.repositoryRoot,
+    expectedBaseCommit: options.expectedBaseCommit
+  });
+  const profile = selectLaunchPolicyProfile(policyRecord.policy, "launch-readiness");
+  if (!profile.enabled) {
+    fail("REVIEW_LAUNCH_READINESS_PROFILE_DISABLED", "The protected launch-readiness compiler requires the enabled checker-only profile.");
+  }
+
+  const subject = {
+    applicationId: applicationReadiness.applicationId,
+    applicationRevision: Number(applicationReadiness.applicationRevision),
+    applicationSha256: applicationReadiness.applicationSha256,
+    packageSha256: applicationReadiness.packageSha256,
+    numericRepositoryId: applicationReadiness.subject.numericRepositoryId,
+    repository: applicationReadiness.subject.repository,
+    commit: applicationReadiness.subject.commit,
+    tree: applicationReadiness.subject.tree,
+    configurationHash: applicationReadiness.subject.configurationHash,
+    routerProvenanceRequired: applicationReadiness.decision !== "not-applicable",
+    // Historical review decisions carried this architecture hint. It never
+    // controls Router applicability; the protected applicability record does.
+    usesUniswapV4: true
+  };
+  const policyEvaluation = evaluateLaunchPolicyRules({
+    policyRecord,
+    profileId: "launch-readiness",
+    subject,
+    evidence
+  });
+  const activeRules = new Map(rulesForProfile(policyRecord.policy, "launch-readiness").map((rule) => [rule.id, rule]));
+  const stateByHandlerStatus = new Map([
+    ["analysis-pending", "analysis_pending"],
+    ["failed", "violated"],
+    ["passed", "passed"]
+  ]);
+  const evaluations = policyEvaluation.results
+    .filter(({ status }) => status !== "not-applicable")
+    .map((result) => {
+      const rule = activeRules.get(result.ruleId);
+      const state = stateByHandlerStatus.get(result.status);
+      if (!rule || !state) {
+        fail("REVIEW_LAUNCH_READINESS_COMPILER_INVALID", "A policy handler returned an unbound launch-readiness result.");
+      }
+      return {
+        ruleId: rule.id,
+        state,
+        evidenceRefs: [applicationReadiness.readinessBinding?.sha256 ?? routerApplicability?.readinessDocumentSha256]
+          .filter((value) => typeof value === "string"),
+        analyzer: { kind: rule.enforcement.mode, id: rule.enforcement.handlerId }
+      };
+    });
+  const input = {
+    schemaVersion: INPUT_SCHEMA_VERSION,
+    profileId: "launch-readiness",
+    expectedPolicyBinding: buildLaunchPolicyBinding(policyRecord, "launch-readiness"),
+    expectedSubject: subject,
+    currentSubject: structuredClone(subject),
+    evaluations,
+    observations: []
+  };
+  trustedLaunchReadinessReviewInputs.add(input);
+  const decision = evaluateTrustedLaunchPolicyReview({
+    input,
+    repositoryRoot: options.repositoryRoot,
+    expectedBaseCommit: options.expectedBaseCommit
+  });
+  trustedLaunchReadinessDecisions.add(decision);
+  return decision;
+}
+
 export function canonicalLaunchPolicyDecision(decision, trustedPolicyRecord) {
+  requireTrustedLaunchReadinessDecision(decision);
   validateLaunchPolicyDecision(decision, trustedPolicyRecord, { verifyDigest: true });
   return canonicalJson(decision);
 }
 
 export function digestLaunchPolicyDecision(decision, trustedPolicyRecord) {
+  requireTrustedLaunchReadinessDecision(decision);
   validateLaunchPolicyDecision(decision, trustedPolicyRecord, { verifyDigest: false });
   return hashLaunchPolicyDecision(decision);
+}
+
+function requireTrustedLaunchReadinessDecision(decision) {
+  if (decision?.profileId === "launch-readiness" && !trustedLaunchReadinessDecisions.has(decision)) {
+    fail(
+      "REVIEW_LAUNCH_READINESS_DECISION_TRUST_REQUIRED",
+      "Canonical launch-readiness validation requires the exact decision minted by the protected Application and Router-readiness compiler; a caller-supplied digest cannot prove provenance."
+    );
+  }
 }
 
 function createDecision({
@@ -265,8 +414,10 @@ function validateLaunchPolicyDecision(decision, trustedPolicyRecord, { verifyDig
     fail("REVIEW_DECISION_AUTHORITY_INVALID", "Review decisions are checker-only and confer no audit, routing, launch, or funds authority.");
   }
   validateTrustedPolicyProjection(decision.trustedPolicy, decision.profileId);
-  validateSubject(decision.expectedSubject, "expectedSubject");
-  validateSubject(decision.currentSubject, "currentSubject");
+  const requireRouterProvenanceRequired = new Set(["launch-readiness", "production-launch"]).has(decision.profileId);
+  const requireApplicationIdentity = decision.profileId === "launch-readiness";
+  validateSubject(decision.expectedSubject, "expectedSubject", { requireApplicationIdentity, requireRouterProvenanceRequired });
+  validateSubject(decision.currentSubject, "currentSubject", { requireApplicationIdentity, requireRouterProvenanceRequired });
   validateEvaluations(decision.evaluations);
   if (canonicalJson(decision.evaluations) !== canonicalJson(sortByCanonical(decision.evaluations))) {
     fail("REVIEW_DECISION_EVALUATIONS_INVALID", "Decision evaluations must use deterministic canonical order.");
@@ -494,6 +645,36 @@ function unboundEvaluationAdvisory(evaluation) {
   };
 }
 
+function verifyApplicationRouterReadinessBinding({ applicationReadiness, parsedReadiness, readinessBytes, routerApplicability }) {
+  const binding = applicationReadiness.readinessBinding;
+  const routerSubject = routerApplicability.subject;
+  const readinessSubject = parsedReadiness.document.subject;
+  if (
+    binding === null
+    || binding.path !== ".programmable/launch-router-readiness.v1.json"
+    || binding.byteLength !== readinessBytes.length
+    || binding.sha256 !== routerApplicability.readinessDocumentSha256
+    || binding.gitBlobOid !== gitBlobOid(readinessBytes)
+    || applicationReadiness.applicationId !== readinessSubject.applicationId
+    || Number(applicationReadiness.applicationRevision) !== readinessSubject.applicationRevision
+    || applicationReadiness.subject.repository !== routerSubject.repository
+    || applicationReadiness.subject.numericRepositoryId !== routerSubject.numericRepositoryId
+    || applicationReadiness.subject.commit !== routerSubject.commit
+    || applicationReadiness.subject.tree !== routerSubject.tree
+    || (applicationReadiness.decision === "required" && applicationReadiness.subject.configurationHash !== routerSubject.configurationHash)
+  ) {
+    fail("REVIEW_LAUNCH_READINESS_APPLICATION_MISMATCH", "Router-readiness bytes do not match the exact opaque Application V3.2 source and artifact binding.");
+  }
+}
+
+function gitBlobOid(bytes) {
+  const normalized = Buffer.from(bytes);
+  return crypto.createHash("sha1")
+    .update(Buffer.from(`blob ${normalized.length}\0`, "utf8"))
+    .update(normalized)
+    .digest("hex");
+}
+
 function validatePolicyBinding(binding) {
   requirePlainObject(binding, "expectedPolicyBinding", "REVIEW_POLICY_BINDING_INVALID");
   exactKeys(binding, ["baseCommit", "baseTree", "gitBlobOid", "numericRepositoryId", "path", "policyId", "policyVersion", "profileId", "repository", "schemaVersion", "sha256"], "REVIEW_POLICY_BINDING_INVALID", "Expected policy binding");
@@ -507,16 +688,28 @@ function validatePolicyBinding(binding) {
     || !OBJECT_ID.test(binding.gitBlobOid ?? "")
     || !/^[a-z0-9][a-z0-9.-]{2,79}$/u.test(binding.policyId ?? "")
     || !/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u.test(binding.policyVersion ?? "")
-    || !new Set(["build", "workflow-canary"]).has(binding.profileId)
+    || !new Set(["build", "launch-readiness", "workflow-canary"]).has(binding.profileId)
     || !SHA256.test(binding.sha256 ?? "")
   ) {
     fail("REVIEW_POLICY_BINDING_INVALID", "Expected policy binding must be the exact closed eleven-field binding contract.");
   }
 }
 
-function validateSubject(subject, label) {
+function validateSubject(subject, label, { requireApplicationIdentity = false, requireRouterProvenanceRequired = false } = {}) {
   requirePlainObject(subject, label, "REVIEW_SUBJECT_INVALID");
-  exactKeys(subject, ["commit", "configurationHash", "numericRepositoryId", "repository", "tree", "usesUniswapV4"], "REVIEW_SUBJECT_INVALID", label);
+  const baseKeys = ["commit", "configurationHash", "numericRepositoryId", "repository", "tree", "usesUniswapV4"];
+  const optionalKeys = ["applicationId", "applicationRevision", "applicationSha256", "packageSha256", "routerProvenanceRequired"];
+  const observedKeys = Object.keys(subject);
+  if (
+    !baseKeys.every((key) => observedKeys.includes(key))
+    || observedKeys.some((key) => ![...baseKeys, ...optionalKeys].includes(key))
+    || (requireRouterProvenanceRequired && !Object.hasOwn(subject, "routerProvenanceRequired"))
+    || (requireApplicationIdentity && !["applicationId", "applicationRevision", "applicationSha256", "packageSha256"].every((key) => Object.hasOwn(subject, key)))
+    || (["applicationId", "applicationRevision", "applicationSha256", "packageSha256"].some((key) => Object.hasOwn(subject, key))
+      && !["applicationId", "applicationRevision", "applicationSha256", "packageSha256"].every((key) => Object.hasOwn(subject, key)))
+  ) {
+    fail("REVIEW_SUBJECT_INVALID", `${label} contains missing or unsupported fields.`);
+  }
   if (
     !POSITIVE_DECIMAL.test(subject.numericRepositoryId ?? "")
     || !REPOSITORY.test(subject.repository ?? "")
@@ -524,6 +717,11 @@ function validateSubject(subject, label) {
     || !OBJECT_ID.test(subject.tree ?? "")
     || !SHA256.test(subject.configurationHash ?? "")
     || typeof subject.usesUniswapV4 !== "boolean"
+    || (Object.hasOwn(subject, "applicationId") && (typeof subject.applicationId !== "string" || subject.applicationId.length > 80 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(subject.applicationId)))
+    || (Object.hasOwn(subject, "applicationRevision") && (!Number.isSafeInteger(subject.applicationRevision) || subject.applicationRevision < 1 || subject.applicationRevision > 1_000_000))
+    || (Object.hasOwn(subject, "applicationSha256") && !SHA256.test(subject.applicationSha256 ?? ""))
+    || (Object.hasOwn(subject, "packageSha256") && !SHA256.test(subject.packageSha256 ?? ""))
+    || (Object.hasOwn(subject, "routerProvenanceRequired") && typeof subject.routerProvenanceRequired !== "boolean")
   ) {
     fail("REVIEW_SUBJECT_INVALID", `${label} must bind one exact closed project revision and build context.`);
   }

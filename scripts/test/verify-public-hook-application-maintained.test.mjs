@@ -181,6 +181,53 @@ test("maintained Application V3 history validates proposal to prototype recheck 
   assert.equal(report.applicationV3RevisionCount, 2);
 });
 
+test("maintained Application V3 history accepts only the explicit V3.1 to V3.2 migration and rejects downgrade", async (t) => {
+  await t.test("V3.1 to V3.2 schema migration", async (subtest) => {
+    const repositoryRoot = createRepositoryFixture(subtest);
+    const first = createApplicationV3TestPackage({ applicationId: "dual-version-history" });
+    writeApplicationV3Revision(repositoryRoot, first);
+    const second = createApplicationV3TestPackage({
+      applicationId: "dual-version-history",
+      applicationContractVersion: "3.2.0",
+      applicationRevision: "2",
+      lineage: {
+        kind: "schema-migration",
+        previous: deriveTestPreviousBinding(first, "3.2.0")
+      }
+    });
+    writeApplicationV3Revision(repositoryRoot, second);
+
+    const report = await verifyMaintainedSubmissions({
+      repositoryRoot,
+      validateLegacyPackage: async () => assert.fail("V3 history must not invoke the legacy package runner")
+    });
+    assert.equal(report.applicationV3RevisionCount, 2);
+  });
+
+  await t.test("V3.2 to V3.1 downgrade", async (subtest) => {
+    const repositoryRoot = createRepositoryFixture(subtest);
+    const first = createApplicationV3TestPackage({
+      applicationId: "dual-version-downgrade",
+      applicationContractVersion: "3.2.0"
+    });
+    writeApplicationV3Revision(repositoryRoot, first);
+    const second = createApplicationV3TestPackage({
+      applicationId: "dual-version-downgrade",
+      applicationRevision: "2",
+      lineage: {
+        kind: "recheck",
+        previous: deriveTestPreviousBinding(first, "3.1.0")
+      }
+    });
+    writeApplicationV3Revision(repositoryRoot, second);
+
+    await assert.rejects(
+      () => verifyMaintainedSubmissions({ repositoryRoot, validateLegacyPackage: async () => {} }),
+      hasCode("MAINTAINED_APPLICATION_V3_CONTRACT_DOWNGRADE")
+    );
+  });
+});
+
 test("maintained Application V3 history binds its exact legacy V2 predecessor package", async (t) => {
   const repositoryRoot = createRepositoryFixture(t);
   const previous = writeLegacyV2Application(repositoryRoot, "legacy-history-example");
@@ -347,7 +394,7 @@ function writeLegacyV2Application(repositoryRoot, applicationId) {
   };
 }
 
-function deriveTestPreviousBinding(fixture) {
+function deriveTestPreviousBinding(fixture, targetContractVersion = fixture.application.contract.version) {
   const application = fixture.application;
   const targetDirectory = `submissions/${application.applicationId}/v3/revisions/${application.applicationRevision}`;
   const applicationBytes = fixture.applicationPackageFiles.get("application.v3.json");
@@ -373,7 +420,8 @@ function deriveTestPreviousBinding(fixture) {
       applicationRevision: application.applicationRevision,
       targetDirectory,
       files
-    }), "utf8"))
+    }), "utf8")),
+    targetContractVersion
   }));
 }
 

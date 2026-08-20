@@ -11,6 +11,7 @@ import Ajv2020 from "../scripts/test/schema-validator/node_modules/ajv/dist/2020
 import {
   canonicalLaunchPolicyDecision,
   digestLaunchPolicyDecision,
+  evaluateTrustedLaunchReadinessPolicyReview,
   evaluateTrustedLaunchPolicyReview,
   validateLaunchPolicyReviewInput
 } from "../review/launch-policy-review-core.mjs";
@@ -20,6 +21,12 @@ import {
   readTrustedLaunchPolicyFromGit,
   rulesForProfile
 } from "../scripts/launch-policy-core.mjs";
+import { createApplicationV3TestPackage } from "../scripts/test/application-v3-package-fixture.mjs";
+import {
+  derivePublicApplicationV3PackageBindingV1,
+  validatePublicApplicationV3PackageFiles,
+  validatePublicApplicationV3SubmissionV2Bytes
+} from "../scripts/verify-public-application-v3-core.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const policyPath = path.join(root, "policy/launch-policy.v1.json");
@@ -42,15 +49,10 @@ function trustedReviewFixture(t) {
   const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "launch-policy-review-"));
   t.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
   fs.mkdirSync(path.join(repositoryRoot, "policy"), { recursive: true });
-  // The canonical 1.3.0 rule is production-route-only. Keep the review
-  // engine's semantic-path tests deterministic with a bounded fixture that
-  // exposes the same rule to the checker-only build profile. This fixture is
-  // not the current production policy.
   const reviewPolicy = JSON.parse(fs.readFileSync(policyPath, "utf8"));
-  reviewPolicy.rules = reviewPolicy.rules.map((rule) => ({
-    ...rule,
-    profiles: ["build", "production-launch"]
-  }));
+  reviewPolicy.rules = reviewPolicy.rules.map((rule) => rule.profiles.includes("launch-readiness")
+    ? { ...rule, profiles: [...new Set(["build", ...rule.profiles])].sort() }
+    : rule);
   fs.writeFileSync(
     path.join(repositoryRoot, "policy/launch-policy.v1.json"),
     `${canonicalJson(reviewPolicy)}\n`,
@@ -67,11 +69,16 @@ function trustedReviewFixture(t) {
 
 function subject(overrides = {}) {
   return {
+    applicationId: "canary-hook",
+    applicationRevision: 1,
+    applicationSha256: `sha256:${"d".repeat(64)}`,
+    packageSha256: `sha256:${"e".repeat(64)}`,
     numericRepositoryId: "1001",
     repository: "example/canary-hook",
     commit: "a".repeat(40),
     tree: "b".repeat(40),
     configurationHash: `sha256:${"c".repeat(64)}`,
+    routerProvenanceRequired: true,
     usesUniswapV4: true,
     ...overrides
   };
@@ -104,6 +111,25 @@ function evaluate(fixture, input) {
   });
 }
 
+function validateApplicationPackage(applicationFixture) {
+  return validatePublicApplicationV3PackageFiles({
+    applicationId: applicationFixture.application.applicationId,
+    applicationRevision: applicationFixture.application.applicationRevision,
+    packageFiles: applicationFixture.applicationPackageFiles,
+    expectedBuilderLogin: applicationFixture.application.builder.githubLogin,
+    expectedBuilderUserId: applicationFixture.application.builder.githubUserId
+  });
+}
+
+function validateApplicationSubmission(applicationFixture, application) {
+  return validatePublicApplicationV3SubmissionV2Bytes({
+    application,
+    submissionBytes: applicationFixture.sourceFiles.get(applicationFixture.application.policyBindings.submissionPath),
+    sourceArtifacts: new Map([...applicationFixture.sourceFiles].map(([filePath, bytes]) => [`primary\0${filePath}`, bytes])),
+    packageFiles: applicationFixture.applicationPackageFiles
+  });
+}
+
 test("complete canary evaluation yields only the declared non-authoritative outcome", (t) => {
   const fixture = trustedReviewFixture(t);
   const decision = evaluate(fixture, validInput(fixture.policyRecord));
@@ -118,6 +144,253 @@ test("complete canary evaluation yields only the declared non-authoritative outc
   });
   assert.deepEqual(decision.findings, []);
   assert.deepEqual(decision.pendingRuleIds, []);
+});
+
+test("protected launch-readiness compiler keeps package-only records pending, derives verified no-market applicability, and rejects clones", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const applicationFixture = createApplicationV3TestPackage({
+    applicationContractVersion: "3.2.0",
+    requestedRoute: "none",
+    marketMode: "no-market"
+  });
+  const packageResult = validateApplicationPackage(applicationFixture);
+  const packageBinding = derivePublicApplicationV3PackageBindingV1({
+    application: packageResult.application,
+    applicationBytes: applicationFixture.applicationPackageFiles.get("application.v3.json"),
+    applicationRecords: packageResult.applicationRecords
+  });
+  const pending = evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult: packageResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: null,
+    repositoryRoot: fixture.repositoryRoot
+  });
+  assert.equal(pending.status, "analysis_pending");
+  assert.equal(pending.outcome, null);
+  assert.equal(pending.expectedSubject.routerProvenanceRequired, true);
+  assert.equal(pending.expectedSubject.applicationSha256, packageBinding.applicationSha256);
+  assert.equal(pending.expectedSubject.packageSha256, packageBinding.packageSha256);
+  assert.deepEqual(pending.pendingRuleIds, [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+  assert.deepEqual(pending.findings, []);
+  assert.deepEqual(pending.notApplicableRuleIds, []);
+
+  const applicationResult = validateApplicationSubmission(applicationFixture, packageResult.application);
+  const decision = evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: null,
+    repositoryRoot: fixture.repositoryRoot
+  });
+
+  assert.equal(decision.profileId, "launch-readiness");
+  assert.equal(decision.status, "passed");
+  assert.equal(decision.outcome, "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED");
+  assert.equal(decision.expectedSubject.applicationId, applicationFixture.application.applicationId);
+  assert.equal(decision.expectedSubject.applicationRevision, Number(applicationFixture.application.applicationRevision));
+  assert.equal(decision.expectedSubject.applicationSha256, packageBinding.applicationSha256);
+  assert.equal(decision.expectedSubject.packageSha256, packageBinding.packageSha256);
+  assert.equal(decision.expectedSubject.routerProvenanceRequired, false);
+  assert.deepEqual(decision.expectedSubject, decision.currentSubject);
+  assert.deepEqual(decision.evaluations, []);
+  assert.deepEqual(decision.pendingRuleIds, []);
+  assert.deepEqual(decision.findings, []);
+  assert.deepEqual(decision.notApplicableRuleIds, [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+  assert.equal(decision.authority.launchAuthorized, false);
+  assert.equal(decision.authority.publicRoutingAuthorized, false);
+  assert.equal(decision.authority.realFundsAuthorized, false);
+  assert.equal(canonicalLaunchPolicyDecision(decision, fixture.policyRecord), canonicalJson(decision));
+
+  const externalFixture = createApplicationV3TestPackage({
+    applicationContractVersion: "3.2.0",
+    requestedRoute: "other",
+    marketMode: "tradable"
+  });
+  const externalPackage = validateApplicationPackage(externalFixture);
+  const externalResult = validateApplicationSubmission(externalFixture, externalPackage.application);
+  const externalDecision = evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult: externalResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: null,
+    repositoryRoot: fixture.repositoryRoot
+  });
+  assert.equal(externalDecision.status, "passed");
+  assert.equal(externalDecision.expectedSubject.routerProvenanceRequired, false);
+  assert.deepEqual(externalDecision.notApplicableRuleIds, decision.notApplicableRuleIds);
+
+  const contradictoryFixture = createApplicationV3TestPackage({
+    applicationContractVersion: "3.2.0",
+    requestedRoute: "none",
+    marketMode: "tradable"
+  });
+  const contradictoryPackage = validateApplicationPackage(contradictoryFixture);
+  assert.throws(
+    () => validateApplicationSubmission(contradictoryFixture, contradictoryPackage.application),
+    hasCode("APPLICATION_V3_ROUTE_DECLARATION_CONTRADICTORY")
+  );
+
+  assert.throws(
+    () => evaluateTrustedLaunchReadinessPolicyReview({
+      applicationResult: structuredClone(applicationResult),
+      expectedBaseCommit: fixture.expectedBaseCommit,
+      readinessBytes: null,
+      repositoryRoot: fixture.repositoryRoot
+    }),
+    hasCode("REVIEW_LAUNCH_READINESS_APPLICATION_INVALID")
+  );
+});
+
+test("protected launch-readiness compiler keeps legacy V3.1 applications admissible and analysis-pending", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const applicationFixture = createApplicationV3TestPackage();
+  const packageResult = validateApplicationPackage(applicationFixture);
+  const submissionResult = validateApplicationSubmission(applicationFixture, packageResult.application);
+  const compile = (applicationResult) => evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: null,
+    repositoryRoot: fixture.repositoryRoot
+  });
+  const packageDecision = compile(packageResult);
+  const sourceDecision = compile(submissionResult);
+
+  for (const decision of [packageDecision, sourceDecision]) {
+    assert.equal(decision.status, "analysis_pending");
+    assert.equal(decision.outcome, null);
+    assert.equal(decision.expectedSubject.routerProvenanceRequired, true);
+    assert.deepEqual(decision.pendingRuleIds, [
+      "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+      "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+    ]);
+    assert.deepEqual(decision.findings, []);
+    assert.deepEqual(decision.notApplicableRuleIds, []);
+    assert.deepEqual(decision.evaluations.map(({ state }) => state), ["analysis_pending", "analysis_pending"]);
+  }
+  assert.equal(packageDecision.digest, sourceDecision.digest);
+});
+
+test("protected launch-readiness compiler requires and evaluates the exact fully verified official Router route", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const applicationFixture = createApplicationV3TestPackage({
+    applicationContractVersion: "3.2.0",
+    requestedRoute: "programmable-ethereum-mainnet",
+    marketMode: "tradable"
+  });
+  const packageResult = validateApplicationPackage(applicationFixture);
+  const packageBinding = derivePublicApplicationV3PackageBindingV1({
+    application: packageResult.application,
+    applicationBytes: applicationFixture.applicationPackageFiles.get("application.v3.json"),
+    applicationRecords: packageResult.applicationRecords
+  });
+
+  const packageOnly = evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult: packageResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: null,
+    repositoryRoot: fixture.repositoryRoot
+  });
+  assert.equal(packageOnly.status, "analysis_pending");
+  assert.equal(packageOnly.expectedSubject.routerProvenanceRequired, true);
+  assert.deepEqual(packageOnly.evaluations.map(({ state }) => state), ["analysis_pending", "analysis_pending"]);
+  assert.deepEqual(packageOnly.pendingRuleIds, [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+  assert.deepEqual(packageOnly.findings, []);
+  assert.deepEqual(packageOnly.notApplicableRuleIds, []);
+
+  const applicationResult = validateApplicationSubmission(applicationFixture, packageResult.application);
+  const requiredWithoutBytes = evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: null,
+    repositoryRoot: fixture.repositoryRoot
+  });
+  assert.equal(requiredWithoutBytes.status, "analysis_pending");
+  assert.equal(requiredWithoutBytes.expectedSubject.routerProvenanceRequired, true);
+  assert.deepEqual(requiredWithoutBytes.pendingRuleIds, packageOnly.pendingRuleIds);
+  assert.deepEqual(requiredWithoutBytes.findings, []);
+  assert.deepEqual(requiredWithoutBytes.notApplicableRuleIds, []);
+
+  const passed = evaluateTrustedLaunchReadinessPolicyReview({
+    applicationResult,
+    expectedBaseCommit: fixture.expectedBaseCommit,
+    readinessBytes: applicationFixture.launchReadinessBytes,
+    repositoryRoot: fixture.repositoryRoot
+  });
+  const readinessSha256 = packageResult.application.launchRequest.routePlan.sha256;
+  assert.equal(passed.profileId, "launch-readiness");
+  assert.equal(passed.status, "passed");
+  assert.equal(passed.outcome, "LAUNCH_READINESS_CHECKED_NOT_AUTHORIZED");
+  assert.equal(passed.expectedSubject.applicationSha256, packageBinding.applicationSha256);
+  assert.equal(passed.expectedSubject.packageSha256, packageBinding.packageSha256);
+  assert.equal(passed.expectedSubject.configurationHash, applicationFixture.launchReadinessDocument.subject.sourceConfigurationHash);
+  assert.equal(passed.expectedSubject.routerProvenanceRequired, true);
+  assert.deepEqual(passed.expectedSubject, passed.currentSubject);
+  assert.deepEqual(passed.evaluations, [
+    {
+      ruleId: "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+      state: "passed",
+      evidenceRefs: [readinessSha256],
+      analyzer: { kind: "deterministic", id: "ethereum-treasury-10-bps-v1" }
+    },
+    {
+      ruleId: "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS",
+      state: "passed",
+      evidenceRefs: [readinessSha256],
+      analyzer: { kind: "deterministic", id: "programmable-router-readiness-v1" }
+    }
+  ]);
+  assert.deepEqual(passed.pendingRuleIds, []);
+  assert.deepEqual(passed.notApplicableRuleIds, []);
+  assert.deepEqual(passed.findings, []);
+  assert.deepEqual(passed.authority, {
+    checkerOnly: true,
+    independentAudit: false,
+    launchAuthorized: false,
+    publicRoutingAuthorized: false,
+    realFundsAuthorized: false
+  });
+  assert.equal(canonicalLaunchPolicyDecision(passed, fixture.policyRecord), canonicalJson(passed));
+  const callerSuppliedDecision = structuredClone(passed);
+  assert.throws(
+    () => canonicalLaunchPolicyDecision(callerSuppliedDecision, fixture.policyRecord),
+    hasCode("REVIEW_LAUNCH_READINESS_DECISION_TRUST_REQUIRED")
+  );
+  assert.throws(
+    () => digestLaunchPolicyDecision(callerSuppliedDecision, fixture.policyRecord),
+    hasCode("REVIEW_LAUNCH_READINESS_DECISION_TRUST_REQUIRED")
+  );
+  assert.equal(
+    passed.digest,
+    evaluateTrustedLaunchReadinessPolicyReview({
+      applicationResult,
+      expectedBaseCommit: fixture.expectedBaseCommit,
+      readinessBytes: applicationFixture.launchReadinessBytes,
+      repositoryRoot: fixture.repositoryRoot
+    }).digest
+  );
+
+  const differentApplication = createApplicationV3TestPackage({
+    applicationContractVersion: "3.2.0",
+    applicationId: "other-official-route",
+    requestedRoute: "programmable-ethereum-mainnet",
+    marketMode: "tradable"
+  });
+  assert.throws(
+    () => evaluateTrustedLaunchReadinessPolicyReview({
+      applicationResult,
+      expectedBaseCommit: fixture.expectedBaseCommit,
+      readinessBytes: differentApplication.launchReadinessBytes,
+      repositoryRoot: fixture.repositoryRoot
+    }),
+    hasCode("REVIEW_LAUNCH_READINESS_APPLICATION_MISMATCH")
+  );
 });
 
 test("LLM observations cannot invent requirements severity or approval", (t) => {
@@ -208,7 +481,7 @@ test("unknown evaluations are advisory only and analyzer authority must match po
   assert.throws(() => evaluate(fixture, forged), hasCode("REVIEW_ANALYZER_MISMATCH"));
 });
 
-test("an explicitly bound route rule remains architecture-agnostic", (t) => {
+test("market-bearing applicability remains architecture-agnostic", (t) => {
   const fixture = trustedReviewFixture(t);
   const input = validInput(fixture.policyRecord, "build");
   input.expectedSubject.usesUniswapV4 = false;
@@ -216,7 +489,37 @@ test("an explicitly bound route rule remains architecture-agnostic", (t) => {
   const decision = evaluate(fixture, input);
   assert.equal(decision.status, "passed");
   assert.deepEqual(decision.notApplicableRuleIds, []);
-  assert.deepEqual(decision.evaluations.map(({ ruleId }) => ruleId), ["LAUNCH.ETHEREUM_AND_TREASURY_10_BPS"]);
+  assert.deepEqual(decision.evaluations.map(({ ruleId }) => ruleId), [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+});
+
+test("conditional no-market semantics are not rejected and unsupported integration remains pending", (t) => {
+  const fixture = trustedReviewFixture(t);
+  const noMarket = validInput(fixture.policyRecord, "build");
+  noMarket.expectedSubject.routerProvenanceRequired = false;
+  noMarket.currentSubject.routerProvenanceRequired = false;
+  noMarket.evaluations = [];
+  const noMarketDecision = evaluate(fixture, noMarket);
+  assert.equal(noMarketDecision.status, "passed");
+  assert.equal(noMarketDecision.outcome, "BUILT_NOT_REVIEWED");
+  assert.deepEqual(noMarketDecision.pendingRuleIds, []);
+  assert.deepEqual(noMarketDecision.findings, []);
+  assert.deepEqual(noMarketDecision.notApplicableRuleIds, [
+    "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
+    "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
+  ]);
+
+  const unsupported = validInput(fixture.policyRecord, "build");
+  const routerEvaluation = unsupported.evaluations.find(({ ruleId }) => ruleId === "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS");
+  routerEvaluation.state = "analysis_pending";
+  routerEvaluation.evidenceRefs = [];
+  const unsupportedDecision = evaluate(fixture, unsupported);
+  assert.equal(unsupportedDecision.status, "analysis_pending");
+  assert.deepEqual(unsupportedDecision.pendingRuleIds, ["LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"]);
+  assert.deepEqual(unsupportedDecision.findings, []);
+  assert.deepEqual(unsupportedDecision.notApplicableRuleIds, []);
 });
 
 test("input grammar is closed and duplicate evaluations cannot compete", (t) => {
@@ -389,10 +692,32 @@ test("new schemas compile strictly and validate examples and decisions", (t) => 
     assert.equal(validateDecision(decision), true, `${name}: ${JSON.stringify(validateDecision.errors)}`);
   }
 
+  const readinessInput = validInput(fixture.policyRecord, "launch-readiness");
+  assert.equal(validateInput(readinessInput), true, JSON.stringify(validateInput.errors));
+  assert.throws(() => evaluate(fixture, readinessInput), hasCode("REVIEW_LAUNCH_READINESS_TRUST_REQUIRED"));
   const passed = evaluate(fixture, validInput(fixture.policyRecord, "build"));
+  assert.equal(validateDecision(passed), true, JSON.stringify(validateDecision.errors));
   const contradicted = structuredClone(passed);
   contradicted.evaluations[0].state = "violated";
   assert.equal(validateDecision(contradicted), false, "passed schema must reject a violation evaluation");
+
+  const missingDerivedFlag = validInput(fixture.policyRecord, "launch-readiness");
+  delete missingDerivedFlag.expectedSubject.routerProvenanceRequired;
+  delete missingDerivedFlag.currentSubject.routerProvenanceRequired;
+  assert.equal(validateInput(missingDerivedFlag), false, "readiness schema must require the derived applicability flag");
+  assert.throws(() => validateLaunchPolicyReviewInput(missingDerivedFlag), hasCode("REVIEW_SUBJECT_INVALID"));
+
+  const missingApplicationDigest = validInput(fixture.policyRecord, "launch-readiness");
+  delete missingApplicationDigest.expectedSubject.applicationSha256;
+  delete missingApplicationDigest.currentSubject.applicationSha256;
+  assert.equal(validateInput(missingApplicationDigest), false, "readiness schema must bind exact Application bytes");
+  assert.throws(() => validateLaunchPolicyReviewInput(missingApplicationDigest), hasCode("REVIEW_SUBJECT_INVALID"));
+
+  const missingPackageDigest = validInput(fixture.policyRecord, "launch-readiness");
+  delete missingPackageDigest.expectedSubject.packageSha256;
+  delete missingPackageDigest.currentSubject.packageSha256;
+  assert.equal(validateInput(missingPackageDigest), false, "readiness schema must bind the closed Application package");
+  assert.throws(() => validateLaunchPolicyReviewInput(missingPackageDigest), hasCode("REVIEW_SUBJECT_INVALID"));
 
   const pendingInput = validInput(fixture.policyRecord, "build");
   pendingInput.evaluations[0].state = "analysis_pending";
