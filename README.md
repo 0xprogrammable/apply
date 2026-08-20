@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="#start-in-30-seconds">Start an application</a> ·
   <a href="docs/COMPLETE_LAUNCH_REQUIREMENTS.md">See every launch requirement</a> ·
   <a href="#launch-policy">Read the launch policy</a> ·
   <a href="#open-review-standard">Read the standard</a> ·
@@ -26,6 +27,35 @@
 Submit a Launch publishes the [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md), a deterministic local checker,
 the public application ledger, and a versioned discovery registry. Complete project source stays in the applicant-owned
 public repository.
+
+## Start in 30 seconds
+
+You do not need Hookbuilder. Use Hookbuilder, another tool or agent, or prepare the files by hand; every path uses the
+same current Application V3.2, Applicant Compatibility V2, and canonical launch policy from one exact repository
+commit. Choose the route that matches the project's verified behavior:
+
+| Project state | Scaffold choice | What the application needs |
+| --- | --- | --- |
+| No selected tradable market | `--route no-market` | V3.2 and Submission 2.1; no Trade Manifest or applicant-owned Router-readiness record; protected validation must verify the state |
+| A market exists outside the official Programmable Ethereum route | `--route external` | V3.2, Submission 2.1, and one Trade Capability Manifest V2 per selected market; no Programmable Router-readiness record, label, or stamp |
+| Official Programmable Ethereum market | `--route official --category custom` or `--category classic` | V3.2, Submission 2.1, Trade Manifest V2, the exact Router-readiness source, and every applicable policy requirement; classification follows only after finalized stamp promotion |
+| Route or market facts are incomplete | `--route unresolved` | An honest `draft-pending` scaffold; missing facts remain `analysis-pending` and grant neither an exemption nor an official label |
+
+From an exact checkout with Node.js 24.12 or newer, create a bounded draft without inventing source, trade, deployment,
+or readiness evidence:
+
+```bash
+npm run --silent applicant:scaffold -- --route unresolved --application-id my-project
+```
+
+Without `--output`, the command prints canonical scaffold JSON. Add `--output <new-directory>` to write a no-overwrite
+draft package, or run
+`npm run --silent applicant:scaffold -- --check <directory>` after adding real artifacts. The scaffold is never
+submit-ready by itself. A route choice is a declaration, not a policy decision: protected validation derives
+applicability from the exact package and source state.
+
+The [standalone V3.2 scaffold guide](docs/examples/APPLICANT_V3_2_SCAFFOLD.md) shows the exact workspace layout and
+local-check boundary.
 
 > [!IMPORTANT]
 > **Three intake transports are open.** Application V3.2 is the complete current contract for the official Programmable
@@ -73,15 +103,24 @@ application, readiness, and promotion artifacts; it does not create requirements
 
 For a selected Programmable Ethereum market, the current policy requires all of the following at the relevant stage:
 
-- exactly **10 bps (0.10%)** of `gross-canonical-pool-volume` to
-  `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`;
+- exactly **10 bps (0.10%)** of `gross-canonical-pool-volume` to the treasury named by
+  [`LAUNCH.ETHEREUM_AND_TREASURY_10_BPS`](policy/launch-policy.v1.json);
 - an exact prelaunch plan for the manifest-resolved current canonical Router; and
-- a finalized matching Router stamp and proof before Registry, API, or terminal promotion.
+- a finalized matching Router stamp and proof before Registry, API, or terminal promotion; and
+- protected evidence for the applicable deployed fee scope and asset showing exact 10 bps settlement over one
+  inclusive finalized historical block range before production promotion.
 
-These conditions do not reject no-market or unfamiliar projects. No-market is `not-applicable`; an unresolved route
-remains `analysis-pending`. The enabled `build` and `workflow-canary` profiles carry no semantic launch requirements.
-The enabled `launch-readiness` profile is checker-only and cannot authorize a launch, public routing, production
-discovery, an audit, or real-user funds.
+These conditions do not reject no-market, external-route, or unfamiliar projects. Verified no-market and external-route
+states are `not-applicable`; incomplete or contradictory route evidence remains `analysis-pending`, even if the
+applicant requested `none` or `other`. The enabled `build` and `workflow-canary` profiles carry no semantic launch
+requirements.
+
+The enabled `launch-readiness` profile is checker-only. A pass proves that the exact checked plan binds the required
+Router and fee configuration; it does not prove that runtime collection or settlement happened. A later production or
+promotion decision needs separate protected, finalized deployment, runtime, and settlement evidence for the observed
+blocks, logs, and assets. The current repository-side settlement assertion can only remain `analysis-pending`; it
+cannot manufacture a passed observer proof. Ongoing monitoring remains separate. Readiness cannot authorize a launch,
+public routing, production discovery, an audit, or real-user funds.
 
 [`policy/launch-policy-authority-ownership.v1.json`](policy/launch-policy-authority-ownership.v1.json) is the separate
 machine-readable ownership proof. It carries no requirement text or parameter values. It binds the closed repository
@@ -178,8 +217,10 @@ npm test
    the draft is valid for review.
 5. **Review separately.** Reviewers evaluate the exact bound revision; intake never records acceptance or approval.
 6. **Check readiness conditionally.** A selected Programmable Ethereum market binds the exact fee tuple and
-   `.programmable/launch-router-readiness.v1.json`; no-market remains exempt and unresolved routes remain pending.
-7. **Launch only with separate authority.** Readiness does not sign, broadcast, deploy, or authorize funds.
+   `.programmable/launch-router-readiness.v1.json`; verified no-market and external routes are not applicable, while
+   unresolved evidence remains pending.
+7. **Launch only with separate authority.** Readiness checks the bound plan; it does not prove runtime fee collection,
+   sign, broadcast, deploy, or authorize funds.
 8. **Verify and promote later.** A finalized canonical Router stamp and matching proof are required before a future
    market can be promoted to Registry, API, or terminal classification. Third-party terminal adoption remains separate.
 
@@ -215,15 +256,6 @@ readiness for an official Ethereum market.
 Hookbuilder v0.10.3 package may also submit exactly six frozen files under `submissions/<application-id>/`. New and
 existing V2 applications use that bounded compatibility validator, but their bytes are never reinterpreted as Canary
 or Website eligibility. Read the [migration contract](docs/MIGRATION.md) for the exact boundary.
-
-## Fee terms
-
-The exact selected-route requirement is **10 bps (0.10%) of gross canonical-pool volume** to
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` on Ethereum mainnet. In canonical policy units this is
-`hundredthsOfBip: 1000` with basis `gross-canonical-pool-volume`. It is not 10% and is not an optional creator fee.
-
-This rule does not restrict open-world intake: no-market projects are not applicable, and unknown or unresolved routes
-remain pending. It becomes mandatory when an exact application selects the Programmable Ethereum market route.
 
 ## Discovery registry
 
@@ -262,6 +294,7 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 ## Documentation
 
 - [Complete launch requirements for agents and Builders](docs/COMPLETE_LAUNCH_REQUIREMENTS.md)
+- [Standalone Application V3.2 scaffold](docs/examples/APPLICANT_V3_2_SCAFFOLD.md)
 - [Generated launch policy](docs/LAUNCH_POLICY.md)
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Open Review Standard](docs/OPEN_REVIEW_STANDARD.md)
@@ -277,7 +310,8 @@ wallet material, private repositories, personal data, or an unpatched exploit.
 
 ## Related repositories
 
-- [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) builds, checks, and prepares applications.
+- [Hookbuilder](https://github.com/0xprogrammable/hookbuilder) is an optional way to build, check, and prepare an
+  application.
 - [Submit a Template](https://github.com/0xprogrammable/submit-template) is the planned path for reusable launch templates.
 - [Programmable](https://github.com/0xprogrammable/programmable) contains the platform, contracts, and Explorer.
 

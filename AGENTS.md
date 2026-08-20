@@ -1,7 +1,8 @@
 # Submit a Launch contribution contract
 
-This repository is the public application ledger and canonical discovery registry for Programmable projects built with
-Hookbuilder.
+This repository is the public application ledger and canonical discovery registry for Programmable projects.
+Applicants may prepare Application V3.2 with Hookbuilder, another tool or agent, or by hand. Every path must resolve
+Applicant Compatibility V2 and the canonical launch policy from the same exact protected repository commit.
 
 ## Authority boundaries
 
@@ -17,8 +18,9 @@ Hookbuilder.
   remains accepted compatibility, but it cannot establish `launch-readiness` or the official Programmable Router route.
 - For a selected Programmable Ethereum market, the protected readiness compiler—not applicant assertions—derives the
   conditional policy subject from the exact verified V3.2 package and source closure. It requires the manifest-resolved
-  canonical Router plan and exactly 10 bps of gross canonical-pool volume to the policy treasury. Unknown route analysis
-  remains pending; verified no-market and external-route projects are not applicable rather than rejected.
+  canonical Router plan and the mandatory fee rule in `policy/launch-policy.v1.json`. A requested route alone never
+  grants an exemption: unresolved or contradictory source and trade state remains pending, while verified no-market and
+  external-route projects are not applicable rather than rejected.
 - A direct Classic, Graph, or Single Factory call is not canonical Programmable Router provenance. Applicants must not
   self-assert a stamp, launch label, Registry promotion, or terminal support.
 - `registry/promotions/<project-id>/<launch-id>.json` is maintainer-owned postlaunch evidence. Before Registry, API,

@@ -156,7 +156,7 @@ function trustedPolicyFixture(t, policy = canonicalPolicyRecord().policy) {
 
 test("canonical policy exposes build readiness canary and disabled production profiles without authority", () => {
   const record = canonicalPolicyRecord();
-  assert.equal(record.policy.policyVersion, "2.0.0");
+  assert.equal(record.policy.policyVersion, "2.1.0");
   assert.deepEqual(record.policy.profiles.map(({ id }) => id), ["build", "launch-readiness", "production-launch", "workflow-canary"]);
   assert.equal(selectLaunchPolicyProfile(record.policy, "build").enabled, true);
   assert.equal(selectLaunchPolicyProfile(record.policy, "launch-readiness").enabled, true);
@@ -176,10 +176,11 @@ test("canonical policy exposes build readiness canary and disabled production pr
 
 test("market-bearing readiness is closed while no-market stays admissible and unsupported integration stays pending", (t) => {
   const { policy } = canonicalPolicyRecord();
-  assert.equal(policy.policyVersion, "2.0.0");
+  assert.equal(policy.policyVersion, "2.1.0");
   assert.deepEqual(policy.rules.map(({ id }) => id), [
     "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
     "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
+    "LAUNCH.ETHEREUM_FINALIZED_RUNTIME_FEE_SETTLEMENT_BEFORE_PROMOTION",
     "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
   ]);
   assert.deepEqual(rulesForProfile(policy, "build"), []);
@@ -190,6 +191,7 @@ test("market-bearing readiness is closed while no-market stays admissible and un
   assert.deepEqual(rulesForProfile(policy, "production-launch").map(({ id }) => id), [
     "LAUNCH.ETHEREUM_AND_TREASURY_10_BPS",
     "LAUNCH.ETHEREUM_FINALIZED_ROUTER_STAMP_BEFORE_PROMOTION",
+    "LAUNCH.ETHEREUM_FINALIZED_RUNTIME_FEE_SETTLEMENT_BEFORE_PROMOTION",
     "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS"
   ]);
   assert.deepEqual(rulesForProfile(policy, "workflow-canary"), []);

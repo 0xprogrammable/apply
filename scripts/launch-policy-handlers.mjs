@@ -1,3 +1,5 @@
+import { isProtectedProgrammableRuntimeFeeSettlementPendingPolicyEvidenceV1 } from "./programmable-runtime-fee-settlement-proof-core.mjs";
+
 function declaredEvidenceHandler({ evidence, rule }) {
   const missingEvidence = rule.evidence.filter((evidenceId) => !evidencePassed(evidence?.[evidenceId]));
   return Object.freeze({
@@ -53,12 +55,57 @@ const ADDRESS = /^0x[0-9A-Fa-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const PROGRAMMABLE_MANIFEST_URL = "https://developers.programmable.family/api/v2/manifest";
 const PENDING_REASON_CODES = new Set([
+  "fee-settlement-observation-pending",
   "finality-pending",
   "manifest-unavailable",
   "platform-integration-pending",
   "route-classification-unresolved",
   "source-deployment-binding-pending"
 ]);
+
+function programmableRuntimeFeeSettlementHandler(context) {
+  const { evidence, rule } = context;
+  const [evidenceId] = rule.evidence;
+  const value = evidence?.[evidenceId];
+  if (value === undefined) {
+    return Object.freeze({
+      passed: false,
+      status: "analysis-pending",
+      missingEvidence: Object.freeze([evidenceId]),
+      message: "Runtime fee settlement remains analysis-pending: no independently verified Ethereum finality/receipt/state proof is available."
+    });
+  }
+
+  const pendingKeys = [
+    "observationPath",
+    "observationSha256",
+    "protectedBaseCommit",
+    "protectedBaseTree",
+    "protectedGitBlobOid",
+    "reasonCode",
+    "status"
+  ];
+  if (
+    isProtectedProgrammableRuntimeFeeSettlementPendingPolicyEvidenceV1(value)
+    && exactObjectKeys(value, pendingKeys)
+    && value.status === "analysis-pending"
+    && value.reasonCode === "runtime-fee-verifier-trust-root-unavailable"
+  ) {
+    return Object.freeze({
+      passed: false,
+      status: "analysis-pending",
+      missingEvidence: Object.freeze([evidenceId]),
+      message: "The protected accounting assertion is structurally bound but remains analysis-pending until a versioned Ethereum finality/receipt/state verifier reproduces it from an independent trust root."
+    });
+  }
+
+  return Object.freeze({
+    passed: false,
+    status: "failed",
+    missingEvidence: Object.freeze([evidenceId]),
+    message: "Applicant-declared, provider-declared, repository-only, cloned, or status-only runtime fee claims cannot prove finalized treasury settlement."
+  });
+}
 
 function programmableRouterReadinessHandler(context) {
   const { evidence, rule, subject } = context;
@@ -345,6 +392,12 @@ const RULE_HANDLERS_BY_POLICY_VERSION = Object.freeze({
     "ethereum-treasury-10-bps-v1": ethereumTreasuryTenBpsHandler,
     "programmable-router-promotion-v1": programmableRouterPromotionHandler,
     "programmable-router-readiness-v1": programmableRouterReadinessHandler
+  }),
+  "2.1.0": Object.freeze({
+    "ethereum-treasury-10-bps-v1": ethereumTreasuryTenBpsHandler,
+    "programmable-router-promotion-v1": programmableRouterPromotionHandler,
+    "programmable-router-readiness-v1": programmableRouterReadinessHandler,
+    "programmable-runtime-fee-settlement-v1": programmableRuntimeFeeSettlementHandler
   })
 });
 

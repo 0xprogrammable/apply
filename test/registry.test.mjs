@@ -579,7 +579,7 @@ function makePromotionRecord(project, acceptance, acceptanceSha256) {
       numericRepositoryId: "1320171831",
       path: "policy/launch-policy.v1.json",
       policyId: "programmable-central-launch-policy",
-      policyVersion: "2.0.0",
+      policyVersion: "2.1.0",
       profileId: "launch-readiness",
       repository: "0xprogrammable/submit-launch",
       sha256: `sha256:${"d".repeat(64)}`

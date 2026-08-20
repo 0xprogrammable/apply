@@ -408,7 +408,7 @@ function validateLaunchStampPromotion(promotion, relativePath, directoryProjectI
 
   const policy = promotion.policy;
   exactKeys(policy, ["baseCommit", "baseTree", "gitBlobOid", "launchReadinessDecision", "launchReadinessDecisionSha256", "numericRepositoryId", "path", "policyId", "policyVersion", "profileId", "repository", "sha256"], `${relativePath}.policy`);
-  if (policy.repository !== "0xprogrammable/submit-launch" || policy.numericRepositoryId !== SUBMIT_LAUNCH_REPOSITORY_ID || policy.path !== "policy/launch-policy.v1.json" || policy.policyId !== "programmable-central-launch-policy" || policy.policyVersion !== "2.0.0" || policy.profileId !== "launch-readiness" || !SHA1.test(policy.baseCommit ?? "") || !SHA1.test(policy.baseTree ?? "") || !SHA1.test(policy.gitBlobOid ?? "") || !SHA256.test(policy.sha256 ?? "") || !SHA256.test(policy.launchReadinessDecisionSha256 ?? "")) {
+  if (policy.repository !== "0xprogrammable/submit-launch" || policy.numericRepositoryId !== SUBMIT_LAUNCH_REPOSITORY_ID || policy.path !== "policy/launch-policy.v1.json" || policy.policyId !== "programmable-central-launch-policy" || policy.policyVersion !== "2.1.0" || policy.profileId !== "launch-readiness" || !SHA1.test(policy.baseCommit ?? "") || !SHA1.test(policy.baseTree ?? "") || !SHA1.test(policy.gitBlobOid ?? "") || !SHA256.test(policy.sha256 ?? "") || !SHA256.test(policy.launchReadinessDecisionSha256 ?? "")) {
     fail("PROMOTION_POLICY_INVALID", `${relativePath} does not bind the exact launch-readiness policy projection`);
   }
 

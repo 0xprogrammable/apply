@@ -372,6 +372,13 @@ test("every semantic finding and handler maps bijectively to a central Rule ID",
       "scripts/launch-policy-handlers.mjs",
       "scripts/registry-core.mjs"
     ],
+    "LAUNCH.ETHEREUM_FINALIZED_RUNTIME_FEE_SETTLEMENT_BEFORE_PROMOTION": [
+      "review/launch-policy-review-core.mjs",
+      "scripts/launch-policy-core.mjs",
+      "scripts/launch-policy-handlers.mjs",
+      "scripts/programmable-runtime-fee-settlement-proof-core.mjs",
+      "scripts/programmable-runtime-fee-settlement-proof-validation.mjs"
+    ],
     "LAUNCH.ETHEREUM_ROUTER_PROVENANCE_READINESS": [
       "review/launch-policy-review-core.mjs",
       "scripts/launch-policy-core.mjs",
