@@ -1144,6 +1144,40 @@ test("all exact central policy Canary and release scripts are maintenance while 
   }
 });
 
+test("exact standalone scaffold and runtime settlement scripts are maintenance while adjacent paths stay closed", (t) => {
+  for (const relativePath of [
+    "scripts/applicant-v3_2-scaffold-core.mjs",
+    "scripts/applicant-v3_2-scaffold.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof-core.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof-validation.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, `maintenance fixture for ${relativePath}\n`);
+    const candidateCommit = commitAll(fixture.candidate, `reserve ${relativePath}`);
+    assert.equal(
+      classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)).mode,
+      "registry-maintenance",
+      relativePath
+    );
+  }
+
+  for (const relativePath of [
+    "scripts/applicant-v3-scaffold.mjs",
+    "scripts/applicant-v3_2-scaffold-private.mjs",
+    "scripts/programmable-runtime-fee-settlement-proof.mjs",
+    "scripts/programmable-runtime-fee-settlement-observer.mjs"
+  ]) {
+    const fixture = createRevisionPair(t);
+    writeFile(fixture.candidate, relativePath, "unreviewed adjacent maintenance path\n");
+    const candidateCommit = commitAll(fixture.candidate, `reject ${relativePath}`);
+    assert.throws(
+      () => classifyPublicIntakePullRequest(classificationInputFor(fixture, candidateCommit)),
+      hasCode("CHANGED_PATH_NOT_ALLOWED"),
+      relativePath
+    );
+  }
+});
+
 test("exact Universal Admission contract and reference paths are maintenance while adjacent private paths stay closed", (t) => {
   const exactPaths = [
     ".programmable/universal-admission-contract.v1.json",
