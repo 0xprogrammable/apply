@@ -1146,6 +1146,7 @@ test("all exact central policy Canary and release scripts are maintenance while 
 
 test("exact standalone scaffold and runtime settlement scripts are maintenance while adjacent paths stay closed", (t) => {
   for (const relativePath of [
+    "policy/schemas/programmable-runtime-fee-settlement-proof-v1.schema.json",
     "scripts/applicant-v3_2-scaffold-core.mjs",
     "scripts/applicant-v3_2-scaffold.mjs",
     "scripts/programmable-runtime-fee-settlement-proof-core.mjs",
@@ -1162,6 +1163,7 @@ test("exact standalone scaffold and runtime settlement scripts are maintenance w
   }
 
   for (const relativePath of [
+    "policy/schemas/programmable-runtime-fee-settlement-proof-v2.schema.json",
     "scripts/applicant-v3-scaffold.mjs",
     "scripts/applicant-v3_2-scaffold-private.mjs",
     "scripts/programmable-runtime-fee-settlement-proof.mjs",
